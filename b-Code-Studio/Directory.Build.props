@@ -1,0 +1,28 @@
+<Project>
+
+  <Import Project="..\Directory.Build.props" />
+
+  <!--
+    解决方案级公共构建属性。
+    作用范围:本目录及其子目录的全部工程。
+  -->
+
+  <PropertyGroup>
+    <!--
+      钉死 RID。net8.0-windows + WPF 的桌面模块只会在 win-x64 上加载，
+      不指定 RID 时部分包会携带十余份其他平台的原生库，输出体积成倍上涨。
+
+      SelfContained 显式写 false:.NET 8 起指定 RID 不再隐含自包含，但显式声明可防
+      SDK 升级后默认值变化。
+    -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+
+    <!--
+      指定 RID 后 SDK 默认把输出改到 bin\<配置>\<TFM>\win-x64\，会让脚本、发布流程和
+      文档里的输出路径引用一次性失效。固定回 bin\<配置>\<TFM>\。
+    -->
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+</Project>

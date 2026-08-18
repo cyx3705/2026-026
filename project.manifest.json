@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "template": {
+    "isTemplate": false,
+    "source": "0000-001-AIReady",
+    "strictValidationArgument": "-Instantiation"
+  },
+  "project": {
+    "id": "2026-026",
+    "name": "HistoryAurora",
+    "title": "HistoryAurora 宿主前端界面模块",
+    "kind": [
+      "software",
+      "tooling",
+      "appshell-module"
+    ],
+    "status": "active",
+    "version": "0.1.0",
+    "branch": "main"
+  },
+  "paths": {
+    "activeRoots": [
+      "b-Code-Studio",
+      "b-Code-Verify",
+      "b-Office/current",
+      "b-Office/package"
+    ],
+    "sourceRoots": [
+      "b-Code-Studio",
+      "b-Code-Verify"
+    ],
+    "generatedRoots": [
+      "b-Code-Studio/**/bin",
+      "b-Code-Studio/**/obj",
+      "b-Code-Verify/**/bin",
+      "b-Code-Verify/**/obj",
+      "z-Publish"
+    ],
+    "archiveRoots": [
+      "b-Office/history",
+      "z-Publish/history"
+    ],
+    "releaseRoots": [
+      "z-Publish"
+    ],
+    "allowedRootDirectoryPrefixes": [
+      "a-",
+      "b-",
+      "z-"
+    ]
+  },
+  "documents": {
+    "center": "b-Office/文档中心.md",
+    "package": "b-Office/package/模块API.md",
+    "structure": "b-Office/文档中心.md",
+    "overview": "b-Office/current/项目概览.md",
+    "technicalContract": "b-Office/current/技术合同.md",
+    "decisions": "b-Office/current/有效决策.md",
+    "verification": "b-Office/current/验证合同.md"
+  },
+  "commands": {
+    "setup": "dotnet restore .\\HistoryAurora.sln --locked-mode -p:NuGetAudit=false",
+    "build": "dotnet build .\\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false",
+    "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
+    "run": null,
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
+  },
+  "externalDependencies": [
+    "HistoryVulcan >= 3.13.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
+    ".NET 8 SDK and Windows Desktop Runtime"
+  ],
+  "contextExclusions": [
+    "b-Office/history/**",
+    "z-Publish/**",
+    "**/bin/**",
+    "**/obj/**",
+    "**/node_modules/**",
+    "**/.vs/**",
+    "artifacts/**"
+  ]
+}
