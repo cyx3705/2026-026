@@ -49,7 +49,14 @@ try {
         $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
         "$hash  $relative"
     } | Where-Object { $_ }
-    Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS') -Value $lines -Encoding utf8
+
+    # 必须无 BOM：宿主 RuntimeModuleDiscoverySource 按 ^[0-9A-Fa-f]{64}  <路径>$ 逐行匹配，
+    # BOM 会让首行匹配失败，整个包被判 invalid-checksum 而静默跳过。
+    # Set-Content -Encoding utf8 在 Windows PowerShell 5.1 下写的是带 BOM 的 UTF-8，不能用。
+    [System.IO.File]::WriteAllLines(
+        (Join-Path $stage 'SHA256SUMS'),
+        [string[]]$lines,
+        (New-Object System.Text.UTF8Encoding $false))
 
     $candidate = Join-Path $repoRoot "z-Publish\HistoryAurora-v$version"
     if (Test-Path -LiteralPath $candidate) {
