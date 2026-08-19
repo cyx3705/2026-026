@@ -8,7 +8,7 @@
   "project": {
     "id": "2026-026",
     "name": "HistoryAurora",
-    "title": "HistoryAurora 宿主前端界面模块",
+    "title": "HistoryAurora 前端应用",
     "kind": [
       "software",
       "tooling",

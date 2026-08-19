@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryAurora",
-  "version": "0.1.0",
-  "description": "宿主前端界面：窗口、布局、控制台与主题",
-  "artifact": "HistoryAurora.dll",
-  "docs": "HistoryAurora.xml",
+  "version": "1.0.0",
+  "description": "前端界面：窗口、布局、控制台与主题",
+  "artifact": "HistoryAurora.Module.dll",
+  "docs": "HistoryAurora.Module.xml",
   "mcpExposure": "readonly",
   "ui": true
 }

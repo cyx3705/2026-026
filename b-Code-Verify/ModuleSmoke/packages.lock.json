@@ -101,7 +101,7 @@
           "xunit.extensibility.core": "[2.9.2]"
         }
       },
-      "HistoryAurora": {
+      "historyaurora.module": {
         "type": "Project"
       }
     }

@@ -6,7 +6,14 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>HistoryAurora</AssemblyName>
+    <!--
+      程序集短名不得与 App 相同（App 的 AssemblyName 也是 HistoryAurora）。
+      WPF 的 pack URI `/HistoryAurora;component/…` 按程序集短名解析，同一进程里
+      存在两个同名程序集时会解析到先命中的那个。本模块不含 .g.resources，
+      于是 AuroraTheme.xaml 被判「找不到资源」抛 IOException，AvalonDock 的
+      浮动覆盖层随之失效——编译期毫无征兆。
+    -->
+    <AssemblyName>HistoryAurora.Module</AssemblyName>
     <RootNamespace>HistoryAurora.Module</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>

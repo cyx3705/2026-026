@@ -36,7 +36,7 @@ if (-not (Test-Path -LiteralPath $output)) { throw "build output missing: $outpu
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("HistoryAurora-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 try {
-    foreach ($name in @('HistoryAurora.dll', 'HistoryAurora.xml', 'module.manifest.json')) {
+    foreach ($name in @('HistoryAurora.Module.dll', 'HistoryAurora.Module.xml', 'module.manifest.json')) {
         $source = Join-Path $output $name
         if (-not (Test-Path -LiteralPath $source)) { throw "expected artifact missing: $source" }
         Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force

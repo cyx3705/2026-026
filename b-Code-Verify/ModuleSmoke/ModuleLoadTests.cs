@@ -29,7 +29,7 @@ public sealed class ModuleLoadTests
 
         Assert.Equal("HistoryVulcan.Module", root.GetProperty("type").GetString());
         Assert.Equal("HistoryAurora", root.GetProperty("name").GetString());
-        Assert.Equal("HistoryAurora.dll", root.GetProperty("artifact").GetString());
+        Assert.Equal("HistoryAurora.Module.dll", root.GetProperty("artifact").GetString());
         Assert.True(root.GetProperty("ui").GetBoolean());
     }
 }
