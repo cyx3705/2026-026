@@ -1,0 +1,75 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\AuroraVersion.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>HistoryAurora</AssemblyName>
+    <RootNamespace>HistoryAurora</RootNamespace>
+    <!--
+      App.xaml 会由 WPF 生成一个入口点，与 Program.cs 的 Main 冲突（CS0017）。
+      显式指定启动对象，沿用宿主 App 工程的做法：入口点要能在建 Application 之前
+      处理命令行参数。
+    -->
+    <StartupObject>HistoryAurora.Program</StartupObject>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
+    <!--
+      REQ-A7：Aurora 是独立应用（DEC-004），不是被服务装载的模块。
+      对宿主的依赖走已发布快照的文件引用，不用跨仓 ProjectReference——
+      后者被 AGENTS.md 与宿主 DEC-023/DEC-040 明确禁止（门禁只验证本仓自身）。
+      HistoryVulcanPackageRoot 可由外部覆盖，便于对未发布的宿主构建做联调。
+    -->
+    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\2026-023-HistoryVulcan\z-Publish</HistoryVulcanPackageRoot>
+    <HistoryVulcanHostRoot Condition="'$(HistoryVulcanHostRoot)' == ''">$(HistoryVulcanPackageRoot)\host</HistoryVulcanHostRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="HistoryVulcan.Core">
+      <HintPath>$(HistoryVulcanHostRoot)\HistoryVulcan.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="HistoryVulcan.Extensibility">
+      <HintPath>$(HistoryVulcanHostRoot)\HistoryVulcan.Extensibility.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="HistoryVulcan.Services">
+      <HintPath>$(HistoryVulcanHostRoot)\HistoryVulcan.Services.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      版本必须与宿主锁定的一致（宿主 Directory.Packages.props 锁 4.72.1）。
+      不写版本时 NuGet 会解析到 3.4.0.4 —— 那是 .NET Framework 目标的包，
+      NU1701 会提示"可能不完全兼容"，而停靠布局的行为差异在编译期看不出来。
+      Aurora 没有中央包管理，因此在此显式锁定。
+    -->
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Link 不加 `Shell\` 前缀：XAML 的 pack URI 形如
+      `/HistoryAurora;component/Themes/AuroraTokens.xaml`，对应的资源名由 Link 路径决定。
+      加了前缀资源会落在 `shell/themes/…`，而 URI 找的是 `themes/…`，
+      运行期报 IOException「找不到资源」——编译期完全看不出来。
+      不加前缀则与迁出前 HistoryVulcan.Shell 工程内的相对结构完全一致，URI 一行都不用改。
+    -->
+    <Compile Include="..\Shell\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="..\Shell\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)"
+          Exclude="..\Shell\**\App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Contracts" />
+    <InternalsVisibleTo Include="Smoke" />
+  </ItemGroup>
+</Project>

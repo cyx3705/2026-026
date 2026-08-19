@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "branch": "main"
   },
   "paths": {
@@ -52,6 +52,7 @@
   "documents": {
     "center": "b-Office/文档中心.md",
     "package": "b-Office/package/模块API.md",
+    "components": "b-Office/package/HistoryAurora_组件清单与用法.md",
     "structure": "b-Office/文档中心.md",
     "overview": "b-Office/current/项目概览.md",
     "technicalContract": "b-Office/current/技术合同.md",
@@ -63,12 +64,14 @@
     "build": "dotnet build .\\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false",
     "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
-    "run": null,
+    "run": "dotnet run --project .\\b-Code-Studio\\App\\HistoryAurora.App.csproj",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
   },
   "externalDependencies": [
-    "HistoryVulcan >= 3.13.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
-    ".NET 8 SDK and Windows Desktop Runtime"
+    "HistoryVulcan >= 4.0.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
+    ".NET 8 SDK and Windows Desktop Runtime",
+    "Dirkster.AvalonDock 4.72.1 (must match the host pin; unpinned resolves to a .NET Framework build)",
+    "Dirkster.AvalonDock.Themes.VS2013 4.72.1"
   ],
   "contextExclusions": [
     "b-Office/history/**",

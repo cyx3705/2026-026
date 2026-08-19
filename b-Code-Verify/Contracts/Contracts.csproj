@@ -4,6 +4,12 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- 承接自宿主的停靠/顶栏契约测试要构造真实 ShellWindow，需要 WPF。 -->
+    <UseWPF>true</UseWPF>
+    <!-- 承接自宿主的测试依赖隐式 using（System、System.IO、System.Linq …），
+         宿主测试工程本就开着；不开会在搬迁后冒出大量"找不到 Path/Directory"。 -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\2026-023-HistoryVulcan\z-Publish</HistoryVulcanPackageRoot>
     <HistoryVulcanHostRoot Condition="'$(HistoryVulcanHostRoot)' == ''">$(HistoryVulcanPackageRoot)\host</HistoryVulcanHostRoot>
   </PropertyGroup>
@@ -26,13 +32,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 停靠契约测试直接断言 AvalonDock 的视觉树，版本必须与 App 一致。 -->
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\b-Code-Studio\Module\HistoryAurora.Module.csproj" />
+    <!-- DEC-004：Aurora 是独立应用而非模块，契约测试对着 App 工程跑。
+         原先指向 Module 骨架，那是 DEC-004 之前的形态。 -->
+    <ProjectReference Include="..\..\b-Code-Studio\App\HistoryAurora.App.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,21 @@
   "version": 1,
   "dependencies": {
     "net8.0-windows7.0": {
+      "Dirkster.AvalonDock": {
+        "type": "Direct",
+        "requested": "[4.72.1, )",
+        "resolved": "4.72.1",
+        "contentHash": "m5J03HVntDM3eu7GyzLWlNdr2c2TTBAoD33Pq1yCID7vEtk13VVngtlmegp67WUvpL5JUC8G2xU8n+ThZKKz0Q=="
+      },
+      "Dirkster.AvalonDock.Themes.VS2013": {
+        "type": "Direct",
+        "requested": "[4.72.1, )",
+        "resolved": "4.72.1",
+        "contentHash": "g+hcHokgRFSvznqsVWxHxPCrUMxe18MTJjXMRVQJTVNo/Kwx8krdNiRnCSUDkuVtr2z29EtC4QofZhwUB7FS+w==",
+        "dependencies": {
+          "Dirkster.AvalonDock": "4.72.1"
+        }
+      },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
         "requested": "[17.12.0, )",
@@ -102,7 +117,11 @@
         }
       },
       "HistoryAurora": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Dirkster.AvalonDock": "[4.72.1, )",
+          "Dirkster.AvalonDock.Themes.VS2013": "[4.72.1, )"
+        }
       }
     }
   }
