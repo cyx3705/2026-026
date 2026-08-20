@@ -46,6 +46,7 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
     // 0.4.4 反哺能力:由 Shell 自行装配,派生应用经下方只读属性取用
     private readonly HistoryVulcan.Services.Modules.ModuleHost? _modules;
+    private readonly Pages.ModulePageLoader _pageLoader;
     private readonly Modules.ShellUiRegistrar _shellUi;
     private readonly HistoryVulcan.Services.Mcp.McpGateway? _mcp;
     private readonly HistoryVulcan.Services.Mcp.PromptGovernanceStore? _prompts;
@@ -214,6 +215,10 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         });
 
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
+        // 页面注册协议 V1：拉取器要早于内置指令组构造，指令组才能拿到它。
+        // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
+        _pageLoader = new Pages.ModulePageLoader(_bus, _docking, log);
+
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
             Window = this,
@@ -225,6 +230,7 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             Bus = _bus,
             DataDirectory = dataDirectory,
             Panels = _panels,
+            PageLoader = _pageLoader,
         });
 
         RegisterFrontendLifecycleCommands(registry);
@@ -280,6 +286,11 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             _modules.UiContext = SynchronizationContext.Current;
             _modules.ShellUi = _shellUi;
             _modules.CommandWorkbench = this;
+
+            // 拉取而非缓存：每次模块集合变化后重新问一遍，注册因此是派生状态，
+            // 没有需要回收的缓存（对比宿主侧 web.frontendcatalog 的幽灵条目）。
+            _modules.ReloadCompleted += () =>
+                Dispatcher.BeginInvoke(new Action(() => _ = _pageLoader.ReloadAsync()));
 
             registry.Register(new CommandDescriptor
             {

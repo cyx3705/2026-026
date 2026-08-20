@@ -9,6 +9,7 @@ using HistoryVulcan.Core.Storage;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell.Console;
 using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
@@ -34,6 +35,9 @@ public sealed class ShellCommandServices
 
     /// <summary>控制窗口群管理器(M4);null 时 panel.* 指令组不注册。</summary>
     public PanelManager? Panels { get; init; }
+
+    /// <summary>页面注册协议的拉取器;null 时 aurora.ui.reloadpages 等指令组不注册。</summary>
+    public ModulePageLoader? PageLoader { get; init; }
 }
 /// <summary>
 /// 框架内置指令组(§5.3 / 附录 B):help / history / run /
@@ -50,5 +54,7 @@ public static partial class BuiltinCommands
         RegisterLayout(r, s);
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
+        if (s.PageLoader != null)
+            RegisterPages(r, s.PageLoader);
     }
 }
