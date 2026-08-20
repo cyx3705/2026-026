@@ -23,7 +23,11 @@ public sealed record MissingComponent(string Owner, string PageId, string Compon
 /// 页面若照抄那条路，幽灵会从"命令数不准"升级成"界面上多出一个打不开的页面"。
 /// 拉取让注册成为派生状态，没有缓存可失效。
 /// </summary>
-public sealed class ModulePageLoader(CommandBus bus, IDockingService docking, IShellLog log)
+public sealed class ModulePageLoader(
+    CommandBus bus,
+    IDockingService docking,
+    IShellLog log,
+    ComponentRequestStore? requests = null)
 {
     private const string Source = "page";
 
@@ -205,7 +209,11 @@ public sealed class ModulePageLoader(CommandBus bus, IDockingService docking, IS
         }
 
         foreach (var component in rendered.MissingComponents)
+        {
             _missing.Add(new MissingComponent(owner, page.Id, component));
+            // 用出来的申请自动进台账：它来自真实使用，比设想出来的需求可信。
+            requests?.Record(component, owner, owner + "/" + page.Id, null);
+        }
 
         try
         {

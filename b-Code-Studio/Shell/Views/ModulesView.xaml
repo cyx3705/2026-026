@@ -28,8 +28,8 @@
                                         DisplayMemberBinding="{Binding ModuleName}" />
                         <GridViewColumn Header="版本" Width="80"
                                         DisplayMemberBinding="{Binding Version}" />
-                        <GridViewColumn Header="指令数" Width="60"
-                                        DisplayMemberBinding="{Binding CommandCount}" />
+                        <GridViewColumn Header="域指令数" Width="72"
+                                        DisplayMemberBinding="{Binding DomainCommandCount}" />
                         <GridViewColumn Header="描述" Width="520"
                                         DisplayMemberBinding="{Binding Description}" />
                     </GridView>

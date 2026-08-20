@@ -38,6 +38,9 @@ public sealed class ShellCommandServices
 
     /// <summary>页面注册协议的拉取器;null 时 aurora.ui.reloadpages 等指令组不注册。</summary>
     public ModulePageLoader? PageLoader { get; init; }
+
+    /// <summary>组件申请台账;与 PageLoader 同进同出。</summary>
+    public ComponentRequestStore? ComponentRequests { get; init; }
 }
 /// <summary>
 /// 框架内置指令组(§5.3 / 附录 B):help / history / run /
@@ -54,7 +57,7 @@ public static partial class BuiltinCommands
         RegisterLayout(r, s);
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
-        if (s.PageLoader != null)
-            RegisterPages(r, s.PageLoader);
+        if (s.PageLoader != null && s.ComponentRequests != null)
+            RegisterPages(r, s.PageLoader, s.ComponentRequests);
     }
 }

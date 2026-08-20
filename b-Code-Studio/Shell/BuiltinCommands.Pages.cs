@@ -12,7 +12,7 @@ namespace HistoryAurora.Shell;
 /// </summary>
 public static partial class BuiltinCommands
 {
-    private static void RegisterPages(CommandRegistry r, ModulePageLoader loader)
+    private static void RegisterPages(CommandRegistry r, ModulePageLoader loader, ComponentRequestStore requests)
     {
         RegisterFrontend(r, new CommandDescriptor
         {
@@ -72,6 +72,61 @@ public static partial class BuiltinCommands
                 }
 
                 return CommandResult.Ok(text.ToString().TrimEnd());
+            }),
+        });
+
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.ui.request",
+            Domain = "aurora",
+            CommandClass = "ui",
+            Summary = "申请一个组件库尚未提供的组件",
+            Example = "aurora.ui.request component=segment.toggle by=HistoryJanus reason=\"分段家族缺 Toggle 成员\"",
+            AllowUnspecifiedParameters = true,
+            Handler = CommandDescriptor.Sync(context =>
+            {
+                var component = context.GetString("component")?.Trim();
+                if (string.IsNullOrWhiteSpace(component))
+                    return CommandResult.Fail("缺少 component");
+                if (PageRenderer.SupportedComponents.Contains(component))
+                    return CommandResult.Ok($"{component} 已经支持，无需申请");
+
+                // 模块经宿主中继调用时 context.Source 是 "Service:Relay"，会把提出方记丢，
+                // 因此允许显式声明 by；缺省才回退到来源标签。
+                var by = context.GetString("by")?.Trim();
+                if (string.IsNullOrWhiteSpace(by))
+                    by = context.Source;
+
+                requests.Record(component, by, context.GetString("page"), context.GetString("reason"));
+                return CommandResult.Ok($"已登记组件申请: {component}");
+            }),
+        });
+
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.ui.requests",
+            Domain = "aurora",
+            CommandClass = "ui",
+            Summary = "列出尚未交付的组件申请（已交付的自动出账）",
+            Readonly = true,
+            Handler = CommandDescriptor.Sync(_ =>
+            {
+                var open = requests.ListOpen();
+                if (open.Count == 0)
+                    return CommandResult.Ok("无未交付的组件申请");
+
+                var text = new StringBuilder();
+                foreach (var request in open)
+                {
+                    text.Append(request.Component).Append("  ← ").Append(request.RequestedBy);
+                    if (request.Pages.Count > 0)
+                        text.Append("  用于 ").Append(string.Join("、", request.Pages));
+                    if (!string.IsNullOrWhiteSpace(request.Reason))
+                        text.Append("  理由: ").Append(request.Reason);
+                    text.AppendLine();
+                }
+
+                return CommandResult.Ok(text.ToString().TrimEnd(), open);
             }),
         });
     }

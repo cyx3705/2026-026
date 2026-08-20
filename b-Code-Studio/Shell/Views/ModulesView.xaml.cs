@@ -28,9 +28,34 @@ public partial class ModulesView : UserControl
         };
     }
 
+    /// <summary>
+    /// <paramref name="DomainCommandCount"/> 是**该域当前注册的指令总数**，不是本模块经模块
+    /// 路径注册的条数。二者对四个业务模块相等，对 HistoryAurora 却差得很远：Aurora 是应用，
+    /// 它的 40 条 aurora.* 由应用进程自持并上报（来源 frontend:*），经模块路径注册的是 0 条
+    /// （DEC-007，ModuleInfo.MainClassType = null）。列里显示 0 会让人以为它坏了。
+    /// </summary>
     public sealed record ModuleRow(
-        string ModuleName, string Version, string Mode, int CommandCount,
+        string ModuleName, string Version, string Mode, int DomainCommandCount,
         string AssemblyFile, string Description);
+
+    /// <summary>按域统计当前注册表里的指令条数；域名取自模块名（History 前缀剥离）。</summary>
+    private static int DomainCommandCount(CommandRegistry registry, string moduleName)
+    {
+        var domain = ModuleDomainNaming.ToDomain(moduleName);
+        if (domain.Length == 0)
+            return 0;
+        return registry.All().Count(descriptor =>
+            string.Equals(DomainOf(descriptor), domain, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>描述符未声明域时按指令名首段兜底，与注册表的归一化口径一致。</summary>
+    private static string DomainOf(CommandDescriptor descriptor)
+    {
+        if (!string.IsNullOrWhiteSpace(descriptor.Domain))
+            return descriptor.Domain;
+        var separator = descriptor.Name.IndexOf('.');
+        return separator > 0 ? descriptor.Name[..separator] : descriptor.Name;
+    }
 
     private async void OnReloadClick(object sender, System.Windows.RoutedEventArgs e)
     {
@@ -139,12 +164,13 @@ public partial class ModulesView : UserControl
             {
                 var rows = snapshot.Modules.Select(m => new ModuleRow(
                         m.ModuleName, m.Version, m.Open ? "全暴露" : "精准暴露",
-                        m.CommandCount, m.AssemblyFile, m.Description))
+                        DomainCommandCount(bus.Registry, m.ModuleName), m.AssemblyFile, m.Description))
                     .ToList();
                 ModuleList.ItemsSource = rows;
                 StatusText.Text = rows.Count == 0
                     ? "当前无已装载模块；运行区为空或包未通过校验"
-                    : $"已装载 {rows.Count} 个模块,共 {snapshot.Modules.Sum(module => module.CommandCount)} 条模块指令";
+                    : $"已装载 {rows.Count} 个模块,合计 {rows.Sum(row => row.DomainCommandCount)} 条域指令"
+                      + $"（其中经模块路径注册 {snapshot.Modules.Sum(module => module.CommandCount)} 条）";
             }
             else
             {

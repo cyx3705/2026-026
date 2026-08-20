@@ -47,6 +47,7 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     // 0.4.4 反哺能力:由 Shell 自行装配,派生应用经下方只读属性取用
     private readonly HistoryVulcan.Services.Modules.ModuleHost? _modules;
     private readonly Pages.ModulePageLoader _pageLoader;
+    private readonly Pages.ComponentRequestStore _componentRequests;
     private readonly Modules.ShellUiRegistrar _shellUi;
     private readonly HistoryVulcan.Services.Mcp.McpGateway? _mcp;
     private readonly HistoryVulcan.Services.Mcp.PromptGovernanceStore? _prompts;
@@ -217,7 +218,8 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
         // 页面注册协议 V1：拉取器要早于内置指令组构造，指令组才能拿到它。
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
-        _pageLoader = new Pages.ModulePageLoader(_bus, _docking, log);
+        _componentRequests = new Pages.ComponentRequestStore(settings, log);
+        _pageLoader = new Pages.ModulePageLoader(_bus, _docking, log, _componentRequests);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
@@ -231,6 +233,7 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             DataDirectory = dataDirectory,
             Panels = _panels,
             PageLoader = _pageLoader,
+            ComponentRequests = _componentRequests,
         });
 
         RegisterFrontendLifecycleCommands(registry);

@@ -49,6 +49,16 @@ public static class PageRenderer
 
     private const double GapNormal = 12;
 
+    /// <summary>
+    /// V1 组件集。这是「某个申请是否已交付」的**唯一权威**——台账不另存一份状态，
+    /// 否则两边会各说各话。新增组件时改这里与 <see cref="Build"/> 的分派，两处必须同步。
+    /// </summary>
+    public static readonly IReadOnlySet<string> SupportedComponents =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "stack", "text", "button", "table", "input", "select",
+        };
+
     private static readonly JsonSerializerOptions RowOptions = new()
     {
         PropertyNameCaseInsensitive = true,
