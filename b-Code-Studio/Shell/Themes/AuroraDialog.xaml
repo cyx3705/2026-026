@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Aurora.Dialog.*：独立 Window 弹窗的外观。弹窗拿不到 ShellWindow.Resources，
+        也不可依赖 Application.Current（界面住进宿主后它经常是 null），
+        因此本字典必须由弹窗自己合并，见 AuroraDialogWindow。
+    -->
+
+    <Style x:Key="Aurora.Dialog.Chrome" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="{DynamicResource Aurora.Space.Pad}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Title" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Body" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Countdown" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="Margin" Value="0,12,0,0" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Footer" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Margin" Value="0,16,0,0" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Content" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.MonoFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Mono}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.ControlBorder}" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Padding" Value="7,3" />
+    </Style>
+
+    <Style x:Key="Aurora.Dialog.Prompt" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.ControlBorder}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="MinHeight" Value="{DynamicResource Aurora.Size.Control}" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+        <Setter Property="Padding" Value="7,3" />
+    </Style>
+</ResourceDictionary>

@@ -1142,7 +1142,7 @@ public sealed class ShellChromeContractTests
                     "vulcan.app.hide", "vulcan.app.show", "vulcan.app.focusconsole", "vulcan.app.close",
                     "aurora.ui.max", "aurora.log.focus",
                     "aurora.app.window", "aurora.ui.autohide", "aurora.ui.floatstate", "aurora.command.copyexample",
-                    "aurora.ui.selectfile", "aurora.ui.selectdirectory",
+                    "aurora.ui.selectfile", "aurora.ui.selectdirectory", "aurora.ui.dialog",
                 },
                 name => Assert.Contains(name, names));
             Assert.DoesNotContain(names, name => name.StartsWith("res.", StringComparison.OrdinalIgnoreCase));

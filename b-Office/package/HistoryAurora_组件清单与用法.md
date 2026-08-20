@@ -130,6 +130,29 @@ GridViewColumn 46 次，而 DataGrid 只有 2 次——`DataGrid` 不在主题�
 `Aurora.ComboBox.ToggleButton`、`Aurora.TreeExpander`、`Aurora.ScrollBar.Thumb`——
 一般不必直接引用，对应控件套用后自动生效。
 
+## 弹窗 `aurora.ui.dialog`（1.1.0）
+
+模块不要自己 `new Window`。前端独立之后，顶层窗口拿不到 `Aurora.*` 令牌，
+`DynamicResource` 会静默退化成系统外观。弹窗由 Aurora 自持，自己合并主题字典。
+
+```text
+aurora.ui.dialog kind=message title=关于 body="……"
+aurora.ui.dialog kind=confirm title=需要确认 body="覆盖现有文件？" danger=true defaultcancel=true
+aurora.ui.dialog kind=prompt title=生成恢复提交 body="恢复提交说明" value="revert abc"
+aurora.ui.dialog kind=content title=预览 body="摘要" content="<大段正文>"
+```
+
+| kind | 用途 | 结果 |
+|---|---|---|
+| `message` | 一段说明 + 关闭 | 点关闭即成功 |
+| `confirm` | 确认 / 取消；`timeout=` 秒后拒绝；`danger=true` 主按钮用危险档 | 取消或超时返回失败 |
+| `prompt` | 带输入的确认 | 成功时 `Message`/`Data` 是输入文本 |
+| `content` | 大段只读等宽正文（历史预览） | 点关闭即成功 |
+
+**不要**把弹窗写进 `<域>.ui.describe` 的页面树。它不是停靠页，页面渲染器里没有
+`dialog` 组件——写了只会变成显式占位。本轮只把 Aurora 侧做出来；模块现有的
+`HistoryPreviewDialog` 等下一轮再改走这条命令。
+
 ## 规矩
 
 1. **不自建组件。** 模块 XAML 里**不得出现 `Style x:Key=` 与 `<ControlTemplate>`**。

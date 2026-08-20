@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Docking;
 using HistoryVulcan.Core.Logging;
@@ -40,8 +39,15 @@ public static partial class BuiltinCommands
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                MessageBox.Show(s.Window, s.Window.AboutText, "关于",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                AuroraDialogWindow.Show(
+                    new AuroraDialogRequest
+                    {
+                        Kind = AuroraDialogKind.Message,
+                        Title = "关于",
+                        Body = s.Window.AboutText,
+                    },
+                    s.Window,
+                    s.Window.IsDarkTheme);
                 return CommandResult.Ok("已显示关于");
             }),
         });

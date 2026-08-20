@@ -55,6 +55,7 @@ public static partial class BuiltinCommands
         RegisterLog(r, s);
         RegisterWin(r, s);
         RegisterLayout(r, s);
+        RegisterDialog(r, s);
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
         if (s.PageLoader != null && s.ComponentRequests != null)
