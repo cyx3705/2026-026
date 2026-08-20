@@ -32,12 +32,83 @@ public sealed class ModulePageLoader(CommandBus bus, IDockingService docking, IS
 
     private readonly List<MissingComponent> _missing = [];
     private readonly HashSet<string> _owners = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _gate = new();
+    private Task<PageLoadReport>? _inFlight;
+    private bool _pending;
 
     /// <summary>最近一次拉取发现的缺件，供 aurora.ui.missing 查询。</summary>
     public IReadOnlyList<MissingComponent> Missing => _missing.ToList();
 
-    /// <summary>全量重拉：先撤掉本机制注册过的全部页面，再逐个模块问一遍。</summary>
-    public async Task<PageLoadReport> ReloadAsync(CancellationToken cancellation = default)
+    /// <summary>
+    /// 全量重拉，**合并重入请求**。
+    ///
+    /// 启动期会连续触发多次：ModuleHost 初次装载一次，宿主的 moduleRevision 通知引发
+    /// <c>ReloadConfirmedSources</c> 又各一次——真机实测一次冷启动打了三遍。
+    /// 不合并的话，等模块真有页面时就是三倍的 describe 调用与三轮建撤抖动。
+    /// 已在跑时只置脏标记，跑完再补一轮，因此最后一次请求的结果一定被反映。
+    /// </summary>
+    public Task<PageLoadReport> ReloadAsync(CancellationToken cancellation = default)
+    {
+        TaskCompletionSource<PageLoadReport> completion;
+        lock (_gate)
+        {
+            if (_inFlight != null)
+            {
+                _pending = true;
+                return _inFlight;
+            }
+
+            // 先把占位任务放进 _inFlight，再启动实际工作。
+            // 不能写成 _inFlight = DrainAsync(...)：当描述命令同步完成时，DrainAsync 会在
+            // 返回前就把 _inFlight 置回 null，外层随后又把那个**已完成**的任务赋回去，
+            // 于是此后每次拉取都命中"已在跑"分支并返回一个永不推进的旧任务——彻底卡死。
+            completion = new TaskCompletionSource<PageLoadReport>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _inFlight = completion.Task;
+        }
+
+        _ = DrainAsync(completion, cancellation);
+        return completion.Task;
+    }
+
+    private async Task DrainAsync(
+        TaskCompletionSource<PageLoadReport> completion,
+        CancellationToken cancellation)
+    {
+        try
+        {
+            while (true)
+            {
+                var report = await ReloadCoreAsync(cancellation).ConfigureAwait(true);
+                lock (_gate)
+                {
+                    if (_pending)
+                    {
+                        _pending = false;
+                        continue;
+                    }
+
+                    _inFlight = null;
+                }
+
+                completion.SetResult(report);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            // 失败也必须解开闸门，否则一次异常会让此后所有拉取都卡在"已在跑"。
+            lock (_gate)
+            {
+                _inFlight = null;
+                _pending = false;
+            }
+
+            completion.SetException(ex);
+        }
+    }
+
+    private async Task<PageLoadReport> ReloadCoreAsync(CancellationToken cancellation)
     {
         foreach (var owner in _owners.ToList())
             Drop(owner);

@@ -147,6 +147,68 @@ public sealed class ModulePageLoaderContractTests
         });
     }
 
+    [Fact]
+    public void Reload_CoalescesOverlappingRequestsIntoOneExtraPass()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandRegistry();
+            var gate = new TaskCompletionSource();
+            var calls = 0;
+
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo" + ModulePageLoader.DescribeSuffix,
+                Domain = "demo",
+                CommandClass = "ui",
+                Summary = "页面描述",
+                Readonly = true,
+                Handler = async _ =>
+                {
+                    calls++;
+                    await gate.Task.ConfigureAwait(true);
+                    return CommandResult.Ok(OnePage("HistoryDemo", "alpha"));
+                },
+            });
+
+            var (loader, _, _) = Loader(registry);
+
+            var first = loader.ReloadAsync();
+            var second = loader.ReloadAsync();
+            var third = loader.ReloadAsync();
+
+            // 在途时重入只置脏标记，返回同一个任务。
+            Assert.Same(first, second);
+            Assert.Same(first, third);
+
+            gate.SetResult();
+            Assert.True(UiTestHost.PumpUntil(() => first.IsCompleted), "拉取未完成");
+
+            // 两次重入合并成一次补跑，而不是各跑一遍：启动期实测会连打三遍。
+            Assert.Equal(2, calls);
+        });
+    }
+
+    [Fact]
+    public void Reload_StaysUsableAfterAFailedPass()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandRegistry();
+            var asked = new List<string>();
+            Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
+
+            var (loader, docking, _) = Loader(registry);
+
+            // 第一轮走通；闸门若在任何路径上没解开，第二轮会永久挂住。
+            loader.ReloadAsync().GetAwaiter().GetResult();
+            docking.Registered.Clear();
+            loader.ReloadAsync().GetAwaiter().GetResult();
+
+            Assert.Equal(["alpha"], docking.Registered.Select(r => r.Descriptor.Id));
+        });
+    }
+
     private static string OnePage(string owner, string id) => $$"""
         {
           "schemaVersion": 1,
