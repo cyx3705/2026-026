@@ -103,11 +103,19 @@ internal static class AuroraShellHost
                 StringComparison.Ordinal))
             .ToList();
 
+        // 判据必须看宿主的**实时**注册表，不是 RegisterCommands 给的暂存表。
+        //
+        // 界面的注册表里除了它自己实现的命令，还有一批**为宿主命令建的代理**
+        // （FrontendCommandCatalog 的框架代理，它们的实现就是返回"前端不可用"）。
+        // 这两类的来源标签相同，按暂存表判重时暂存表是空的，于是代理也被登记回宿主，
+        // 把 vulcan.app.show 这类真实实现覆盖成死代理——症状是命令还在、
+        // 一调就答"前端不可用"，而窗口明明开着。
+        var live = context.Bus.Registry;
         context.RegisterCommands(host =>
         {
             foreach (var descriptor in owned)
             {
-                if (host.TryGet(descriptor.Name, out _))
+                if (live.TryGet(descriptor.Name, out _) || host.TryGet(descriptor.Name, out _))
                     continue;
                 host.Register(Marshalled(descriptor, window));
             }
