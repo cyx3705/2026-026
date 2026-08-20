@@ -66,7 +66,20 @@ try {
         [string[]]$lines,
         (New-Object System.Text.UTF8Encoding $false))
 
-    $candidate = Join-Path $repoRoot "z-Publish\HistoryAurora-v$version"
+    $publishRoot = Join-Path $repoRoot 'z-Publish'
+    $historyRoot = Join-Path $publishRoot 'history'
+    New-Item -ItemType Directory -Path $historyRoot -Force | Out-Null
+    Get-ChildItem -LiteralPath $publishRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'HistoryAurora-v*' -and $_.Name -ne "HistoryAurora-v$version" } |
+        ForEach-Object {
+            $archive = Join-Path $historyRoot $_.Name
+            if (Test-Path -LiteralPath $archive) {
+                Remove-Item -LiteralPath $archive -Recurse -Force
+            }
+            Move-Item -LiteralPath $_.FullName -Destination $archive
+        }
+
+    $candidate = Join-Path $publishRoot "HistoryAurora-v$version"
     if (Test-Path -LiteralPath $candidate) {
         Remove-Item -LiteralPath $candidate -Recurse -Force
     }

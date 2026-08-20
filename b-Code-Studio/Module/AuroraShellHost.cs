@@ -17,10 +17,8 @@ namespace HistoryAurora.Module;
 /// Aurora 不再有独立 exe：界面是宿主装载的一个模块，启动、显示、隐藏一律走注册的指令，
 /// 桌面入口由 Mercury 活动坞承担。本类是那条路径的落点。
 ///
-/// **必须与 manifest 的 <c>pinned: true</c> 配套。** WPF 的类型解析、Dispatcher 与资源
-/// 程序集都是进程级的，装进可回收上下文再卸载重来必崩在第二次；而实测一次冷启动就重载
-/// 2–3 次。钉住之后同名程序集只装载一次，下面这些静态字段跨重载存活，
-/// <see cref="EnsureStarted"/> 因此能靠它们做幂等守卫。
+/// 热重载要求宿主先 DestroyUi 再装新包。本类在 Shutdown 里关掉窗口、停 Dispatcher、
+/// 汇合 STA 线程，静态字段归零；下一轮 <see cref="EnsureStarted"/> 会再开一条界面线程。
 /// </summary>
 internal static class AuroraShellHost
 {
@@ -43,8 +41,8 @@ internal static class AuroraShellHost
     internal static ShellWindow? Window => _window;
 
     /// <summary>
-    /// 幂等启动。第二次及以后的调用直接返回——钉住模块每次重载都会重新 Attach，
-    /// 不守卫就会开出第二套界面。
+    /// 幂等启动。同一轮装载里 Attach 可能被叫两次，不得开出第二套界面。
+    /// 热重载会先 Shutdown，静态字段归零后再进来，那时应当新开线程。
     /// </summary>
     internal static void EnsureStarted(IModuleContext context, TimeSpan readyTimeout)
     {
@@ -275,5 +273,66 @@ internal static class AuroraShellHost
             return false;
         window.Dispatcher.Invoke(action);
         return true;
+    }
+
+    /// <summary>
+    /// 关掉窗口、停 Dispatcher、汇合 STA 线程。热重载与宿主退出都走这里。
+    /// 已在界面线程上时不得 Join 自己。
+    /// </summary>
+    internal static void Shutdown(IShellLog? log)
+    {
+        Thread? uiThread;
+        ShellWindow? window;
+        lock (Gate)
+        {
+            window = _window;
+            uiThread = _uiThread;
+            _window = null;
+            _uiThread = null;
+            Ready.Reset();
+        }
+
+        if (window == null && uiThread == null)
+            return;
+
+        var onUiThread = uiThread != null && ReferenceEquals(Thread.CurrentThread, uiThread);
+
+        void CloseAndStopDispatcher()
+        {
+            try
+            {
+                window?.ForceClose();
+            }
+            catch (Exception ex)
+            {
+                log?.Warn("aurora", $"关闭界面失败: {ex.Message}");
+            }
+
+            var dispatcher = window?.Dispatcher;
+            if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
+        }
+
+        if (window != null)
+        {
+            if (onUiThread)
+            {
+                CloseAndStopDispatcher();
+            }
+            else
+            {
+                try
+                {
+                    window.Dispatcher.Invoke(CloseAndStopDispatcher);
+                }
+                catch (Exception ex)
+                {
+                    log?.Warn("aurora", $"编组关闭界面失败: {ex.Message}");
+                }
+            }
+        }
+
+        if (uiThread != null && !onUiThread && !uiThread.Join(TimeSpan.FromSeconds(5)))
+            log?.Warn("aurora", "界面线程 5s 内未退出，新一轮装载可能与旧窗口重叠");
     }
 }

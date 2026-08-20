@@ -37,8 +37,9 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiPro
     public IShellUiRegistrar? ShellUi => AuroraShellHost.Registrar;
 
     /// <summary>
-    /// 空实现。本模块**承载**界面而不是往界面里加东西，窗口的生死由
-    /// <see cref="AuroraShellHost"/> 的 STA 线程自己管。
+    /// 空实现。本模块**承载**界面而不是往界面里加东西。窗口在
+    /// <see cref="AuroraShellHost.EnsureStarted"/> 里创建，在
+    /// <see cref="DestroyUi"/> 里关掉。
     ///
     /// 之所以还要实现 <see cref="IUiModule"/>：宿主只把实现了它的模块放进 UiModules，
     /// 而 <c>CreateUi</c> 正是从那个集合里找 <see cref="IShellUiProvider"/>。
@@ -49,9 +50,15 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiPro
     {
     }
 
-    /// <summary>空实现。钉住模块不会被卸载，界面随宿主进程一起结束。</summary>
+    /// <summary>
+    /// 先摘掉宿主打到本窗口的前端执行器，再关掉 STA 界面。
+    /// 必须能从非 UI 线程调用：宿主会在提供方这条路径上 Join 界面线程。
+    /// </summary>
     public void DestroyUi()
     {
+        if (_context != null)
+            _context.Bus.FrontendExecutor = null;
+        AuroraShellHost.Shutdown(_context?.Log);
     }
 
     /// <summary>当前生效的宿主上下文；未装载时为 null。</summary>

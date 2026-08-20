@@ -75,6 +75,9 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly ISettingsService _settings;
     private string _theme = ThemeLight;
 
+    /// <summary>弹窗与主窗体必须用同一套令牌；独立 Window 自己合并字典，但要知道此刻是哪一套。</summary>
+    internal bool IsDarkTheme => string.Equals(_theme, ThemeDark, StringComparison.Ordinal);
+
     // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
     private readonly DispatcherTimer _chromeUpkeep;
     private bool _reservePending;
@@ -642,6 +645,15 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         RootBorder.Padding = _customChrome && maximized
             ? SystemParameters.WindowResizeBorderThickness
             : default;
+    }
+
+    /// <summary>
+    /// 热重载与宿主退出用：绕过「关闭即隐藏」，真正关掉窗口。
+    /// </summary>
+    internal void ForceClose()
+    {
+        _allowClose = true;
+        Close();
     }
 
     private void OnShellClosing(object? sender, CancelEventArgs e)
