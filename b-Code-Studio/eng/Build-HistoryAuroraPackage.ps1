@@ -36,7 +36,15 @@ if (-not (Test-Path -LiteralPath $output)) { throw "build output missing: $outpu
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("HistoryAurora-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 try {
-    foreach ($name in @('HistoryAurora.Module.dll', 'HistoryAurora.Module.xml', 'module.manifest.json')) {
+    # DEC-008：产物名取回 HistoryAurora（独立 exe 退役，不再有同名程序集）。
+    # AvalonDock 必须随包走——模块的装载上下文只在包目录内解析依赖，
+    # 少带一个就在建窗时 FileNotFoundException，而那发生在运行期。
+    foreach ($name in @(
+            'HistoryAurora.dll',
+            'HistoryAurora.xml',
+            'AvalonDock.dll',
+            'AvalonDock.Themes.VS2013.dll',
+            'module.manifest.json')) {
         $source = Join-Path $output $name
         if (-not (Test-Path -LiteralPath $source)) { throw "expected artifact missing: $source" }
         Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force

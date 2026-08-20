@@ -7,24 +7,51 @@ namespace HistoryAurora.Module;
 /// <summary>
 /// HistoryAurora 的模块装配入口。
 ///
-/// 定位：宿主对用户可见的那一面——窗口、布局、控制台与主题。这些能力目前仍由
-/// HistoryVulcan 前端进程自持（实测：`vulcan` 域 81 条命令中 39 条来源为
-/// <c>frontend:HistoryVulcan.Frontend</c>，涵盖 ui 21 条、log 10 条、app 4 条、command 4 条，
-/// 且其中零条投影为 MCP 工具）。本模块的目标是把那 39 条从宿主搬出来，让宿主只保留
-/// 指令总线与 MCP。宿主版本要求见 <c>AuroraVersion.props</c>，此处不复述字面量。
+/// 定位：体系对用户可见的那一面——窗口、布局、控制台与主题。
+/// DEC-008 起界面不再有独立 exe：它是宿主装载的一个模块，在宿主进程内开窗，
+/// 启动与显隐一律走注册的指令，桌面入口由 Mercury 活动坞承担。
 ///
-/// 迁移尚未开始：此处只是骨架，<see cref="Attach"/> 暂不注册任何命令。每迁入一组能力，
-/// 都应在 <c>b-Office/current/技术合同.md</c> 立一条带编号的要求与验收，再落代码。
+/// 本类同时是 <see cref="IShellUiProvider"/>：界面既然整体成了模块，
+/// 宿主自己就不再持有任何界面实现，其余模块要用的注册器只能由这里交回去。
 /// </summary>
-public sealed class AuroraBusinessComposition : IModuleContextAware
+public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiProvider, IUiModule
 {
     private IModuleContext? _context;
 
-    /// <summary>宿主在装载时注入上下文，提供权威命令总线、设置、日志与数据根目录。</summary>
+    /// <summary>界面就绪等待上限；超时只告警不失败，宿主下一轮重载会补上。</summary>
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// 宿主在装载时注入上下文，提供权威命令总线、设置、日志与数据根目录。
+    ///
+    /// 界面在这里启动而不是在 <c>IUiModule.CreateUi</c> 里：CreateUi 由宿主在**取到注册器
+    /// 之后**才调用，而注册器正是界面创建出来的——放那儿会死锁在自己身上。
+    /// </summary>
     public void Attach(IModuleContext context)
     {
         _context = context;
-        context.Log.Info("aurora", "HistoryAurora 已装载（骨架，尚未接管前端能力）");
+        AuroraShellHost.EnsureStarted(context, ReadyTimeout);
+    }
+
+    /// <summary>供宿主转交给其余 UI 模块的界面注册器；界面未就绪时为 null。</summary>
+    public IShellUiRegistrar? ShellUi => AuroraShellHost.Registrar;
+
+    /// <summary>
+    /// 空实现。本模块**承载**界面而不是往界面里加东西，窗口的生死由
+    /// <see cref="AuroraShellHost"/> 的 STA 线程自己管。
+    ///
+    /// 之所以还要实现 <see cref="IUiModule"/>：宿主只把实现了它的模块放进 UiModules，
+    /// 而 <c>CreateUi</c> 正是从那个集合里找 <see cref="IShellUiProvider"/>。
+    /// 不实现就永远轮不到被问——症状是界面起来了、四个模块的页面却一个都没有，
+    /// 日志里也没有任何错误。
+    /// </summary>
+    public void CreateUi()
+    {
+    }
+
+    /// <summary>空实现。钉住模块不会被卸载，界面随宿主进程一起结束。</summary>
+    public void DestroyUi()
+    {
     }
 
     /// <summary>当前生效的宿主上下文；未装载时为 null。</summary>

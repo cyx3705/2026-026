@@ -390,11 +390,13 @@ public partial class ShellWindow
     }
 
     // ---------------------------------------------------------------- 专注模式(UI-04)
-
-    /// <summary>
-    /// 页面最大化 = 专注态:窗格去标题条与页签并铺满,顶栏只保留主窗口控制组。
-    /// 由 DockingHost.WindowsChanged 驱动 —— MaximizeWindow 与
-    /// RestoreLayoutFromMaximized 都从那里出口,不需要新增公开 API。
-    /// </summary>
+    //
+    // 页面最大化 = 专注态:窗格去标题条与页签并铺满,顶栏只保留主窗口控制组。
+    // 由 DockingHost.WindowsChanged 驱动 —— MaximizeWindow 与
+    // RestoreLayoutFromMaximized 都从那里出口,不需要新增公开 API。
+    //
+    // 原为 /// 文档注释但其后没有任何成员，属于悬空注释（CS1587）。
+    // App 工程不生成文档文件，因此这条一直没被发现；界面回归模块形态后
+    // （模块工程开了 GenerateDocumentationFile）立刻编译失败。
 }
 

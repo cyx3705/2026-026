@@ -478,6 +478,12 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     /// <summary>模块托管宿主(0.4.4);EnableModules=false 时为 null。</summary>
     public HistoryVulcan.Services.Modules.ModuleHost? Modules => _modules;
 
+    /// <summary>
+    /// 界面注册器。进程内形态下由模块交回宿主，宿主再转给其余 UI 模块——
+    /// 宿主自己已不含任何界面实现，注册器只能来自这里（DEC-008）。
+    /// </summary>
+    public HistoryVulcan.Core.Modules.IShellUiRegistrar ShellUi => _shellUi;
+
     /// <summary>MCP 网关；仅在消费方显式启用 <see cref="ShellConfig.EnableMcp"/> 时创建。</summary>
     public HistoryVulcan.Services.Mcp.McpGateway? Mcp => _mcp;
 

@@ -29,7 +29,17 @@ public sealed class ModuleLoadTests
 
         Assert.Equal("HistoryVulcan.Module", root.GetProperty("type").GetString());
         Assert.Equal("HistoryAurora", root.GetProperty("name").GetString());
-        Assert.Equal("HistoryAurora.Module.dll", root.GetProperty("artifact").GetString());
+        // DEC-008：独立 exe 退役后不再有同名程序集，产物名取回 HistoryAurora——
+        // Shell 的 pack URI 按程序集短名解析，名字对上才不用逐条改。
+        Assert.Equal("HistoryAurora.dll", root.GetProperty("artifact").GetString());
         Assert.True(root.GetProperty("ui").GetBoolean());
+
+        // 界面在宿主进程内开窗，WPF 的进程级状态拆不掉：必须声明不可热重载，
+        // 否则宿主重载时卸载装载上下文，第二次初始化必崩。
+        Assert.True(root.GetProperty("pinned").GetBoolean());
+
+        // AvalonDock 要随包走：模块的装载上下文只在包目录内解析依赖。
+        var deps = root.GetProperty("deps").EnumerateArray().Select(item => item.GetString()).ToList();
+        Assert.Contains("AvalonDock.dll", deps);
     }
 }

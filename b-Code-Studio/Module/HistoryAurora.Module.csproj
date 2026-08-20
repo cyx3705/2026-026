@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="..\AuroraVersion.props" />
 
   <PropertyGroup>
@@ -7,21 +7,29 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!--
-      程序集短名不得与 App 相同（App 的 AssemblyName 也是 HistoryAurora）。
-      WPF 的 pack URI `/HistoryAurora;component/…` 按程序集短名解析，同一进程里
-      存在两个同名程序集时会解析到先命中的那个。本模块不含 .g.resources，
-      于是 AuroraTheme.xaml 被判「找不到资源」抛 IOException，AvalonDock 的
-      浮动覆盖层随之失效——编译期毫无征兆。
+      DEC-008：界面回归模块形态，独立 exe 已退役。App 工程消失后不再有同名程序集，
+      因此程序集短名取回 HistoryAurora——Shell 里 11 处 pack URI 形如
+      `/HistoryAurora;component/Themes/AuroraTokens.xaml`，按程序集**短名**解析，
+      名字对上就一行都不用改。
+      （2026-08-20 曾因 App 与模块同名而解析到不含 .g.resources 的那个，
+      AvalonDock 主题抛 IOException 且编译期毫无征兆——那正是同名的代价。）
     -->
-    <AssemblyName>HistoryAurora.Module</AssemblyName>
+    <AssemblyName>HistoryAurora</AssemblyName>
     <RootNamespace>HistoryAurora.Module</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      类库默认不把 NuGet 依赖落到输出目录；而模块的装载上下文只在**包目录内**解析依赖
+      （宿主 ModuleLoadContext 按包路径解析，MH-02 槽内隔离），
+      AvalonDock 不在包里就会在建窗时报 FileNotFoundException。
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
     <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\2026-023-HistoryVulcan\z-Publish</HistoryVulcanPackageRoot>
     <HistoryVulcanHostRoot Condition="'$(HistoryVulcanHostRoot)' == ''">$(HistoryVulcanPackageRoot)\host</HistoryVulcanHostRoot>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 模块引用宿主运行库一律 Private=false：部署时由宿主提供，包里不带副本。 -->
     <Reference Include="HistoryVulcan.Core">
       <HintPath>$(HistoryVulcanHostRoot)\HistoryVulcan.Core.dll</HintPath>
       <Private>false</Private>
@@ -37,16 +45,33 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      版本必须与宿主锁定的一致（宿主 Directory.Packages.props 锁 4.72.1）。
+      不写版本时 NuGet 会解析到 3.4.0.4——那是 .NET Framework 目标的包，
+      NU1701 只提示"可能不完全兼容"，而停靠布局的行为差异在编译期看不出来。
+    -->
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.72.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Link 不加 `Shell\` 前缀：XAML 的 pack URI 对应的资源名由 Link 路径决定，
+      加了前缀资源会落在 `shell/themes/…` 而 URI 找的是 `themes/…`，
+      运行期报 IOException「找不到资源」，编译期完全看不出来。
+    -->
+    <Compile Include="..\Shell\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="..\Shell\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AuroraBusinessComposition.cs" Link="AuroraBusinessComposition.cs" />
-    <Compile Include="..\Views\**\*.cs" Link="Views\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Page Include="..\Views\**\*.xaml" Link="Views\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Smoke" />
     <InternalsVisibleTo Include="Contracts" />
+    <InternalsVisibleTo Include="ModuleSmoke" />
   </ItemGroup>
 </Project>
