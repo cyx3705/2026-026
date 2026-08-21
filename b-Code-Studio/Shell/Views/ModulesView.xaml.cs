@@ -25,6 +25,11 @@ public partial class ModulesView : UserControl
                 return;
             _initialLoadDone = true;
             await RefreshAsync();
+            // 热重载曾在 Show 时快照仍空；若这一帧仍是空列表，等闲时再读一次。
+            if (ModuleList.ItemsSource is System.Collections.ICollection { Count: > 0 })
+                return;
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            await RefreshAsync();
         };
     }
 

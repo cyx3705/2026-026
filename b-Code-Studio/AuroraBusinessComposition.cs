@@ -37,9 +37,9 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiPro
     public IShellUiRegistrar? ShellUi => AuroraShellHost.Registrar;
 
     /// <summary>
-    /// 空实现。本模块**承载**界面而不是往界面里加东西。窗口在
-    /// <see cref="AuroraShellHost.EnsureStarted"/> 里创建，在
-    /// <see cref="DestroyUi"/> 里关掉。
+    /// 真正把主窗口显示出来。窗口本体在 <see cref="AuroraShellHost.EnsureStarted"/>
+    /// 里已经建好（宿主要先拿到注册器），但不能在 Attach 阶段 Show：那时
+    /// <c>vulcan.module.list</c> 读到的还是空快照，模块管理页只会画一次。
     ///
     /// 之所以还要实现 <see cref="IUiModule"/>：宿主只把实现了它的模块放进 UiModules，
     /// 而 <c>CreateUi</c> 正是从那个集合里找 <see cref="IShellUiProvider"/>。
@@ -47,8 +47,7 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiPro
     /// 日志里也没有任何错误。
     /// </summary>
     public void CreateUi()
-    {
-    }
+        => AuroraShellHost.ShowMainWindow();
 
     /// <summary>
     /// 先摘掉宿主打到本窗口的前端执行器，再关掉 STA 界面。

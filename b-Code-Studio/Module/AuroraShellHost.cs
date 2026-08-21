@@ -170,9 +170,8 @@ internal static class AuroraShellHost
                 args.Handled = true;
             };
 
-            window.Show();
             Ready.Set();
-            context.Log.Info("aurora", "界面已在宿主进程内启动");
+            context.Log.Info("aurora", "界面线程已就绪，等待宿主提交模块快照后再显示窗口");
 
             // 不建 Application：主题字典挂在 ShellWindow.Resources 与 DockManager.Resources 上，
             // 全仓只有一处读 Application.Current 且本就空值守卫。少一个进程级单例，
@@ -263,6 +262,35 @@ internal static class AuroraShellHost
         // 反向：宿主收到界面命令时打回来。进程内直接指向界面总线，不经网关。
         context.Bus.FrontendExecutor = (text, source, cancellation)
             => window.Dispatcher.Invoke(() => window.Commands.ExecuteAsync(text, source, cancellation));
+
+        // 进程内没有 WebSocket Shell。宿主默认的 ShellRelayConfirmation 在
+        // ConnectedShells=0 时直接拒绝，Janus 改名/提交/回滚的 ConfirmPrompt 会无弹窗失败。
+        // 把确认通道接到本窗的 Aurora 弹窗，MCP 预批准仍由 GatewayAwareConfirmation 放行。
+        var uiConfirm = new MessageBoxConfirmation(window);
+        context.Bus.Confirmation = new HistoryVulcan.Core.Mcp.GatewayAwareConfirmation(uiConfirm);
+        context.Bus.ConfirmationRouter = (_, prompt) => uiConfirm.Confirm(prompt);
+    }
+
+    /// <summary>
+    /// 宿主 <c>CreateUi</c> 阶段再 Show。模块清单此时已经 Finalize，
+    /// 模块管理页 Loaded 读 <c>vulcan.module.list</c> 才能看见运行区里的包。
+    /// </summary>
+    internal static void ShowMainWindow()
+    {
+        var window = _window;
+        if (window == null)
+            return;
+
+        void Show()
+        {
+            if (!window.IsVisible)
+                window.Show();
+        }
+
+        if (window.Dispatcher.CheckAccess())
+            Show();
+        else
+            window.Dispatcher.Invoke(Show);
     }
 
     /// <summary>把动作编组到界面线程；界面未就绪时返回 false。</summary>
