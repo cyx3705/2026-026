@@ -1,4 +1,4 @@
-using HistoryVulcan.Core.Docking;
+﻿using HistoryVulcan.Core.Docking;
 
 namespace HistoryAurora.Shell;
 
@@ -73,15 +73,6 @@ public sealed class ShellConfig
     public bool EnableMaximizeOnDoubleClick { get; set; } = true;
 
     /// <summary>
-    /// MCP 服务(0.4.4 由 HistoryJanus 反哺):元数据自描述层、网关、提示词治理,
-    /// 注册 mcp.* / prompt.* / correction.* / incident.* 指令组。
-    /// 默认关闭；消费方置 true 后才创建网关、治理存储和 mcp.*，并按 mcp.autostart 决定是否监听。
-    /// 本地 command.* 和命令集主窗口属于 Shell 核心能力，不依赖本开关。
-    /// 提示词治理与留痕写入数据目录中的 JSON/JSONL 文件，不依赖数据服务。
-    /// </summary>
-    public bool EnableMcp { get; set; }
-
-    /// <summary>
     /// 客户端模式下只创建命令集、指令详情和模块管理视图，不在本进程创建 MCP 或 ModuleHost。
     /// 视图经 CommandBus.RemoteExecutor 读取服务端结构化结果。
     /// </summary>
@@ -91,22 +82,10 @@ public sealed class ShellConfig
     public ShellCloseBehavior CloseBehavior { get; set; } = ShellCloseBehavior.Exit;
 
     /// <summary>
-    /// MCP 调用留痕接管点:null 时框架用内置 McpAuditRecorder 写 state/mcp-history.jsonl。
-    /// 派生应用若已有自己的留痕器,实现 IMcpAuditLog 接进来即可。
-    /// </summary>
-    public HistoryVulcan.Core.Mcp.IMcpAuditLog? McpAuditLog { get; set; }
-
-    /// <summary>
     /// 应用身份:null 时取 <c>AppIdentity.Current</c>(入口程序集)。
     /// 测试宿主等入口程序集不是应用本体的场景应显式提供。
     /// </summary>
     public HistoryVulcan.Core.ApplicationIdentity? Identity { get; set; }
-
-    /// <summary>
-    /// MCP 危险调用的宿主确认中继(CX-02,host 档使用):
-    /// null 时框架用内置对话框 <c>RemoteConfirmDialog</c>。
-    /// </summary>
-    public Func<string, string, int, bool?>? McpRemoteConfirm { get; set; }
 
     /// <summary>
     /// 命令集选中状态(0.4.4):框架的命令集窗口(McpToolsView)写入选中的指令名。

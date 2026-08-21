@@ -1,4 +1,4 @@
-using HistoryAurora.Module;
+﻿using HistoryAurora.Module;
 using HistoryAurora.Shell;
 using Xunit;
 
@@ -16,14 +16,28 @@ namespace HistoryAurora.Verify.Contracts;
 /// </summary>
 public sealed class FrontendMcpOwnershipTests
 {
+    /// <summary>
+    /// 界面不得能够创建 MCP 网关——不是"默认不创建"，是**没有这个能力**。
+    /// </summary>
+    /// <remarks>
+    /// 断言从 <c>Assert.False(config.EnableMcp)</c> 改成「这个开关不存在」（Vulcan 4.4.0）。
+    /// 一个从不被置 true 的开关守不住任何东西：它只是把「未实现」写成「可配置」的样子，
+    /// 而下一个读代码的人会以为那条路还能走通。
+    ///
+    /// MCP 由 HistoryPortunus 承载，界面需要它的地方只剩命令集页，走指令总线取数。
+    /// 哪天有人把网关加回界面，这条会立刻失败。
+    /// </remarks>
     [Fact]
-    public void InProcessShellDoesNotStartASecondMcpGateway()
+    public void ShellCannotCreateAnMcpGatewayAtAll()
     {
-        var config = AuroraShellHost.CreateConfig();
+        Assert.Null(typeof(ShellConfig).GetProperty("EnableMcp"));
+        Assert.Null(typeof(ShellConfig).GetProperty("McpAuditLog"));
+        Assert.Null(typeof(ShellConfig).GetProperty("McpRemoteConfirm"));
+        Assert.Null(typeof(ShellWindow).GetProperty("Mcp"));
+        Assert.Null(typeof(ShellWindow).GetProperty("Prompts"));
 
-        // MCP 由宿主的权威注册表承载；界面只保留远程管理视图。
-        Assert.False(config.EnableMcp);
-        Assert.True(config.EnableRemoteManagementViews);
+        // 远程管理视图仍然要在：命令集页靠它经指令总线取数。
+        Assert.True(AuroraShellHost.CreateConfig().EnableRemoteManagementViews);
     }
 
     [Fact]

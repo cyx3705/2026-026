@@ -1,4 +1,4 @@
-using HistoryVulcan.Core.Commands;
+﻿using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
@@ -20,14 +20,12 @@ public static class FrontendCommandCatalog
     public static IReadOnlyList<CommandDescriptor> SharedBuiltinSourceDescriptors =>
         FrameworkSnapshot.Value.SharedBuiltins;
 
-    public static IReadOnlyList<CommandDescriptor> CreateFrameworkProxies()
-        => FrameworkSnapshot.Value.Frontend.Select(CreateProxy).ToList();
-
-    public static CommandDescriptor CreateProxy(CommandDescriptor source)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        return FrontendCommandCapability.From(source, Source).CreateProxy();
-    }
+    // CreateFrameworkProxies / CreateProxy 随进程外前端退役（DEC-008，Vulcan 4.2.0）。
+    //
+    // 它们把界面指令投影成「代理描述符」，登记到服务端的注册表里，由服务把调用中继回
+    // 另一个进程的界面。界面变成宿主内模块之后中继链路本身消失了，代理无处可投——
+    // 它们依赖的 Core.FrontendCommandCapability 也已随之从宿主删除。
+    // 本类保留下来的是 Source 常量与框架描述符快照：那两样与中继无关。
 
     private static CatalogSnapshot CreateFrameworkSnapshot()
     {

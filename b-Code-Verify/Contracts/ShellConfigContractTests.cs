@@ -1,4 +1,4 @@
-using HistoryVulcan.Core.Commands;
+﻿using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell;
 using Xunit;
 
@@ -25,37 +25,7 @@ public sealed class ShellConfigContractTests
 
         Assert.False(config.EnableModules);
         Assert.False(config.EnableUiModules);
-        Assert.False(config.EnableMcp);
         Assert.False(config.EnableRemoteManagementViews);
         Assert.Empty(config.Panels);
-    }
-
-    /// <summary>
-    /// 两条造代理的路径必须给出同一份治理元数据。它们分别服务于框架内置命令与模块能力，
-    /// 若有一条漏掉 <c>IsDangerous</c> 之类的位，危险命令会在某一条路径上悄悄失去确认闸口。
-    /// </summary>
-    [Fact]
-    public void FrontendProxyFactoriesUseTheSameGovernanceMetadata()
-    {
-        var source = new CommandDescriptor
-        {
-            Name = "ui.dangerous",
-            Summary = "dangerous",
-            Dangerous = true,
-            RequiresUiThread = true,
-            AllowUnspecifiedParameters = true,
-            AllowMcpExecution = true,
-            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok()),
-        };
-
-        var frameworkProxy = FrontendCommandCatalog.CreateProxy(source);
-        var capabilityProxy = FrontendCommandCapability.From(
-            source, FrontendCommandCatalog.Source).CreateProxy();
-
-        Assert.Equal(capabilityProxy.IsDangerous, frameworkProxy.IsDangerous);
-        Assert.Equal(capabilityProxy.RequiresUiThread, frameworkProxy.RequiresUiThread);
-        Assert.Equal(capabilityProxy.AllowUnspecifiedParameters, frameworkProxy.AllowUnspecifiedParameters);
-        Assert.Equal(capabilityProxy.AllowMcpExecution, frameworkProxy.AllowMcpExecution);
-        Assert.NotNull(frameworkProxy.ConfirmPrompt);
     }
 }

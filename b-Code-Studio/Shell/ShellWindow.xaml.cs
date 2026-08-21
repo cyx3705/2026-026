@@ -49,8 +49,6 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly Pages.ModulePageLoader _pageLoader;
     private readonly Pages.ComponentRequestStore _componentRequests;
     private readonly Modules.ShellUiRegistrar _shellUi;
-    private readonly HistoryVulcan.Services.Mcp.McpGateway? _mcp;
-    private readonly HistoryVulcan.Services.Mcp.PromptGovernanceStore? _prompts;
 
     // 命令集页与指令详情页的选中联动(0.4.4 上抛):优先用派生应用经 ShellConfig 传入的实例,
     // 未传则自建。由构造函数赋值——工具窗口内容工厂在 DockingHost 构建默认布局时即被调用,
@@ -332,48 +330,24 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
                 HistoryAurora.Shell.Modules.ModuleCommands.RegisterAll(registry, _modules, settings);
         }
 
-        if (config.EnableMcp)
-        {
-            var identity = config.Identity ?? HistoryVulcan.Core.AppIdentity.Current;
-            _prompts = new HistoryVulcan.Services.Mcp.PromptGovernanceStore(dataDirectory, log);
-            var audit = config.McpAuditLog
-                        ?? new HistoryVulcan.Services.Mcp.McpAuditRecorder(dataDirectory, log);
-            Func<string, string, int, bool?> remoteConfirm = config.McpRemoteConfirm
-                ?? ((_, prompt, timeout) =>
-                    HistoryAurora.Shell.Mcp.RemoteConfirmDialog.Ask(this, prompt, timeout));
-            _mcp = new HistoryVulcan.Services.Mcp.McpGateway(
-                () => _bus, settings, log, audit, _prompts, identity, remoteConfirm);
-
-            // McpCommands.RegisterAll 是聚合入口:内部级联注册 prompt.*(提示词治理)与
-            // command.*(命令目录),不可在此重复调用 CommandCatalogCommands/PromptGovernanceCommands,
-            // 否则 vulcan.command.list 等会二次注册,CommandRegistry 冲突即抛(§5.3)。
-            // 全限定:本类的 Mcp 只读属性会遮蔽 HistoryAurora.Shell.Mcp 命名空间。
-            HistoryVulcan.Services.Mcp.McpCommands.RegisterAll(registry, () => _bus, () => _mcp, settings, _prompts);
-
-            // CX-03:MCP 中继预批准的执行直接放行,其余仍走 Shell 交互确认
-            _bus.Confirmation = new HistoryVulcan.Core.Mcp.GatewayAwareConfirmation(_bus.Confirmation);
-        }
-        else
-        {
-            // command.* 与中央命令集不需要网关、提示词存储或审计器。
-            HistoryVulcan.Services.Mcp.CommandCatalogCommands.RegisterCore(registry);
-        }
+        // MCP 不再由界面承载（Vulcan 4.4.0）。
+        //
+        // 这里原先有一整段 `if (config.EnableMcp)`：自建 McpGateway、PromptGovernanceStore
+        // 与 McpAuditRecorder，并注册 mcp.* 与 command.*。它自界面变成宿主内模块（DEC-008）
+        // 起就再没被构造过——EnableMcp 全仓只被赋值一次，值是 false。
+        // 一个从不执行的分支不是纵深防御，只是把「未实现」写成了「可配置」的样子。
+        //
+        // 界面现在需要 MCP 的地方只剩命令集页，而它本来就走指令总线：
+        // 经 CommandBus 执行 vulcan.command.list，从结果里读 CommandCatalogRow。
+        // 这条路不依赖任何 MCP 实现类型，因此网关搬到哪个模块都与界面无关。
+        //
+        // vulcan.command.* 由宿主注册，界面不得重复注册——CommandRegistry 冲突即抛。
 
         config.ConfigureCommands?.Invoke(registry);
 
         // 模块宿主在全部指令注册完成后接入并首次装载(此刻仍在 UI 线程)
         _modules?.Attach(registry, _bus, settings, dataDirectory);
         _modules?.Start();
-
-        // 指令与模块全部就绪后再启动网关，保证首次 tools/list 即为完整注册表。
-        if (_mcp != null)
-        {
-            var (success, message) = _mcp.TryAutostart();
-            if (success)
-                log.Info("mcp", message);
-            else
-                log.Warn("mcp", message);
-        }
 
         // 命令结果统一进入 IShellLog/控制台；失败仍自动打开控制台查看全文。
         _bus.Executed += (text, source, result) => Dispatcher.BeginInvoke(() =>
@@ -486,12 +460,6 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     /// 宿主自己已不含任何界面实现，注册器只能来自这里（DEC-008）。
     /// </summary>
     public HistoryVulcan.Core.Modules.IShellUiRegistrar ShellUi => _shellUi;
-
-    /// <summary>MCP 网关；仅在消费方显式启用 <see cref="ShellConfig.EnableMcp"/> 时创建。</summary>
-    public HistoryVulcan.Services.Mcp.McpGateway? Mcp => _mcp;
-
-    /// <summary>提示词治理存储(0.4.4);与 <see cref="Mcp"/> 同生命周期。</summary>
-    public HistoryVulcan.Services.Mcp.PromptGovernanceStore? Prompts => _prompts;
 
     /// <summary>
     /// 命令集选中状态(0.4.4):框架的命令集窗口写入,派生应用的指令详情窗口读取。
@@ -671,10 +639,8 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         SaveWindowBounds();
         _docking.SaveCurrentLayout();
 
-        // 0.4.4:Shell 自建的能力由 Shell 自己收尾——网关握着监听端口,
-        // 模块宿主握着文件监听与防抖定时器,都必须在退出前释放。
-        // 派生应用不再需要(也不应该)重复 Dispose 这两件。
-        _mcp?.Dispose();
+        // Shell 自建的能力由 Shell 自己收尾：模块宿主握着文件监听与防抖定时器，
+        // 必须在退出前释放。网关一项随 MCP 迁出 Aurora（Vulcan 4.4.0）而消失。
         _modules?.Dispose();
         _history.Save();
         _catalogSession.Dispose();

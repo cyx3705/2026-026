@@ -17,7 +17,7 @@ using HistoryVulcan.Extensibility.CommandSurface;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell;
 using HistoryAurora.Shell.Console;
-using HistoryVulcan.Services.Mcp;
+using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using Xunit;
 

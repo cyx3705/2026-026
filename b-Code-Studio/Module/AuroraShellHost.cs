@@ -198,7 +198,6 @@ internal static class AuroraShellHost
             AppVersion = identity.Version,
             EnableModules = false,
             EnableUiModules = false,
-            EnableMcp = false,
             RequireConfirmedModuleSources = true,
             EnableRemoteManagementViews = true,
             CloseBehavior = ShellCloseBehavior.Hide,
