@@ -10,7 +10,15 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+
+    # Diana 发布器的调用契约（Publish-OneHistoryModule.ps1）：候选先扁平写进一个临时
+    # OutputRoot，跑完模块合同与验证之后，由发布器自己提升为 z-Publish\HistoryAurora-vX.Y.Z。
+    # 省略时保持手工用法不变：直接写进 z-Publish 的版本化目录并归档旧版。
+    [string]$OutputRoot,
+
+    # 发布器指定本次要编译到哪一份宿主快照；省略时由 Directory.Build.props 决定。
+    [string]$HistoryVulcanPackageRoot
 )
 
 Set-StrictMode -Version Latest
@@ -27,7 +35,11 @@ if (-not $versionMatch.Success) {
 $version = $versionMatch.Groups['v'].Value
 
 $solution = Join-Path $repoRoot 'HistoryAurora.sln'
-& dotnet build $solution -c $Configuration --nologo -p:NuGetAudit=false
+$buildProperties = @('-p:NuGetAudit=false')
+if (-not [string]::IsNullOrWhiteSpace($HistoryVulcanPackageRoot)) {
+    $buildProperties += "-p:HistoryVulcanPackageRoot=$HistoryVulcanPackageRoot"
+}
+& dotnet build $solution -c $Configuration --nologo @buildProperties
 if ($LASTEXITCODE -ne 0) { throw "build failed with exit code $LASTEXITCODE" }
 
 $output = Join-Path $componentRoot "Module\bin\$Configuration\net8.0-windows"
@@ -65,6 +77,17 @@ try {
         (Join-Path $stage 'SHA256SUMS'),
         [string[]]$lines,
         (New-Object System.Text.UTF8Encoding $false))
+
+    if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
+        # 发布器路径：只交付内容，不碰 z-Publish。归档与版本化目录由它统一处理，
+        # 两边都做会让 history/ 里出现同一版本的两份。
+        $staged = [IO.Path]::GetFullPath($OutputRoot)
+        New-Item -ItemType Directory -Path $staged -Force | Out-Null
+        Get-ChildItem -LiteralPath $staged -Force | Remove-Item -Recurse -Force
+        Copy-Item -Path (Join-Path $stage '*') -Destination $staged -Recurse -Force
+        Write-Host "HistoryAurora $version staged for the publisher: $staged"
+        return
+    }
 
     $publishRoot = Join-Path $repoRoot 'z-Publish'
     $historyRoot = Join-Path $publishRoot 'history'
