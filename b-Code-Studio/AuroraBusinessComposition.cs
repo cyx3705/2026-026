@@ -1,6 +1,7 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
+using HistoryVulcan.Extensibility.Modules;
 
 namespace HistoryAurora.Module;
 
@@ -11,10 +12,13 @@ namespace HistoryAurora.Module;
 /// DEC-008 起界面不再有独立 exe：它是宿主装载的一个模块，在宿主进程内开窗，
 /// 启动与显隐一律走注册的指令，桌面入口由 Mercury 活动坞承担。
 ///
-/// 本类同时是 <see cref="IShellUiProvider"/>：界面既然整体成了模块，
-/// 宿主自己就不再持有任何界面实现，其余模块要用的注册器只能由这里交回去。
+/// 本类同时是 <see cref="IShellUiProvider"/> 与
+/// <see cref="IShellCommandWorkbenchProvider"/>：界面既然整体成了模块，
+/// 宿主自己就不再持有任何界面实现，其余模块要用的注册器与命令工作台挂载点
+/// 都只能由这里交回去。
 /// </summary>
-public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiProvider, IUiModule
+public sealed class AuroraBusinessComposition
+    : IModuleContextAware, IShellUiProvider, IShellCommandWorkbenchProvider, IUiModule
 {
     private IModuleContext? _context;
 
@@ -35,6 +39,15 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IShellUiPro
 
     /// <summary>供宿主转交给其余 UI 模块的界面注册器；界面未就绪时为 null。</summary>
     public IShellUiRegistrar? ShellUi => AuroraShellHost.Registrar;
+
+    /// <summary>
+    /// 供宿主转交给命令工作台模块（HistoryMercury）的挂载点；界面未就绪时为 null。
+    ///
+    /// 主窗口本身实现 <see cref="IShellCommandWorkbenchHost"/>——工作台要的
+    /// 共享选中态、控制台目录会话与补全路由都长在它身上，别处给不出来。
+    /// 少了这条通道，命令集与指令详情两页不会出现，控制台补全同时退化到本地兜底。
+    /// </summary>
+    public IShellCommandWorkbenchHost? CommandWorkbench => AuroraShellHost.Window;
 
     /// <summary>
     /// 空实现。本模块**承载**界面而不是往界面里加东西，窗口的生死由
