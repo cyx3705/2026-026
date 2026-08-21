@@ -130,10 +130,13 @@ GridViewColumn 46 次，而 DataGrid 只有 2 次——`DataGrid` 不在主题�
 `Aurora.ComboBox.ToggleButton`、`Aurora.TreeExpander`、`Aurora.ScrollBar.Thumb`——
 一般不必直接引用，对应控件套用后自动生效。
 
-## 弹窗 `aurora.ui.dialog`（1.1.0）
+## 弹窗 `aurora.ui.dialog`（1.2.0）
 
 模块不要自己 `new Window`。前端独立之后，顶层窗口拿不到 `Aurora.*` 令牌，
-`DynamicResource` 会静默退化成系统外观。弹窗由 Aurora 自持，自己合并主题字典。
+`DynamicResource` 会静默退化成系统外观。弹窗由 Aurora 自持，自己合并主题字典，
+并用与主窗体相同的自绘顶栏（无系统标题栏）。
+
+写操作的宿主 `ConfirmPrompt` 在进程内也走同一组件：Aurora 启动时接管宿主确认通道。
 
 ```text
 aurora.ui.dialog kind=message title=关于 body="……"
@@ -149,9 +152,10 @@ aurora.ui.dialog kind=content title=预览 body="摘要" content="<大段正文>
 | `prompt` | 带输入的确认 | 成功时 `Message`/`Data` 是输入文本 |
 | `content` | 大段只读等宽正文（历史预览） | 点关闭即成功 |
 
+模块不要再叠一层确认框。
+
 **不要**把弹窗写进 `<域>.ui.describe` 的页面树。它不是停靠页，页面渲染器里没有
-`dialog` 组件——写了只会变成显式占位。本轮只把 Aurora 侧做出来；模块现有的
-`HistoryPreviewDialog` 等下一轮再改走这条命令。
+`dialog` 组件——写了只会变成显式占位。
 
 ## 规矩
 

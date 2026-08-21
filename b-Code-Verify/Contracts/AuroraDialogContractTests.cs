@@ -43,6 +43,8 @@ public sealed class AuroraDialogContractTests
                 Assert.Equal(Colors.White, surface.Color);
                 Assert.NotNull(dialog.TryFindResource("Aurora.Button.Accent"));
                 Assert.NotNull(dialog.TryFindResource("Aurora.Dialog.Chrome"));
+                Assert.Equal(WindowStyle.None, dialog.WindowStyle);
+                Assert.Equal("关于", dialog.CaptionTitle?.Text);
                 Assert.Equal("关闭", dialog.PrimaryButton.Content);
                 Assert.Null(dialog.CancelButton);
                 dialog.Close();
@@ -111,8 +113,39 @@ public sealed class AuroraDialogContractTests
             Assert.Equal("abc123 提交", content.BodyText?.Text);
             Assert.Equal("diff --git a/file", content.ContentBox?.Text);
             Assert.IsType<TextBox>(content.ContentBox);
+            Assert.Equal(WindowStyle.None, content.WindowStyle);
+            Assert.Equal("预览", content.CaptionTitle?.Text);
+            Assert.NotNull(content.TryFindResource("Aurora.WindowButton.Close"));
             content.Close();
         });
+    }
+
+    [Fact]
+    public void InProcessShellClaimsHostConfirmationChannel()
+    {
+        var path = Path.Combine(
+            RepositoryRoot(),
+            "b-Code-Studio",
+            "Module",
+            "AuroraShellHost.cs");
+        var source = File.ReadAllText(path);
+        Assert.Contains("new MessageBoxConfirmation(window)", source, StringComparison.Ordinal);
+        Assert.Contains("ConfirmationRouter", source, StringComparison.Ordinal);
+        Assert.Contains("GatewayAwareConfirmation", source, StringComparison.Ordinal);
+        Assert.Contains("ShellRelayConfirmation", source, StringComparison.Ordinal);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "project.manifest.json")))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("未找到 HistoryAurora 仓库根目录");
     }
 
     [Fact]

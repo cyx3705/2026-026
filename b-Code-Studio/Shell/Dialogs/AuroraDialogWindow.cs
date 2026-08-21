@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Shapes;
+using System.Windows.Shell;
 using System.Windows.Threading;
 
 namespace HistoryAurora.Shell;
@@ -27,6 +30,9 @@ public sealed class AuroraDialogWindow : Window
     private static readonly Uri DialogUri =
         new("/HistoryAurora;component/Themes/AuroraDialog.xaml", UriKind.Relative);
 
+    private static readonly Uri ChromeUri =
+        new("/HistoryAurora;component/Themes/AuroraChrome.xaml", UriKind.Relative);
+
     private readonly AuroraDialogRequest _request;
     private bool _accepted;
     private bool _timedOut;
@@ -46,13 +52,16 @@ public sealed class AuroraDialogWindow : Window
         ShowInTaskbar = false;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = false;
 
         MergeTheme(dark);
         SetResourceReference(ForegroundProperty, "Aurora.Brush.TextPrimary");
-        SetResourceReference(BackgroundProperty, "Aurora.Brush.Surface");
+        SetResourceReference(BackgroundProperty, "Aurora.Brush.Canvas");
 
         Content = BuildContent();
         ApplySize();
+        ApplyChrome();
 
         SourceInitialized += (_, _) =>
         {
@@ -61,6 +70,8 @@ public sealed class AuroraDialogWindow : Window
         };
         Closed += (_, _) => _timer?.Stop();
     }
+
+    internal TextBlock? CaptionTitle { get; private set; }
 
     internal TextBlock? BodyText { get; private set; }
 
@@ -98,7 +109,23 @@ public sealed class AuroraDialogWindow : Window
     {
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = dark ? DarkTokensUri : LightTokensUri });
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = ControlsUri });
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = ChromeUri });
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = DialogUri });
+    }
+
+    private void ApplyChrome()
+    {
+        var caption = TryFindResource("Aurora.Size.Tab") is double tab ? tab : 32;
+        WindowChrome.SetWindowChrome(this, new WindowChrome
+        {
+            CaptionHeight = caption,
+            ResizeBorderThickness = ResizeMode == ResizeMode.CanResize
+                ? new Thickness(6)
+                : new Thickness(0),
+            GlassFrameThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(0),
+            UseAeroCaptionButtons = false,
+        });
     }
 
     private void ApplySize()
@@ -134,15 +161,23 @@ public sealed class AuroraDialogWindow : Window
         chrome.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Chrome");
 
         var root = new DockPanel();
+        var caption = BuildCaption();
+        DockPanel.SetDock(caption, Dock.Top);
+        root.Children.Add(caption);
+
+        var inner = new DockPanel();
+        var pad = new Border { Child = inner };
+        pad.SetResourceReference(Border.PaddingProperty, "Aurora.Space.Pad");
+
         var footer = BuildFooter();
         DockPanel.SetDock(footer, Dock.Bottom);
-        root.Children.Add(footer);
+        inner.Children.Add(footer);
 
         if (_request.Kind == AuroraDialogKind.Confirm && _request.TimeoutSeconds > 0)
         {
             var countdown = BuildCountdown();
             DockPanel.SetDock(countdown, Dock.Bottom);
-            root.Children.Add(countdown);
+            inner.Children.Add(countdown);
         }
 
         if (_request.Kind == AuroraDialogKind.Prompt)
@@ -150,7 +185,7 @@ public sealed class AuroraDialogWindow : Window
             PromptBox = new TextBox { Text = _request.Value ?? "" };
             PromptBox.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Prompt");
             DockPanel.SetDock(PromptBox, Dock.Bottom);
-            root.Children.Add(PromptBox);
+            inner.Children.Add(PromptBox);
         }
 
         if (_request.Kind == AuroraDialogKind.Content)
@@ -160,22 +195,66 @@ public sealed class AuroraDialogWindow : Window
                 BodyText = new TextBlock { Text = _request.Body };
                 BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Title");
                 DockPanel.SetDock(BodyText, Dock.Top);
-                root.Children.Add(BodyText);
+                inner.Children.Add(BodyText);
             }
 
             ContentBox = new TextBox { Text = _request.Content ?? "" };
             ContentBox.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Content");
-            root.Children.Add(ContentBox);
+            inner.Children.Add(ContentBox);
         }
         else if (!string.IsNullOrWhiteSpace(_request.Body))
         {
             BodyText = new TextBlock { Text = _request.Body, MaxWidth = 460 };
             BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Body");
-            root.Children.Add(BodyText);
+            inner.Children.Add(BodyText);
         }
 
+        root.Children.Add(pad);
         chrome.Child = root;
         return chrome;
+    }
+
+    private FrameworkElement BuildCaption()
+    {
+        var bar = new Grid();
+        bar.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Caption");
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        CaptionTitle = new TextBlock { Text = Title, VerticalAlignment = VerticalAlignment.Center };
+        CaptionTitle.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.CaptionTitle");
+        Grid.SetColumn(CaptionTitle, 0);
+
+        var close = new Button { Focusable = false, ToolTip = "关闭" };
+        close.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.WindowButton.Close");
+        close.Click += (_, _) =>
+        {
+            _accepted = false;
+            try { DialogResult = false; }
+            catch (InvalidOperationException) { Close(); }
+        };
+        var icon = new Path
+        {
+            Data = Geometry.Parse("M 0,0 L 10,10 M 10,0 L 0,10"),
+            StrokeThickness = 1.2,
+            Stretch = Stretch.Uniform,
+            Width = 10,
+            Height = 10,
+        };
+        icon.SetBinding(Shape.StrokeProperty, new Binding(nameof(Foreground)) { Source = close });
+        close.Content = icon;
+        Grid.SetColumn(close, 1);
+
+        bar.Children.Add(CaptionTitle);
+        bar.Children.Add(close);
+
+        var wrap = new DockPanel { LastChildFill = true };
+        var hairline = new Border { Height = 1 };
+        hairline.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Hairline");
+        DockPanel.SetDock(hairline, Dock.Bottom);
+        wrap.Children.Add(hairline);
+        wrap.Children.Add(bar);
+        return wrap;
     }
 
     private FrameworkElement BuildFooter()
