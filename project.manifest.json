@@ -57,7 +57,8 @@
     "overview": "b-Office/current/项目概览.md",
     "technicalContract": "b-Office/current/技术合同.md",
     "decisions": "b-Office/current/有效决策.md",
-    "verification": "b-Office/current/验证合同.md"
+    "verification": "b-Office/current/验证合同.md",
+    "uiStyle": "b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md"
   },
   "commands": {
     "setup": "dotnet restore .\\HistoryAurora.sln --locked-mode -p:NuGetAudit=false",

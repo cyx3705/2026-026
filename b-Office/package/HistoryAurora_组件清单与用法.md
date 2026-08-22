@@ -1,6 +1,8 @@
 # HistoryAurora 组件清单与用法
 
 > 面向模块作者。本文列出 Aurora 前端提供的样式键与页面注册方式，以及**怎么用**。
+> 颜色、间距、嵌入页结构和顶栏归属见
+> [HistoryAurora_UI风格与嵌入页面规范](../current/HistoryAurora_UI风格与嵌入页面规范.md)。
 > 组件的建设计划与调研依据见 `../history/前端组件计划表V1.0.md`；
 > 长期约束见 `../current/技术合同.md`。
 
