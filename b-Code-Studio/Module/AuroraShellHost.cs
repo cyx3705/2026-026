@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
@@ -140,8 +140,10 @@ internal static class AuroraShellHost
             Dangerous = source.Dangerous,
             Readonly = source.Readonly,
             RequiresUiThread = source.RequiresUiThread,
-            ExecutionSite = source.ExecutionSite,
             AllowMcpExecution = source.AllowMcpExecution,
+            // 逐字段抄写就得抄全：漏掉一个，界面指令的那项声明会在进入宿主表时被静默清空。
+            // AllowCliExecution 此前就漏了，界面指令因此永远无法声明命令行暴露。
+            AllowCliExecution = source.AllowCliExecution,
             AllowUnspecifiedParameters = source.AllowUnspecifiedParameters,
             Annotations = source.Annotations,
             Handler = context => window.Dispatcher.Invoke(() => source.Handler(context)),
@@ -247,8 +249,7 @@ internal static class AuroraShellHost
 
                 // 本机已登记且需要 UI 线程的命令留在界面侧：宿主那边没有窗口实例。
                 if (window.Commands.Registry.TryGet(parsed.Name, out var descriptor)
-                    && descriptor.RequiresUiThread
-                    && descriptor.ExecutionSite != CommandExecutionSite.Frontend)
+                    && descriptor.RequiresUiThread)
                     return false;
             }
             catch (CommandSyntaxException)
