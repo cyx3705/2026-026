@@ -45,3 +45,6 @@ z-Package-AppShell/staging/
 
 # 本机覆盖点：AI 工作树里指回来源仓的宿主快照，不入库
 Directory.Build.user.props
+
+# WPF 构建过程产生的临时工程文件（*_wpftmp.csproj）
+*_wpftmp.csproj

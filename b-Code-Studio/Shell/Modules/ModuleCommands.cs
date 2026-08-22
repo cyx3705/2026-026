@@ -71,7 +71,7 @@ public static class ModuleCommands
             CommandClass = "module",
             Summary = "从已校验候选包原子安装并重载运行时模块",
             Example = "vulcan.module.install path=C:\\OneHistory\\HistoryClio\\2026-020-HistoryJanus\\z-Publish\\HistoryJanus-v5.0.0",
-            Dangerous = true,
+            Level = CommandLevel.Ask,
             Parameters = [new ParameterSpec
             {
                 Name = "path",
@@ -92,7 +92,7 @@ public static class ModuleCommands
             CommandClass = "module",
             Summary = "从运行区原子移除模块包并刷新运行快照",
             Example = "vulcan.module.remove name=HistoryJanus",
-            Dangerous = true,
+            Level = CommandLevel.Ask,
             Parameters = [new ParameterSpec
             {
                 Name = "name",

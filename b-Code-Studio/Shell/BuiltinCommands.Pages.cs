@@ -17,6 +17,7 @@ public static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.reloadpages",
+            HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
             Summary = "重新向全部模块拉取页面描述并建页",
@@ -31,6 +32,7 @@ public static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.invalidate",
+            HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
             Summary = "模块声明自己的页面描述已变，请求重拉该模块",
@@ -50,6 +52,7 @@ public static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.missing",
+            HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
             Summary = "列出页面描述里引用了、但组件库尚未提供的组件",
@@ -78,6 +81,7 @@ public static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.request",
+            HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
             Summary = "申请一个组件库尚未提供的组件",
@@ -105,6 +109,7 @@ public static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.requests",
+            HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
             Summary = "列出尚未交付的组件申请（已交付的自动出账）",

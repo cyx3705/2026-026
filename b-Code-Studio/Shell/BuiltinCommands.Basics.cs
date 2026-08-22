@@ -145,8 +145,8 @@ public static partial class BuiltinCommands
         sb.Append($"\n{CommandBus.FormatUsage(d)}");
         if (d.Example != null)
             sb.Append($"\n示例: {d.Example}");
-        if (d.IsDangerous)
-            sb.Append("\n安全: 执行动作可能要求本地二次确认");
+        if (d.Level == CommandLevel.Ask)
+            sb.Append("\n级别: 询问（执行前会要求确认）");
         if (d.RequiresUiThread)
             sb.Append("\n线程: UI");
         return CommandResult.Ok(sb.ToString());

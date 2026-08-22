@@ -137,13 +137,12 @@ internal static class AuroraShellHost
             Example = source.Example,
             Parameters = source.Parameters,
             ConfirmPrompt = source.ConfirmPrompt,
-            Dangerous = source.Dangerous,
+            Level = source.Level,
             Readonly = source.Readonly,
             RequiresUiThread = source.RequiresUiThread,
-            AllowMcpExecution = source.AllowMcpExecution,
             // 逐字段抄写就得抄全：漏掉一个，界面指令的那项声明会在进入宿主表时被静默清空。
-            // AllowCliExecution 此前就漏了，界面指令因此永远无法声明命令行暴露。
-            AllowCliExecution = source.AllowCliExecution,
+            // 隐藏声明尤其不能漏——漏掉等于把一条刻意不对远端暴露的指令暴露出去。
+            HiddenReason = source.HiddenReason,
             AllowUnspecifiedParameters = source.AllowUnspecifiedParameters,
             Annotations = source.Annotations,
             Handler = context => window.Dispatcher.Invoke(() => source.Handler(context)),
