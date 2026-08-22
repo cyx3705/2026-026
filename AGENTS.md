@@ -16,7 +16,8 @@
 
 - 本项目是**独立应用** `HistoryAurora.exe`（DEC-004），同时在 Vulcan 的模块注册表里登记
   一条平级条目（DEC-007）。它不是宿主：宿主之所以是宿主，只因为它持有指令总线与注册表。
-- 宿主合同以 `../2026-023-HistoryVulcan/b-Office/package/` 为准，不在本仓复述。
+- 宿主合同以 `../2026-023-HistoryVulcan/b-Office/package/` 为准，不在本仓复述指令与公开 API。
+- 界面视觉、嵌入页结构与顶栏归属以本仓 `b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md` 为准。
 - 消费的宿主版本由 `b-Code-Studio/AuroraVersion.props` 的 `MinimumHistoryVulcanVersion`
   单点声明，发布脚本与门禁都从此读取，不得各自硬编码字面量。
 - 模块引用宿主运行库一律 `Private=false`（部署时由宿主提供）；测试工程是独立宿主进程，
