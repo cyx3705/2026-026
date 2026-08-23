@@ -1,12 +1,14 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Threading;
+using HistoryAurora.Shell;
+using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Logging;
+using HistoryAurora.Shell.Modules;
 using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
 using HistoryVulcan.Services;
-using HistoryAurora.Shell;
 
 
 namespace HistoryAurora.Module;
@@ -68,10 +70,7 @@ internal static class AuroraShellHost
         // 拿到 null 会让那些模块这一轮全部无处注册，而下一轮重载才补上——
         // 表现为"第一次启动少几个页面"，比多等几百毫秒难查得多。
         if (!Ready.Wait(readyTimeout))
-        {
-            context.Log.Warn("aurora", $"界面未在 {readyTimeout.TotalSeconds:0.#}s 内就绪，本轮模块页面可能缺失");
             return;
-        }
 
         PublishShellCommands(context);
     }
@@ -119,7 +118,6 @@ internal static class AuroraShellHost
             }
         });
 
-        context.Log.Info("aurora", $"已向宿主登记界面指令 {owned.Count} 条");
     }
 
     /// <summary>
@@ -154,12 +152,14 @@ internal static class AuroraShellHost
         {
             var paths = new AppPaths(AppIdentity.Current.Name);
             var config = CreateConfig();
+            var log = new MemoryShellLog();
+            var settings = new SettingsService(paths);
             var window = new ShellWindow(
                 config,
                 new FileLayoutStore(paths),
-                context.Log,
-                context.Settings,
-                context.DataDirectory);
+                log,
+                settings,
+                paths.Root);
 
             _window = window;
             WireBuses(window, context);
@@ -167,12 +167,11 @@ internal static class AuroraShellHost
             // 未处理异常落日志而不弹框：本进程是服务，没有人在屏幕前等着点"确定"。
             Dispatcher.CurrentDispatcher.UnhandledException += (_, args) =>
             {
-                context.Log.Log(ShellLogLevel.Fatal, "aurora", $"界面未处理异常: {args.Exception}");
+                log.Log(ShellLogLevel.Fatal, "aurora", $"界面未处理异常: {args.Exception}");
                 args.Handled = true;
             };
 
             Ready.Set();
-            context.Log.Info("aurora", "界面线程已就绪，等待宿主提交模块快照后再显示窗口");
 
             // 不建 Application：主题字典挂在 ShellWindow.Resources 与 DockManager.Resources 上，
             // 全仓只有一处读 Application.Current 且本就空值守卫。少一个进程级单例，
@@ -181,7 +180,7 @@ internal static class AuroraShellHost
         }
         catch (Exception ex)
         {
-            context.Log.Log(ShellLogLevel.Fatal, "aurora", $"界面启动失败: {ex}");
+            System.Diagnostics.Debug.WriteLine($"aurora 界面启动失败: {ex}");
             Ready.Set();
         }
     }
@@ -259,15 +258,57 @@ internal static class AuroraShellHost
         };
 
         // 反向：宿主收到界面命令时打回来。进程内直接指向界面总线，不经网关。
-        context.Bus.FrontendExecutor = (text, source, cancellation)
-            => window.Dispatcher.Invoke(() => window.Commands.ExecuteAsync(text, source, cancellation));
+        context.Bus.FrontendExecutor = (name, source, cancellation) =>
+            window.Dispatcher.InvokeAsync(() => DispatchFrontendCommand(window, name, source, cancellation)).Task.Unwrap();
 
-        // 进程内没有 WebSocket Shell。宿主默认的 ShellRelayConfirmation 在
-        // ConnectedShells=0 时直接拒绝，Janus 改名/提交/回滚的 ConfirmPrompt 会无弹窗失败。
-        // 把确认通道接到本窗的 Aurora 弹窗，MCP 预批准仍由 GatewayAwareConfirmation 放行。
         var uiConfirm = new MessageBoxConfirmation(window);
-        context.Bus.Confirmation = new HistoryVulcan.Core.Mcp.GatewayAwareConfirmation(uiConfirm);
+        context.Bus.Confirmation = uiConfirm;
         context.Bus.ConfirmationRouter = (_, prompt) => uiConfirm.Confirm(prompt);
+
+        window.AttachHostBus(context.Bus);
+    }
+
+    private static Task<CommandResult> DispatchFrontendCommand(
+        ShellWindow window, string name, string source, CancellationToken cancellation)
+    {
+        if (name.Equals("vulcan.app.show", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("vulcan.app.focusconsole", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!window.IsVisible)
+                window.Show();
+            window.Activate();
+            if (name.Equals("vulcan.app.focusconsole", StringComparison.OrdinalIgnoreCase))
+                window.ActivateToolContent("console");
+            return Task.FromResult(CommandResult.Ok("界面已显示"));
+        }
+
+        if (name.Equals("vulcan.app.hide", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("vulcan.app.close", StringComparison.OrdinalIgnoreCase))
+        {
+            window.Hide();
+            return Task.FromResult(CommandResult.Ok("界面已隐藏"));
+        }
+
+        return window.Commands.ExecuteAsync(name, source, cancellation);
+    }
+
+    /// <summary>
+    /// Attach 返回后排队显示。此时宿主往往还在提交模块快照；
+    /// ApplicationIdle 让 Show 落到快照提交之后，模块管理页才能读到清单。
+    /// </summary>
+    internal static void ShowMainWindowIdle()
+    {
+        var window = _window;
+        if (window == null)
+            return;
+
+        window.Dispatcher.BeginInvoke(
+            DispatcherPriority.ApplicationIdle,
+            new Action(() =>
+            {
+                ShowMainWindow();
+                _ = window.DiscoverModuleSurfacesAsync();
+            }));
     }
 
     /// <summary>
@@ -328,6 +369,7 @@ internal static class AuroraShellHost
         {
             try
             {
+                window?.DetachHostBus();
                 window?.ForceClose();
             }
             catch (Exception ex)

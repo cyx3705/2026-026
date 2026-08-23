@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;

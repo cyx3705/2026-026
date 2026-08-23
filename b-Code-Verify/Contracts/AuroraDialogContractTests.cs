@@ -131,8 +131,6 @@ public sealed class AuroraDialogContractTests
         var source = File.ReadAllText(path);
         Assert.Contains("new MessageBoxConfirmation(window)", source, StringComparison.Ordinal);
         Assert.Contains("ConfirmationRouter", source, StringComparison.Ordinal);
-        Assert.Contains("GatewayAwareConfirmation", source, StringComparison.Ordinal);
-        Assert.Contains("ShellRelayConfirmation", source, StringComparison.Ordinal);
     }
 
     private static string RepositoryRoot()
@@ -184,7 +182,7 @@ public sealed class AuroraDialogContractTests
         });
     }
 
-    private sealed class MemoryLayoutStore : HistoryVulcan.Core.Storage.ILayoutStore
+    private sealed class MemoryLayoutStore : HistoryAurora.Shell.Docking.ILayoutStore
     {
         private string? _current;
         private readonly Dictionary<string, string> _named = new(StringComparer.OrdinalIgnoreCase);

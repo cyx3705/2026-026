@@ -1,4 +1,4 @@
-﻿using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 
 namespace HistoryAurora.Shell;
 
@@ -34,7 +34,7 @@ public sealed class ShellConfig
     /// <summary>
     /// C# 通道声明的控制面板(P-01;与数据目录 panels/*.json 合并,JSON 优先加载在后)。
     /// </summary>
-    public List<HistoryVulcan.Extensibility.Panels.PanelDefinition> Panels { get; } = new();
+    public List<HistoryAurora.Shell.Panels.PanelDefinition> Panels { get; } = new();
 
     // ---------------------------------------------------------------- 0.4.4 反哺能力(消费方显式启用)
 

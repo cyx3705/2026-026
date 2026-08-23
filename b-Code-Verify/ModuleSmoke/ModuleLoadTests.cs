@@ -44,8 +44,8 @@ public sealed class ModuleLoadTests
     }
 
     [Fact]
-    public void DestroyUiWithoutAttachDoesNotThrow()
+    public void DisposeWithoutAttachDoesNotThrow()
     {
-        new AuroraBusinessComposition().DestroyUi();
+        new AuroraBusinessComposition().Dispose();
     }
 }

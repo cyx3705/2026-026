@@ -70,7 +70,7 @@ public static class ModuleCommands
             Domain = "vulcan",
             CommandClass = "module",
             Summary = "从已校验候选包原子安装并重载运行时模块",
-            Example = "vulcan.module.install path=C:\\OneHistory\\HistoryClio\\2026-020-HistoryJanus\\z-Publish\\HistoryJanus-v5.0.0",
+            Example = "vulcan.module.install path=C:\\OneHistory\\HistoryClio\\2026-020-HistoryJanus\\z-Publish\\HistoryJanus-v4.2.0",
             Level = CommandLevel.Ask,
             Parameters = [new ParameterSpec
             {

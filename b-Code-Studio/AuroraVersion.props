@@ -1,12 +1,10 @@
 <Project>
   <PropertyGroup>
-    <HistoryAuroraVersion>1.4.0</HistoryAuroraVersion>
+    <HistoryAuroraVersion>1.5.0</HistoryAuroraVersion>
     <!-- Aurora 消费的 HistoryVulcan 正式宿主版本。这是宿主契约的唯一真源：
          发布脚本与质量门禁都从此读取，不再各自硬编码字面量。
-         3.13.0 起 Web 网关要求 IPC 凭据（DEC-046）；4.0.0 的 A 阶段又移除了 162 个
-         Services 公开符号并搬迁了 MCP 类型，Aurora 直接链这些程序集，
-         因此低于 4.0.0 的宿主不可用。 -->
-    <MinimumHistoryVulcanVersion>4.4.0</MinimumHistoryVulcanVersion>
+         5.0.0 拆除宿主模块领域 SDK，冻结面只留注册器、总线和开发总线。 -->
+    <MinimumHistoryVulcanVersion>5.0.0</MinimumHistoryVulcanVersion>
     <VersionPrefix>$(HistoryAuroraVersion)</VersionPrefix>
     <Version>$(HistoryAuroraVersion)</Version>
     <AssemblyVersion>$(HistoryAuroraVersion).0</AssemblyVersion>

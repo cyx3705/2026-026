@@ -1,4 +1,4 @@
-﻿
+
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -6,11 +6,10 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell;
-using HistoryAurora.Shell.Docking;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
