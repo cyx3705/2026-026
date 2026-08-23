@@ -1,6 +1,7 @@
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
+using HistoryVulcan.Services.Commands;
 
 namespace HistoryAurora.Shell.Pages;
 
@@ -118,7 +119,7 @@ public sealed class ModulePageLoader(
             Drop(owner);
         _missing.Clear();
 
-        var owners = DescribableOwners();
+        var owners = await DescribableOwnersAsync(cancellation).ConfigureAwait(true);
         var registered = 0;
         var skipped = new List<string>();
 
@@ -152,15 +153,35 @@ public sealed class ModulePageLoader(
     /// 不用"先问 manifest 的 ui 标志再逐个试"——那要求宿主把 manifest 字段透出来，
     /// 而注册表本来就是权威且已经在手边；模块没注册该命令就是没有页面，不是错误。
     /// </summary>
-    private List<string> DescribableOwners()
-        => bus.Registry.All()
-            .Select(d => d.Name)
+    private async Task<List<string>> DescribableOwnersAsync(CancellationToken cancellation)
+    {
+        var names = bus.Registry.All().Select(d => d.Name).ToList();
+        if (bus.RemoteExecutor != null)
+        {
+            try
+            {
+                var listed = await bus.ExecuteAsync("vulcan.command.list", "UI", cancellation)
+                    .ConfigureAwait(true);
+                if (listed.Success
+                    && CommandResultData.TryRead<IReadOnlyList<CommandCatalogRow>>(listed.Data, out var rows))
+                {
+                    names.AddRange(rows.Select(row => row.CommandName));
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Log(ShellLogLevel.Warn, Source, "读取宿主命令目录失败: " + ex.Message);
+            }
+        }
+
+        return names
             .Where(name => name.EndsWith(DescribeSuffix, StringComparison.OrdinalIgnoreCase))
             .Select(name => name[..^DescribeSuffix.Length])
             .Where(domain => domain.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(domain => domain, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
 
     private async Task<int> LoadOwnerAsync(string domain, List<string> skipped, CancellationToken cancellation)
     {

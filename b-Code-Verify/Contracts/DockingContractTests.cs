@@ -1,4 +1,4 @@
-﻿
+
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -6,11 +6,10 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell;
-using HistoryAurora.Shell.Docking;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
@@ -279,10 +278,12 @@ public sealed class DockingContractTests
 
             try
             {
-                Assert.Null(window.Mcp);
                 Assert.Null(window.Modules);
-                Assert.True(window.Commands.Registry.TryGet("vulcan.command.list", out _));
+                // 界面自己不注册指令目录：vulcan.command.* 归宿主（Vulcan 4.4.0）。
+                Assert.False(window.Commands.Registry.TryGet("vulcan.command.list", out _));
+                // 两个名字都不许出现：改名前的与改名后的。
                 Assert.False(window.Commands.Registry.TryGet("vulcan.mcp.start", out _));
+                Assert.False(window.Commands.Registry.TryGet("portunus.mcp.start", out _));
                 Assert.False(window.Commands.Registry.TryGet("vulcan.module.list", out _));
                 window.Show();
                 UiTestHost.Pump();

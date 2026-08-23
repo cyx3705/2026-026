@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml.Linq;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using AvalonDock;

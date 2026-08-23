@@ -10,14 +10,14 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using HistoryVulcan.Extensibility.CommandSurface;
+using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell;
 using HistoryAurora.Shell.Console;
-using HistoryVulcan.Services.Mcp;
+using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using Xunit;
 

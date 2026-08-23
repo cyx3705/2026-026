@@ -1,7 +1,7 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Services.Modules;
-using HistoryVulcan.Services.Mcp;
+using HistoryVulcan.Services.Commands;
 using System.Text.Json;
 using System.Xml.Linq;
 using HistoryAurora.Shell.Views;
@@ -114,10 +114,7 @@ public sealed class ModuleCatalogSnapshotTests
         => new(name, name, "", "module", module);
 
     private static CommandCatalogRow CatalogRow(string name, string module)
-        => new(
-            name, "calc", name, null, 0, "module", module,
-            false, false, null, "standard", false,
-            false, null, 0, 0, null);
+        => new(name, "calc", name, null, 0, "module", module, false, false, false, null);
 
     private sealed class TestLog : IShellLog
     {

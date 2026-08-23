@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -8,8 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Extensibility.Commands;
-using HistoryVulcan.Extensibility.CommandSurface;
+using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Core.Logging;
 
 namespace HistoryAurora.Shell.Console;
@@ -21,7 +20,7 @@ namespace HistoryAurora.Shell.Console;
 /// 承压设计(N-03):日志事件先进并发队列,UI 以 100ms 批量合并刷新;
 /// 列表虚拟化 + 环形缓冲上限(C-05)。
 /// </summary>
-public partial class ConsoleView : UserControl, HistoryVulcan.Core.Modules.IActivatableToolContent
+public partial class ConsoleView : UserControl, HistoryAurora.Shell.Modules.IActivatableToolContent
 {
     public const string KeyHistory = "console.history";
     public const string KeyBuffer = "console.buffer";

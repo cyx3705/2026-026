@@ -3,12 +3,11 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell.Console;
-using HistoryAurora.Shell.Docking;
 using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;

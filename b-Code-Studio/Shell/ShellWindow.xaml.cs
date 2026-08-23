@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -9,15 +9,12 @@ using System.Windows.Media;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Extensibility.CommandSurface;
-using HistoryVulcan.Core.Docking;
+using HistoryAurora.Shell.CommandSurface;
+using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using HistoryVulcan.Core.Modules;
-using HistoryVulcan.Extensibility.Modules;
-using HistoryAurora.Shell.CommandSurface;
+using HistoryAurora.Shell.Modules;
 using HistoryAurora.Shell.Console;
-using HistoryAurora.Shell.Docking;
 using HistoryAurora.Shell.Themes;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
@@ -44,13 +41,11 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly ConsoleView _console;
     private readonly Panels.PanelManager _panels;
 
-    // 0.4.4 反哺能力:由 Shell 自行装配,派生应用经下方只读属性取用
-    private readonly HistoryVulcan.Services.Modules.ModuleHost? _modules;
     private readonly Pages.ModulePageLoader _pageLoader;
     private readonly Pages.ComponentRequestStore _componentRequests;
     private readonly Modules.ShellUiRegistrar _shellUi;
-    private readonly HistoryVulcan.Services.Mcp.McpGateway? _mcp;
-    private readonly HistoryVulcan.Services.Mcp.PromptGovernanceStore? _prompts;
+    private Modules.UiAnnotationClaimer? _annotationClaimer;
+    private Action? _hostRegistryChanged;
 
     // 命令集页与指令详情页的选中联动(0.4.4 上抛):优先用派生应用经 ShellConfig 传入的实例,
     // 未传则自建。由构造函数赋值——工具窗口内容工厂在 DockingHost 构建默认布局时即被调用,
@@ -271,109 +266,13 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             }),
         });
         // ---- 0.4.4 反哺能力:模块托管与 MCP 服务(默认关闭,ShellConfig 显式开启)
-        //      注册次序在内置指令之后、派生自定义指令之前——派生应用因此可以在
-        //      ConfigureCommands 里看到 module.*/mcp.* 已存在,并按需登记只读白名单。
+        // 5.0 起模块生命周期由宿主独占。界面不再自建 ModuleHost，也不再调用已删除的
+        // EnableUiModules / ShellUi / CommandWorkbench / ModulePanelSync。
         if (config.EnableModules || config.EnableUiModules)
-        {
-            _modules = config.ModuleDiscoveryRoots.Count > 0
-                ? new HistoryVulcan.Services.Modules.ModuleHost(
-                    new HistoryVulcan.Services.Modules.ZModuleDiscoverySource(config.ModuleDiscoveryRoots), log)
-                : config.RequireConfirmedModuleSources
-                    ? new HistoryVulcan.Services.Modules.ModuleHost(
-                        new HistoryVulcan.Services.Modules.RuntimeModuleDiscoverySource(
-                            config.ModuleDirectory ?? HistoryVulcan.Services.AppPaths.GetModulesDir(dataDirectory)), log)
-                : new HistoryVulcan.Services.Modules.ModuleHost(
-                    config.ModuleDirectory ?? HistoryVulcan.Services.AppPaths.GetModulesDir(dataDirectory), log);
-            _modules.EnableCommands = config.EnableModules;
-            _modules.EnableUiModules = config.EnableModules || config.EnableUiModules;
-            _modules.EnableFileWatching = config.ModuleDiscoveryRoots.Count == 0
-                                          && (config.EnableModules || !config.EnableRemoteManagementViews);
-            _modules.RequireConfirmedSources = config.RequireConfirmedModuleSources;
-            _modules.UiContext = SynchronizationContext.Current;
-            _modules.ShellUi = _shellUi;
-            _modules.CommandWorkbench = this;
-
-            // 拉取而非缓存：每次模块集合变化后重新问一遍，注册因此是派生状态，
-            // 没有需要回收的缓存（对比宿主侧 web.frontendcatalog 的幽灵条目）。
-            _modules.ReloadCompleted += () =>
-                Dispatcher.BeginInvoke(new Action(() => _ = _pageLoader.ReloadAsync()));
-
-            registry.Register(new CommandDescriptor
-            {
-                Name = "vulcan.module.unload",
-                Domain = "vulcan",
-                CommandClass = "module",
-                Summary = "卸载一个已装载模块的界面与本进程快照",
-                Example = "vulcan.module.unload name=HistoryJanus",
-                RequiresUiThread = true,
-                Parameters =
-                [
-                    new ParameterSpec
-                    {
-                        Name = "name",
-                        Description = "vulcan.module.list 中的模块名",
-                        Required = true,
-                        Position = 0,
-                    },
-                ],
-                Handler = CommandDescriptor.Sync(context =>
-                    _modules.Unload(context.RequireString("name"))),
-            });
-
-            // MD-08:窗口成型前先做一次文件级面板同步,上一会话遗留的模块旁面板本次即成窗口
-            if (config.ModuleDiscoveryRoots.Count == 0)
-            {
-                HistoryVulcan.Services.Modules.ModulePanelSync.SyncFiles(
-                    _modules.ModulesDirectory, HistoryVulcan.Services.AppPaths.GetPanelsDir(dataDirectory), log);
-            }
-
-            // 全限定:本类的 Modules / Mcp 只读属性会遮蔽同名命名空间
-            if (config.EnableModules)
-                HistoryAurora.Shell.Modules.ModuleCommands.RegisterAll(registry, _modules, settings);
-        }
-
-        if (config.EnableMcp)
-        {
-            var identity = config.Identity ?? HistoryVulcan.Core.AppIdentity.Current;
-            _prompts = new HistoryVulcan.Services.Mcp.PromptGovernanceStore(dataDirectory, log);
-            var audit = config.McpAuditLog
-                        ?? new HistoryVulcan.Services.Mcp.McpAuditRecorder(dataDirectory, log);
-            Func<string, string, int, bool?> remoteConfirm = config.McpRemoteConfirm
-                ?? ((_, prompt, timeout) =>
-                    HistoryAurora.Shell.Mcp.RemoteConfirmDialog.Ask(this, prompt, timeout));
-            _mcp = new HistoryVulcan.Services.Mcp.McpGateway(
-                () => _bus, settings, log, audit, _prompts, identity, remoteConfirm);
-
-            // McpCommands.RegisterAll 是聚合入口:内部级联注册 prompt.*(提示词治理)与
-            // command.*(命令目录),不可在此重复调用 CommandCatalogCommands/PromptGovernanceCommands,
-            // 否则 vulcan.command.list 等会二次注册,CommandRegistry 冲突即抛(§5.3)。
-            // 全限定:本类的 Mcp 只读属性会遮蔽 HistoryAurora.Shell.Mcp 命名空间。
-            HistoryVulcan.Services.Mcp.McpCommands.RegisterAll(registry, () => _bus, () => _mcp, settings, _prompts);
-
-            // CX-03:MCP 中继预批准的执行直接放行,其余仍走 Shell 交互确认
-            _bus.Confirmation = new HistoryVulcan.Core.Mcp.GatewayAwareConfirmation(_bus.Confirmation);
-        }
-        else
-        {
-            // command.* 与中央命令集不需要网关、提示词存储或审计器。
-            HistoryVulcan.Services.Mcp.CommandCatalogCommands.RegisterCore(registry);
-        }
+            log.Warn("shell", "5.0 起界面不再自建模块宿主，EnableModules/EnableUiModules 已被忽略");
 
         config.ConfigureCommands?.Invoke(registry);
 
-        // 模块宿主在全部指令注册完成后接入并首次装载(此刻仍在 UI 线程)
-        _modules?.Attach(registry, _bus, settings, dataDirectory);
-        _modules?.Start();
-
-        // 指令与模块全部就绪后再启动网关，保证首次 tools/list 即为完整注册表。
-        if (_mcp != null)
-        {
-            var (success, message) = _mcp.TryAutostart();
-            if (success)
-                log.Info("mcp", message);
-            else
-                log.Warn("mcp", message);
-        }
 
         // 命令结果统一进入 IShellLog/控制台；失败仍自动打开控制台查看全文。
         _bus.Executed += (text, source, result) => Dispatcher.BeginInvoke(() =>
@@ -456,6 +355,48 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     /// <summary>指令总线(派生应用 / 启动参数经此执行指令)。</summary>
     public CommandBus Commands => _bus;
 
+    /// <summary>
+    /// 宿主总线。进程内装载后由 AuroraShellHost 注入，用来扫描模块注解并执行活对象命令。
+    /// </summary>
+    internal CommandBus? HostBus { get; private set; }
+
+    internal void AttachHostBus(CommandBus hostBus)
+    {
+        ArgumentNullException.ThrowIfNull(hostBus);
+        DetachHostBus();
+        HostBus = hostBus;
+        _annotationClaimer = new Modules.UiAnnotationClaimer(hostBus, _docking, _log);
+        _hostRegistryChanged = () =>
+        {
+            Dispatcher.BeginInvoke(() => _ = DiscoverModuleSurfacesAsync());
+        };
+        hostBus.Registry.Changed += _hostRegistryChanged;
+    }
+
+    internal void DetachHostBus()
+    {
+        if (HostBus != null && _hostRegistryChanged != null)
+            HostBus.Registry.Changed -= _hostRegistryChanged;
+        _hostRegistryChanged = null;
+        HostBus = null;
+        _annotationClaimer = null;
+    }
+
+    /// <summary>拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。</summary>
+    internal async Task DiscoverModuleSurfacesAsync()
+    {
+        try
+        {
+            await _pageLoader.ReloadAsync().ConfigureAwait(true);
+            if (_annotationClaimer != null)
+                await _annotationClaimer.ClaimAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _log.Log(ShellLogLevel.Warn, "ui-claim", "模块界面发现失败: " + ex.Message);
+        }
+    }
+
     /// <summary>Adds a backend log entry to the in-memory console without writing a second log file.</summary>
     public void AddTransientLog(ShellLogEntry entry)
     {
@@ -478,20 +419,14 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         UpdateErrorBadge();
     }
 
-    /// <summary>模块托管宿主(0.4.4);EnableModules=false 时为 null。</summary>
-    public HistoryVulcan.Services.Modules.ModuleHost? Modules => _modules;
+    /// <summary>模块托管宿主。5.0 起由 HistoryVulcan 独占，界面侧恒为 null。</summary>
+    public HistoryVulcan.Services.Modules.ModuleHost? Modules => null;
 
     /// <summary>
     /// 界面注册器。进程内形态下由模块交回宿主，宿主再转给其余 UI 模块——
     /// 宿主自己已不含任何界面实现，注册器只能来自这里（DEC-008）。
     /// </summary>
-    public HistoryVulcan.Core.Modules.IShellUiRegistrar ShellUi => _shellUi;
-
-    /// <summary>MCP 网关；仅在消费方显式启用 <see cref="ShellConfig.EnableMcp"/> 时创建。</summary>
-    public HistoryVulcan.Services.Mcp.McpGateway? Mcp => _mcp;
-
-    /// <summary>提示词治理存储(0.4.4);与 <see cref="Mcp"/> 同生命周期。</summary>
-    public HistoryVulcan.Services.Mcp.PromptGovernanceStore? Prompts => _prompts;
+    public IShellUiRegistrar ShellUi => _shellUi;
 
     /// <summary>
     /// 命令集选中状态(0.4.4):框架的命令集窗口写入,派生应用的指令详情窗口读取。
@@ -671,11 +606,8 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         SaveWindowBounds();
         _docking.SaveCurrentLayout();
 
-        // 0.4.4:Shell 自建的能力由 Shell 自己收尾——网关握着监听端口,
-        // 模块宿主握着文件监听与防抖定时器,都必须在退出前释放。
-        // 派生应用不再需要(也不应该)重复 Dispose 这两件。
-        _mcp?.Dispose();
-        _modules?.Dispose();
+        // Shell 自建的能力由 Shell 自己收尾：模块宿主握着文件监听与防抖定时器，
+        // 必须在退出前释放。网关一项随 MCP 迁出 Aurora（Vulcan 4.4.0）而消失。
         _history.Save();
         _catalogSession.Dispose();
     }

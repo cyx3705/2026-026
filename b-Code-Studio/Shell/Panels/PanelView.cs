@@ -1,11 +1,11 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Extensibility.Panels;
+using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell.Panels;
 
