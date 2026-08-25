@@ -1,7 +1,7 @@
 namespace HistoryAurora.Shell.Docking;
 
 /// <summary>某个工具窗口的当前状态快照。</summary>
-public sealed record ToolWindowInfo(
+internal sealed record ToolWindowInfo(
     string Id,
     string Title,
     bool IsVisible,
@@ -11,7 +11,7 @@ public sealed record ToolWindowInfo(
     string Owner = "framework");
 
 /// <summary>停靠系统对外门面。5.0 起由 Aurora 自持，不再来自宿主 Core。</summary>
-public interface IDockingService
+internal interface IDockingService
 {
     string? MaximizedId { get; }
 
@@ -52,7 +52,7 @@ public interface IDockingService
     event EventHandler? WindowsChanged;
 }
 
-public enum DockSide
+internal enum DockSide
 {
     Left = 0,
     Right = 1,
@@ -62,7 +62,7 @@ public enum DockSide
     Center = 5,
 }
 
-public sealed class ToolWindowDescriptor
+internal sealed class ToolWindowDescriptor
 {
     public required string Id { get; init; }
 
@@ -81,7 +81,7 @@ public sealed class ToolWindowDescriptor
     public Func<object>? ContentFactory { get; init; }
 }
 
-public static class StandardWindowIds
+internal static class StandardWindowIds
 {
     public const string Console = "console";
     public const string Mcp = "mcp";
@@ -89,7 +89,7 @@ public static class StandardWindowIds
     public const string Modules = "modules";
 }
 
-public sealed class ShellCommandEventArgs : EventArgs
+internal sealed class ShellCommandEventArgs : EventArgs
 {
     public required string CommandText { get; init; }
 
@@ -97,7 +97,7 @@ public sealed class ShellCommandEventArgs : EventArgs
 }
 
 /// <summary>布局文件存取。5.0 起从宿主 Core 迁入 Aurora。</summary>
-public interface ILayoutStore
+internal interface ILayoutStore
 {
     string? ReadCurrent();
 

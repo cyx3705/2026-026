@@ -304,6 +304,17 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Modules.IAct
             $"console-{DateTime.Now:yyyyMMdd-HHmmss-fff}.txt");
     }
 
+    /// <summary>
+    /// 把一段文字填进输入框但**不执行**（aurora.log.prefill）。
+    /// 命令集与指令详情用它把指令名交回控制台：那两页只负责"找到它"，
+    /// 按不按回车是人的决定——目录页替人执行一条会改东西的指令是不可接受的。
+    /// </summary>
+    public void Prefill(string text)
+    {
+        SetInputText(text ?? "");
+        FocusInput();
+    }
+
     /// <summary>聚焦输入框(C-15 全局快捷键落点)。</summary>
     public void FocusInput()
     {

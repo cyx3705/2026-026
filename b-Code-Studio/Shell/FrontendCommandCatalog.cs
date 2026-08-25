@@ -1,4 +1,5 @@
 ﻿using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
@@ -41,6 +42,8 @@ public static class FrontendCommandCatalog
             Bus = null!,
             DataDirectory = "",
             Panels = new PanelManager(),
+            // 目录快照只取描述符,处理器一律不执行,因此依赖可以是空的。
+            Actions = new ActionRegistry(null!, null!),
         });
 
         var all = registry.All();

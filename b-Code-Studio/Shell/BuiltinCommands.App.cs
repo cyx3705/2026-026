@@ -11,7 +11,7 @@ using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
 
-public static partial class BuiltinCommands
+internal static partial class BuiltinCommands
 {
     private static void RegisterApp(CommandRegistry r, ShellCommandServices s)
     {

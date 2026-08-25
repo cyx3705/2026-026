@@ -6,7 +6,7 @@ namespace HistoryAurora.Shell;
 /// 页面注册协议之外的弹窗命令。弹窗不是停靠页，不能进 <c>PageRenderer</c> 组件集；
 /// 模块下一轮用本命令替换自己的 <c>Window</c>，本轮只把能力做出来。
 /// </summary>
-public static partial class BuiltinCommands
+internal static partial class BuiltinCommands
 {
     private static void RegisterDialog(CommandRegistry r, ShellCommandServices s)
     {

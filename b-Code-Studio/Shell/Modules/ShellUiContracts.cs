@@ -7,7 +7,7 @@ using HistoryVulcan.Core.Storage;
 namespace HistoryAurora.Shell.Modules;
 
 /// <summary>模块向 Aurora 注册内嵌界面的门面。5.0 起由 Aurora 自持。</summary>
-public interface IShellUiRegistrar
+internal interface IShellUiRegistrar
 {
     bool IsUiThread { get; }
 
@@ -21,13 +21,13 @@ public interface IShellUiRegistrar
 }
 
 /// <summary>工具窗口被激活时应接收输入焦点时实现。</summary>
-public interface IActivatableToolContent
+internal interface IActivatableToolContent
 {
     void ActivateContent();
 }
 
 /// <summary>命令工作台挂载点。5.0 宿主不再转发，由 Aurora 窗口自持。</summary>
-public interface IShellCommandWorkbenchHost
+internal interface IShellCommandWorkbenchHost
 {
     CommandBus Bus { get; }
 

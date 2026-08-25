@@ -217,6 +217,22 @@ internal static class AuroraShellHost
             DefaultSide = DockSide.Left,
             DefaultRatio = 0.38,
         });
+        // 命令集回到中央主区（1.7.0）。宿主 5.0 拆掉界面 SDK 后这一页没人挂，
+        // 主区因此空了一轮；它现在由 Aurora 自建，不再取决于哪个模块在不在场。
+        config.ToolWindows.Add(new ToolWindowDescriptor
+        {
+            Id = StandardWindowIds.Mcp,
+            Title = "命令集",
+            DefaultSide = DockSide.Center,
+            DefaultRatio = 0.5,
+        });
+        config.ToolWindows.Add(new ToolWindowDescriptor
+        {
+            Id = StandardWindowIds.CommandDetail,
+            Title = "指令详情",
+            DefaultSide = DockSide.Right,
+            DefaultRatio = 0.26,
+        });
 
         return config;
     }

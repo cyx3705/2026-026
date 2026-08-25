@@ -2,9 +2,9 @@ using HistoryAurora.Shell.Docking;
 
 namespace HistoryAurora.Shell;
 
-public sealed record ShellMenuAction(string Header, string CommandText);
+internal sealed record ShellMenuAction(string Header, string CommandText);
 
-public enum ShellCloseBehavior
+internal enum ShellCloseBehavior
 {
     Exit,
     Hide,
@@ -13,7 +13,7 @@ public enum ShellCloseBehavior
 /// <summary>
 /// 派生应用向 Shell 提交的装配清单(§9 开发流程第 2/7 条的入口)。
 /// </summary>
-public sealed class ShellConfig
+internal sealed class ShellConfig
 {
     public required string AppName { get; init; }
 

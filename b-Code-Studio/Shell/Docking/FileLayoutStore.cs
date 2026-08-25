@@ -4,7 +4,7 @@ using HistoryVulcan.Services;
 namespace HistoryAurora.Shell.Docking;
 
 /// <summary>当前布局为 layout/current.layout.xml，命名方案为 layout/&lt;名称&gt;.layout.xml。</summary>
-public sealed class FileLayoutStore : ILayoutStore
+internal sealed class FileLayoutStore : ILayoutStore
 {
     private const string Extension = ".layout.xml";
     private const string CurrentName = "current";

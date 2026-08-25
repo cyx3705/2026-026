@@ -1,19 +1,19 @@
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
+using HistoryAurora.Shell.Modules;
 
 namespace HistoryAurora.Shell.Pages;
 
 /// <summary>一次拉取的结果，供命令回显与测试断言。</summary>
-public sealed record PageLoadReport(
+internal sealed record PageLoadReport(
     int ModulesAsked,
     int PagesRegistered,
     IReadOnlyList<string> Skipped,
     IReadOnlyList<MissingComponent> Missing);
 
 /// <summary>某个模块的某一页引用了组件库尚未提供的组件。</summary>
-public sealed record MissingComponent(string Owner, string PageId, string Component);
+internal sealed record MissingComponent(string Owner, string PageId, string Component);
 
 /// <summary>
 /// 按页面注册协议 V1 从模块拉取页面描述并建页。
@@ -24,11 +24,13 @@ public sealed record MissingComponent(string Owner, string PageId, string Compon
 /// 页面若照抄那条路，幽灵会从"命令数不准"升级成"界面上多出一个打不开的页面"。
 /// 拉取让注册成为派生状态，没有缓存可失效。
 /// </summary>
-public sealed class ModulePageLoader(
+internal sealed class ModulePageLoader(
     CommandBus bus,
     IDockingService docking,
     IShellLog log,
-    ComponentRequestStore? requests = null)
+    ComponentRequestStore? requests = null,
+    HistoryAurora.Shell.Actions.ActionRegistry? actions = null,
+    HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null)
 {
     private const string Source = "page";
 
@@ -136,52 +138,38 @@ public sealed class ModulePageLoader(
         return new PageLoadReport(owners.Count, registered, skipped, Missing);
     }
 
-    /// <summary>只重拉一个模块（aurora.ui.invalidate）。模块内容变化时由模块自己触发。</summary>
-    public async Task<PageLoadReport> ReloadOwnerAsync(string owner, CancellationToken cancellation = default)
+    /// <summary>
+    /// 只重拉一个模块（aurora.ui.invalidate）。模块内容变化时由模块自己触发。
+    ///
+    /// 参数**同时接受模块名与域名**，因为这里有两个身份要用：撤旧页按 owner
+    /// （<c>HistoryMercury</c>），拉描述按域（<c>mercury.ui.describe</c>）。
+    /// 两者按设计就不相等——域去掉 <c>History</c> 前缀（宿主手册 §3.3.1）。
+    /// 1.6.0 把同一个字符串既当 owner 又当域使，结果是：传 <c>owner=HistoryMercury</c>
+    /// 会去调不存在的 <c>HistoryMercury.ui.describe</c>；传 <c>owner=mercury</c> 拉得到描述，
+    /// 却在 <c>_owners</c> 里撤不掉旧页，随后同 id 重注册失败。
+    /// **任何模块的这条上行通知都拉不到描述**，而全量拉取那条路探测的是注册表里的域，
+    /// 因此一直是好的——缺陷只在这一条路径上，也只在真机上看得见。
+    /// </summary>
+    public async Task<PageLoadReport> ReloadOwnerAsync(
+        string ownerOrDomain,
+        CancellationToken cancellation = default)
     {
+        var domain = ModuleDomainNaming.ToDomain(ownerOrDomain ?? "");
+        if (domain.Length == 0)
+            return new PageLoadReport(0, 0, [], Missing);
+
+        var owner = ModuleCommandProbe.ExpectedOwner(domain);
         Drop(owner);
         _missing.RemoveAll(m => string.Equals(m.Owner, owner, StringComparison.OrdinalIgnoreCase));
 
         var skipped = new List<string>();
-        var registered = await LoadOwnerAsync(owner, skipped, cancellation).ConfigureAwait(true);
+        var registered = await LoadOwnerAsync(domain, skipped, cancellation).ConfigureAwait(true);
         return new PageLoadReport(1, registered, skipped, Missing);
     }
 
-    /// <summary>
-    /// 哪些模块声明了页面：直接看注册表里有没有 <c>&lt;域&gt;.ui.describe</c>。
-    ///
-    /// 不用"先问 manifest 的 ui 标志再逐个试"——那要求宿主把 manifest 字段透出来，
-    /// 而注册表本来就是权威且已经在手边；模块没注册该命令就是没有页面，不是错误。
-    /// </summary>
-    private async Task<List<string>> DescribableOwnersAsync(CancellationToken cancellation)
-    {
-        var names = bus.Registry.All().Select(d => d.Name).ToList();
-        if (bus.RemoteExecutor != null)
-        {
-            try
-            {
-                var listed = await bus.ExecuteAsync("vulcan.command.list", "UI", cancellation)
-                    .ConfigureAwait(true);
-                if (listed.Success
-                    && CommandResultData.TryRead<IReadOnlyList<CommandCatalogRow>>(listed.Data, out var rows))
-                {
-                    names.AddRange(rows.Select(row => row.CommandName));
-                }
-            }
-            catch (Exception ex)
-            {
-                log.Log(ShellLogLevel.Warn, Source, "读取宿主命令目录失败: " + ex.Message);
-            }
-        }
-
-        return names
-            .Where(name => name.EndsWith(DescribeSuffix, StringComparison.OrdinalIgnoreCase))
-            .Select(name => name[..^DescribeSuffix.Length])
-            .Where(domain => domain.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(domain => domain, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
+    /// <summary>哪些模块声明了页面：判定收在 <see cref="ModuleCommandProbe"/>，与动作声明同一口径。</summary>
+    private Task<List<string>> DescribableOwnersAsync(CancellationToken cancellation)
+        => ModuleCommandProbe.OwnersWithSuffixAsync(bus, log, Source, DescribeSuffix, cancellation);
 
     private async Task<int> LoadOwnerAsync(string domain, List<string> skipped, CancellationToken cancellation)
     {
@@ -200,7 +188,7 @@ public sealed class ModulePageLoader(
 
         // 描述可能来自跨进程中继，结构化载荷不保证存活，因此同样接受 Message 承载。
         var payload = result.Data as string ?? result.Message;
-        var parsed = PageDescriptionReader.Read(payload, ExpectedOwner(domain));
+        var parsed = PageDescriptionReader.Read(payload, ModuleCommandProbe.ExpectedOwner(domain));
         if (!parsed.Ok)
             return Skip(skipped, domain, parsed.Error!);
 
@@ -220,7 +208,16 @@ public sealed class ModulePageLoader(
         RenderedPage rendered;
         try
         {
-            rendered = PageRenderer.Render(page, new PageRenderContext { Bus = bus, Log = log, Owner = owner });
+            rendered = PageRenderer.Render(
+                page,
+                new PageRenderContext
+                {
+                    Bus = bus,
+                    Log = log,
+                    Owner = owner,
+                    Actions = actions,
+                    Completions = completions,
+                });
         }
         catch (Exception ex)
         {
@@ -279,12 +276,6 @@ public sealed class ModulePageLoader(
         log.Log(ShellLogLevel.Warn, Source, $"跳过模块 {domain}: {reason}");
         return 0;
     }
-
-    /// <summary>域名反推模块名，用于 owner 校验：mercury → HistoryMercury。</summary>
-    private static string ExpectedOwner(string domain) => "History" + Capitalize(domain);
-
-    private static string Capitalize(string value)
-        => value.Length == 0 ? value : char.ToUpperInvariant(value[0]) + value[1..];
 
     private static DockSide ParseSide(string? side)
         => (side ?? "").ToLowerInvariant() switch

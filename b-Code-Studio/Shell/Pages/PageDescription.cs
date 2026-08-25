@@ -82,6 +82,24 @@ public sealed class PageNode
 
     public IReadOnlyList<PageColumn>? Columns { get; init; }
 
+    /// <summary>panel 专用：面板内的小组件（文字 / 文本框 / 按钮），与控制面板同一套契约。</summary>
+    public IReadOnlyList<HistoryAurora.Shell.Panels.PanelWidget>? Widgets { get; init; }
+
+    /// <summary>
+    /// table 专用：行操作（REQ-UI-011）。一份声明同时给出行内按钮与右键菜单，
+    /// 页面作者不必在两种控件之间挑一个、挑完还要各写一遍参数。
+    /// </summary>
+    public IReadOnlyList<PageRowAction>? RowActions { get; init; }
+
+    /// <summary>
+    /// input 专用：候选来源。目前只支持 <c>commands</c>（指令名与参数分段补全）。
+    /// 声明了但当前拿不到补全会话时退回普通输入框，并记一条 Warn——不静默。
+    /// </summary>
+    public string? Suggest { get; init; }
+
+    /// <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
+    public double? Min { get; init; }
+
     /// <summary>表格数据源；组件按需回调模块取数，数据不内联进描述。</summary>
     public PageDataSource? DataSource { get; init; }
 
@@ -92,6 +110,29 @@ public sealed class PageNode
 
     /// <summary>启用条件；目前只支持 { "selected": "&lt;节点 id&gt;" }。</summary>
     public PageEnabledWhen? EnabledWhen { get; init; }
+}
+
+/// <summary>
+/// 一条行操作。落点与按钮一样是**动作 id**：指令改名由模块自己的
+/// <c>&lt;域&gt;.ui.actions</c> 吸收，页面描述一个字不动（REQ-UI-009）。
+///
+/// 动作里的占位符 <c>{列名}</c> 默认取**被操作那一行**的同名列——
+/// 行操作的作用域天然就是一行，让它去引用"某个节点的选中行"是绕远路。
+/// <see cref="Args"/> 只在需要写死值或跨节点取值时才用。
+/// </summary>
+public sealed class PageRowAction
+{
+    public string? Action { get; init; }
+
+    public string Title { get; init; } = "";
+
+    /// <summary>语义档位：danger 表示危险动作。</summary>
+    public string? Style { get; init; }
+
+    /// <summary>是否同时在行内放一个按钮；false 表示只进右键菜单。缺省 true。</summary>
+    public bool Inline { get; init; } = true;
+
+    public IReadOnlyDictionary<string, PageArgument>? Args { get; init; }
 }
 
 public sealed class PageColumn
@@ -112,9 +153,19 @@ public sealed class PageDataSource
     public IReadOnlyDictionary<string, string>? Args { get; init; }
 }
 
-/// <summary>命令调用：参数值可以是字面量，也可以从视图状态取（<see cref="PageArgument.From"/>）。</summary>
+/// <summary>
+/// 按钮的落点。二选一：
+/// <list type="bullet">
+///   <item><see cref="Action"/>——模块声明的动作 id，**推荐**。指令改名不影响按钮；</item>
+///   <item><see cref="Command"/>——直接写指令名。模块改名时这里会静默失效，
+///         因此渲染器会记一条 Warn，让"哪些按钮还没换成动作"是可查的。</item>
+/// </list>
+/// </summary>
 public sealed class PageInvoke
 {
+    /// <summary>动作 id（见 <c>&lt;域&gt;.ui.actions</c>）。与 <see cref="Command"/> 同时给出时以本项为准。</summary>
+    public string? Action { get; init; }
+
     public string Command { get; init; } = "";
 
     public IReadOnlyDictionary<string, PageArgument>? Args { get; init; }
