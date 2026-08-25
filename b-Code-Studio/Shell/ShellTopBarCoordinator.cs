@@ -749,12 +749,42 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
     }
 
+    /// <summary>
+    /// 开始拖动一个窗口。浮窗走这条路时，AvalonDock 会顺势接管停靠。
+    ///
+    /// 关键是**必须先放掉 Win32 捕获**。WPF 的 <c>Mouse.Capture</c> 底层就是 SetCapture；
+    /// 捕获还在时 <c>DefWindowProc</c> 的移动循环根本不会启动，`DragMove()` 于是
+    /// 静默地什么都不做——不抛异常，也不移动窗口。
+    ///
+    /// 为什么这件事决定"浮窗能不能叠回去"：AvalonDock 的
+    /// <c>LayoutFloatingWindowControl.FilterMessage</c> 只处理
+    /// WM_SYSCOMMAND（仅最大化/还原）、WM_LBUTTONUP、**WM_MOVING**、WM_EXITSIZEMOVE。
+    /// 建 DragService（也就是那组蓝色停靠指示）的是 WM_MOVING → UpdateDragPosition。
+    /// 而 WM_MOVING 只在系统的移动循环里才发。移动循环起不来 = 一次都不发 =
+    /// 指示不出现、松手也无从停靠。
+    /// （2026-08-25 反编译确认；此前以为它认 WM_NCLBUTTONDOWN/HTCAPTION，那是错的。）
+    /// </summary>
     private void TryDragWindow(Window hostWindow)
     {
+        // 这条日志是给真机排查用的：浮窗停靠一旦不灵，第一件要确认的就是
+        // "这次拖动到底有没有走到这里"。缺了它只能靠猜。
+        _log.Info(
+            ChromeLogSource,
+            $"开始拖动窗口 {hostWindow.GetType().Name}（浮窗={hostWindow is LayoutFloatingWindowControl}）");
+
+        // 浮窗才需要观测：只有它走停靠链路。探针只读，拖动结束时报出断点所在环。
+        using var probe = hostWindow is LayoutFloatingWindowControl floating
+            ? new DockingDragProbe(floating, _manager, _log, ChromeLogSource)
+            : null;
+        probe?.Start();
+
         try
         {
             hostWindow.Activate();
+            Mouse.Capture(null);
+            NativeMethods.ReleaseCapture();
             hostWindow.DragMove();
+            _log.Info(ChromeLogSource, "窗口拖动结束");
         }
         catch (InvalidOperationException ex)
         {
