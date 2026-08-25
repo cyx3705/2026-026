@@ -511,6 +511,12 @@ public sealed class ShellChromeContractTests
             var floating = Assert.Single(manager.FloatingWindows.ToList());
             var chrome = WindowChrome.GetWindowChrome(floating);
             Assert.NotNull(chrome);
+            // CaptionHeight 必须是 0。1.7.1/1.7.2 曾把它抬到 35，理由是
+            // 「AvalonDock 要收到 WM_NCLBUTTONDOWN/HTCAPTION 才建 DragService」——
+            // 反编译 FilterMessage 后确认那条理由是错的：它只看 WM_SYSCOMMAND(仅最大化/还原)、
+            // WM_LBUTTONUP、WM_MOVING、WM_EXITSIZEMOVE。
+            // 抬高它反而有害：页头变成非客户区，WPF 收不到鼠标按下，
+            // Aurora 自己那条会去调 DragMove 的拖动手势根本起不来。
             Assert.Equal(0, chrome.CaptionHeight);
             var root = Assert.IsType<Border>(floating.Template.LoadContent());
             var presenter = Assert.Single(FindLogicalDescendants<ContentPresenter>(root));
@@ -838,9 +844,8 @@ public sealed class ShellChromeContractTests
     {
         RunShell(window =>
         {
-            // DEC-023:中央命令集页由 Mercury 提供，不在本仓库门禁内。注册一个等价的中央页，
-            // 断言的是 Vulcan 自己的聚焦头与共享 chrome 归属。
-            window.Docking.RegisterWindow(CenterPage(StandardWindowIds.Mcp), "test");
+            // 1.7.0 起命令集由 Aurora 自建（REQ-UI-014），不再需要补一个等价的中央页。
+            // 断言的仍然是聚焦头与共享 chrome 的归属。
             window.Docking.Show(StandardWindowIds.Mcp);
             UiTestHost.Pump();
 

@@ -507,6 +507,21 @@
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!--
+            CaptionHeight 必须是 0。
+
+            1.7.1/1.7.2 曾把它抬到 35，理由是「AvalonDock 要收到
+            WM_NCLBUTTONDOWN/HTCAPTION 才会建 DragService」。**那条理由是错的**：
+            反编译 LayoutFloatingWindowControl.FilterMessage 后确认，它只处理
+            WM_SYSCOMMAND(0x0112，且仅 SC_MAXIMIZE/SC_RESTORE)、WM_LBUTTONUP(0x0202)、
+            WM_MOVING(0x0216)、WM_EXITSIZEMOVE(0x0232)——**根本不看非客户区消息**。
+            真正建 DragService 的是 WM_MOVING → UpdateDragPosition，
+            也就是"窗口正在被系统的移动循环拖着"这件事本身。
+
+            而抬高 CaptionHeight 有害：页头那一条随即变成非客户区，
+            WPF 不再收到鼠标按下，Aurora 自己的拖动手势（它才会去调 DragMove）
+            压根起不来。所以这里回到 0。
+        -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
                 <WindowChrome CaptionHeight="0"
@@ -540,6 +555,21 @@
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!--
+            CaptionHeight 必须是 0。
+
+            1.7.1/1.7.2 曾把它抬到 35，理由是「AvalonDock 要收到
+            WM_NCLBUTTONDOWN/HTCAPTION 才会建 DragService」。**那条理由是错的**：
+            反编译 LayoutFloatingWindowControl.FilterMessage 后确认，它只处理
+            WM_SYSCOMMAND(0x0112，且仅 SC_MAXIMIZE/SC_RESTORE)、WM_LBUTTONUP(0x0202)、
+            WM_MOVING(0x0216)、WM_EXITSIZEMOVE(0x0232)——**根本不看非客户区消息**。
+            真正建 DragService 的是 WM_MOVING → UpdateDragPosition，
+            也就是"窗口正在被系统的移动循环拖着"这件事本身。
+
+            而抬高 CaptionHeight 有害：页头那一条随即变成非客户区，
+            WPF 不再收到鼠标按下，Aurora 自己的拖动手势（它才会去调 DragMove）
+            压根起不来。所以这里回到 0。
+        -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
                 <WindowChrome CaptionHeight="0"
