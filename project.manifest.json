@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.5.2",
+    "version": "1.7.0",
     "branch": "main"
   },
   "paths": {
@@ -69,7 +69,7 @@
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
   },
   "externalDependencies": [
-    "HistoryVulcan >= 4.0.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
+    "HistoryVulcan >= 5.1.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
     ".NET 8 SDK and Windows Desktop Runtime",
     "Dirkster.AvalonDock 4.72.1 (must match the host pin; unpinned resolves to a .NET Framework build)",
     "Dirkster.AvalonDock.Themes.VS2013 4.72.1"

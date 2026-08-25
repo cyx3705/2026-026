@@ -1,31 +1,36 @@
 using System.IO;
 using System.Text.Json;
-using HistoryVulcan.Core.Commands;
+using System.Text.Json.Serialization;
+using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Docking;
+using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell.Panels;
 
 /// <summary>
-/// 控制窗口群管理器(§4.5):
-/// 从 &lt;数据目录&gt;/panels/*.json 加载面板声明(P-01,JSON 为主),
-/// 与 C# 注册通道(ShellConfig.Panels)合并;每个面板注册为一个独立
-/// 可停靠工具窗口(P-05,窗口名 = 面板 id),随布局一起持久化。
-/// aurora.ui.panelreload 重读 JSON 并原地重建既有面板内容(P-08;新增面板需重启)。
+/// 控制面板群管理器（REQ-UI-008）：
+/// 从 &lt;数据目录&gt;/panels/*.json 加载面板声明，与 C# 注册通道（ShellConfig.Panels）合并；
+/// 每个面板注册为一个独立可停靠工具窗口（窗口名 = 面板 id），随布局一起持久化。
+/// <c>aurora.ui.panelreload</c> 重读 JSON 并原地重建既有面板内容（新增面板需重启）。
+///
+/// 声明经 <see cref="PanelDefinitionValidator"/> 逐份校验，不合规的整份跳过并记一条错误——
+/// 半个面板会让按钮拿到错的参数，比没有面板更危险。
 /// </summary>
-public sealed class PanelManager
+internal sealed class PanelManager
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private readonly string _panelsDir;
     private readonly CommandBus _bus;
     private readonly IShellLog _log;
+    private readonly ActionRegistry _actions;
     private readonly Dictionary<string, PanelView> _views = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PanelDefinition> _definitions = new();
 
@@ -35,30 +40,41 @@ public sealed class PanelManager
         _panelsDir = "";
         _bus = null!;
         _log = null!;
+        _actions = null!;
     }
 
-    public PanelManager(string panelsDir, IEnumerable<PanelDefinition>? configured, CommandBus bus, IShellLog log)
+    public PanelManager(
+        string panelsDir,
+        IEnumerable<PanelDefinition>? configured,
+        CommandBus bus,
+        IShellLog log,
+        ActionRegistry actions)
     {
         _panelsDir = panelsDir;
         _bus = bus;
         _log = log;
+        _actions = actions;
         Directory.CreateDirectory(panelsDir);
 
         if (configured != null)
-            _definitions.AddRange(configured);
+        {
+            foreach (var definition in configured)
+                TryAdd(definition, "ShellConfig");
+        }
+
         LoadJsonFiles();
     }
 
     public IReadOnlyList<PanelDefinition> Definitions => _definitions;
 
-    /// <summary>把每个面板注册为工具窗口描述符(启动时调用,先于停靠系统初始化)。</summary>
+    /// <summary>把每个面板注册为工具窗口描述符（启动时调用，先于停靠系统初始化）。</summary>
     public void RegisterWindows(List<ToolWindowDescriptor> windows)
     {
         foreach (var def in _definitions)
         {
             if (windows.Any(w => w.Id.Equals(def.Id, StringComparison.OrdinalIgnoreCase)))
             {
-                _log.Error("panel", $"面板 id 与已注册窗口冲突,已跳过: {def.Id}");
+                _log.Error("panel", $"面板 id 与已注册窗口冲突，已跳过: {def.Id}");
                 continue;
             }
 
@@ -75,7 +91,7 @@ public sealed class PanelManager
         }
     }
 
-    /// <summary>aurora.ui.panelset 落点(P-07)。</summary>
+    /// <summary>aurora.ui.panelset 落点。</summary>
     public bool TrySetValue(string panelId, string controlId, string value, out string error)
     {
         error = "";
@@ -95,7 +111,7 @@ public sealed class PanelManager
         return true;
     }
 
-    /// <summary>aurora.ui.panelreload(P-08):重读 JSON,重建既有面板内容;新增面板提示重启。</summary>
+    /// <summary>aurora.ui.panelreload：重读 JSON，重建既有面板内容；新增面板提示重启。</summary>
     public string Reload()
     {
         var before = _definitions.Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -119,15 +135,31 @@ public sealed class PanelManager
 
         var message = $"已重载 {rebuilt} 个面板";
         if (pendingRestart.Count > 0)
-            message += $";新增面板需重启后生效: {string.Join(" / ", pendingRestart)}";
+            message += $"；新增面板需重启后生效: {string.Join(" / ", pendingRestart)}";
         return message;
+    }
+
+    /// <summary>
+    /// 按当前声明重建全部已实例化的面板。动作声明刷新后必须调用：
+    /// 按钮的「有没有落点」是在构建时决定的，声明变了而界面不重建，
+    /// 就会留下一块已经过期的警示牌，或者反过来留一个其实已经失效的按钮。
+    /// </summary>
+    public int RebuildAll()
+    {
+        foreach (var def in _definitions)
+        {
+            if (_views.TryGetValue(def.Id, out var view))
+                view.Rebuild(def);
+        }
+
+        return _views.Count;
     }
 
     private PanelView GetView(PanelDefinition def)
     {
         if (!_views.TryGetValue(def.Id, out var view))
         {
-            view = new PanelView(def, _bus, _log);
+            view = new PanelView(def, _bus, _log, _actions);
             _views[def.Id] = view;
         }
 
@@ -136,31 +168,39 @@ public sealed class PanelManager
 
     private void LoadJsonFiles()
     {
-        foreach (var file in Directory.EnumerateFiles(_panelsDir, "*.json").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        foreach (var file in Directory.EnumerateFiles(_panelsDir, "*.json")
+                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
         {
             try
             {
                 var def = JsonSerializer.Deserialize<PanelDefinition>(File.ReadAllText(file), JsonOptions);
-                if (def == null || string.IsNullOrWhiteSpace(def.Id))
-                {
-                    _log.Error("panel", $"面板配置无效(缺 id),已跳过: {Path.GetFileName(file)}");
-                    continue;
-                }
-
-                if (_definitions.Any(d => d.Id.Equals(def.Id, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _log.Error("panel", $"面板 id 重复,已跳过: {def.Id}({Path.GetFileName(file)})");
-                    continue;
-                }
-
-                _definitions.Add(def);
+                TryAdd(def, Path.GetFileName(file));
             }
             catch (Exception ex)
             {
-                // 单个配置损坏不阻断其余面板(N-05 思想)
-                _log.Error("panel", $"面板配置解析失败,已跳过 {Path.GetFileName(file)}: {ex.Message}");
+                // 单个配置损坏不阻断其余面板。
+                _log.Error("panel", $"面板配置解析失败，已跳过 {Path.GetFileName(file)}: {ex.Message}");
             }
         }
+    }
+
+    private void TryAdd(PanelDefinition? definition, string origin)
+    {
+        var parsed = PanelDefinitionValidator.Validate(definition);
+        if (!parsed.Ok)
+        {
+            _log.Error("panel", $"面板声明无效，已跳过（{origin}）: {parsed.Error}");
+            return;
+        }
+
+        var value = parsed.Value!;
+        if (_definitions.Any(d => d.Id.Equals(value.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            _log.Error("panel", $"面板 id 重复，已跳过: {value.Id}（{origin}）");
+            return;
+        }
+
+        _definitions.Add(value);
     }
 
     private static DockSide ParseSide(string side) => side.ToLowerInvariant() switch

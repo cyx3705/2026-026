@@ -22,7 +22,7 @@ namespace HistoryAurora.Shell.Docking;
 /// 职责:窗口注册、默认布局构建、布局持久化(含损坏回退 N-06)、
 /// 布局手势 → 等价指令(W-10,含防再入抑制)。
 /// </summary>
-public sealed partial class DockingHost : IDockingService
+internal sealed partial class DockingHost : IDockingService
 {
     private const double MaximumSideAllocation = 0.5;
     private const string LayoutSource = "layout";

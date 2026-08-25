@@ -9,7 +9,7 @@ using HistoryAurora.Shell.Themes;
 
 namespace HistoryAurora.Shell;
 
-public partial class ShellWindow
+internal partial class ShellWindow
 {
     // ---------------------------------------------------------------- 主题(UI-08)
 

@@ -838,9 +838,8 @@ public sealed class ShellChromeContractTests
     {
         RunShell(window =>
         {
-            // DEC-023:中央命令集页由 Mercury 提供，不在本仓库门禁内。注册一个等价的中央页，
-            // 断言的是 Vulcan 自己的聚焦头与共享 chrome 归属。
-            window.Docking.RegisterWindow(CenterPage(StandardWindowIds.Mcp), "test");
+            // 1.7.0 起命令集由 Aurora 自建（REQ-UI-014），不再需要补一个等价的中央页。
+            // 断言的仍然是聚焦头与共享 chrome 的归属。
             window.Docking.Show(StandardWindowIds.Mcp);
             UiTestHost.Pump();
 

@@ -1,10 +1,21 @@
 <Project>
   <PropertyGroup>
-    <HistoryAuroraVersion>1.5.2</HistoryAuroraVersion>
+    <HistoryAuroraVersion>1.7.0</HistoryAuroraVersion>
     <!-- Aurora 消费的 HistoryVulcan 正式宿主版本。这是宿主契约的唯一真源：
          发布脚本与质量门禁都从此读取，不再各自硬编码字面量。
-         5.0.0 拆除宿主模块领域 SDK，冻结面只留注册器、总线和开发总线。 -->
-    <MinimumHistoryVulcanVersion>5.0.0</MinimumHistoryVulcanVersion>
+         5.0.0 拆除宿主模块领域 SDK，冻结面只留注册器、总线和开发总线。
+
+         1.6.0 抬到 5.1。逐条比过 5.0.1 → 5.1.0 的公开 API 基线：Core 与 ServiceHost
+         零变化，Services 只多出 ModuleMeta.Attached / AttachFailures，**纯增量、零删除**，
+         因此本轮没有一处代码是为了"不被 5.1 打断"而改的。
+
+         2026-08-24 23:38 宿主已重发 5.1.0 快照，此前"快照停在 5.0.1"的落差已消除：
+         Aurora 现在编译时看到的就是 5.1.0 的引用程序集，上面那两个新成员可以用了。
+         模块管理页据此增加"装载了但 Attach 失败"一列属下一轮，本版未做。
+
+         1.7.0 不动宿主下限：本版全部是 Aurora 自己这一侧的事——补齐组件、找回命令集
+         与指令详情两页、把停靠系统收成 internal。宿主契约一个字没碰。 -->
+    <MinimumHistoryVulcanVersion>5.1.0</MinimumHistoryVulcanVersion>
     <VersionPrefix>$(HistoryAuroraVersion)</VersionPrefix>
     <Version>$(HistoryAuroraVersion)</Version>
     <AssemblyVersion>$(HistoryAuroraVersion).0</AssemblyVersion>

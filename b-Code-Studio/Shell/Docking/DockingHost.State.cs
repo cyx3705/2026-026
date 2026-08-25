@@ -8,7 +8,7 @@ using AvalonDock.Layout;
 
 namespace HistoryAurora.Shell.Docking;
 
-public sealed partial class DockingHost
+internal sealed partial class DockingHost
 {
     private sealed record WinState(bool Visible, bool Floating, DockSide? Side, string? TabTarget, double Ratio);
 

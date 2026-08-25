@@ -10,7 +10,7 @@ namespace HistoryAurora.Shell;
 /// 模块只连宿主总线、不认识 Aurora：它调 <c>aurora.ui.invalidate</c> 与调自己的命令没有区别，
 /// 宿主只负责路由，不解释载荷。因此模块无需引用 Aurora 的任何程序集。
 /// </summary>
-public static partial class BuiltinCommands
+internal static partial class BuiltinCommands
 {
     private static void RegisterPages(CommandRegistry r, ModulePageLoader loader, ComponentRequestStore requests)
     {
@@ -37,6 +37,18 @@ public static partial class BuiltinCommands
             CommandClass = "ui",
             Summary = "模块声明自己的页面描述已变，请求重拉该模块",
             Example = "aurora.ui.invalidate owner=HistoryMercury",
+            // 模块名与域名都收：拉描述用的是域（mercury.ui.describe），撤旧页用的是
+            // 模块名（HistoryMercury），两者按设计不相等。1.7.0 起在拉取器里各归一一次。
+            Parameters =
+            [
+                new ParameterSpec
+                {
+                    Name = "owner",
+                    Description = "模块名（HistoryMercury）或指令域（mercury），两种都接受",
+                    Required = true,
+                    Position = 0,
+                },
+            ],
             RequiresUiThread = true,
             AllowUnspecifiedParameters = true,
             Handler = async context =>
@@ -92,7 +104,8 @@ public static partial class BuiltinCommands
                 var component = context.GetString("component")?.Trim();
                 if (string.IsNullOrWhiteSpace(component))
                     return CommandResult.Fail("缺少 component");
-                if (PageRenderer.SupportedComponents.Contains(component))
+                if (PageRenderer.SupportedComponents.Contains(component)
+                    || PageRenderer.SupportedCapabilities.Contains(component))
                     return CommandResult.Ok($"{component} 已经支持，无需申请");
 
                 // 模块经宿主中继调用时 context.Source 是 "Service:Relay"，会把提出方记丢，

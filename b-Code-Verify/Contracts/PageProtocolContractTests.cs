@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
+using HistoryAurora.Shell.Table;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -211,16 +212,17 @@ public sealed class PageProtocolContractTests
             var rendered = PageRenderer.Render(page, context);
 
             var stack = Assert.IsType<StackPanel>(rendered.Root);
-            var list = Assert.IsType<ListView>(stack.Children[0]);
+            // REQ-UI-007：table 节点渲染成 AuroraTable，不再是页面自拼的 ListView。
+            var table = Assert.IsType<AuroraTable>(stack.Children[0]);
             var button = Assert.IsType<Button>(stack.Children[1]);
 
             // 取数走总线，异步回填。
-            Assert.True(UiTestHost.PumpUntil(() => list.Items.Count == 2), "表格未从总线取到行");
+            Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 2), "表格未从总线取到行");
 
             // 没有选中行时按钮应禁用——enabledWhen 是视图行为，不产生命令。
             Assert.False(button.IsEnabled);
 
-            list.SelectedIndex = 1;
+            table.SelectedIndex = 1;
             UiTestHost.PumpUntil(() => button.IsEnabled);
             Assert.True(button.IsEnabled);
 

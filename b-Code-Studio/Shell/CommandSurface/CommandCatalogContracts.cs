@@ -51,6 +51,15 @@ public interface ICommandCatalogSession : IDisposable
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// 取补全候选的口径（REQ-UI-013）。控制台、命令集的搜索框与页面里的补全输入框
+/// 共用同一个签名，因此"控制台里补得出来、页面里补不出来"这种不一致不成立。
+/// </summary>
+public delegate Task<ConsoleCompletionResult> AuroraCompletionProvider(
+    string text,
+    int caretIndex,
+    CancellationToken cancellationToken);
+
 public enum ConsoleCompletionKind
 {
     Command,

@@ -20,21 +20,11 @@
         <TextBlock DockPanel.Dock="Bottom" x:Name="StatusText" Foreground="{DynamicResource Aurora.Brush.TextSecondary}" Margin="0,6,0,0"
                    Text="模块来自 %AppData%\HistoryVulcan\Modules；热重载安装候选或历史包" />
 
-        <Grid>
-            <ListView x:Name="ModuleList">
-                <ListView.View>
-                    <GridView ColumnHeaderContainerStyle="{StaticResource Aurora.GridHeader}">
-                        <GridViewColumn Header="模块" Width="160"
-                                        DisplayMemberBinding="{Binding ModuleName}" />
-                        <GridViewColumn Header="版本" Width="80"
-                                        DisplayMemberBinding="{Binding Version}" />
-                        <GridViewColumn Header="域指令数" Width="72"
-                                        DisplayMemberBinding="{Binding DomainCommandCount}" />
-                        <GridViewColumn Header="描述" Width="520"
-                                        DisplayMemberBinding="{Binding Description}" />
-                    </GridView>
-                </ListView.View>
-            </ListView>
-        </Grid>
+        <!--
+            REQ-UI-007：表格一律由 AuroraTable 承担，本页只提供数据与列宽。
+            列在 ModulesView.xaml.cs 里声明——列宽属于数据形状，而列的取值是强类型委托，
+            写在代码里比写成 Binding 字符串更早发现错。
+        -->
+        <ContentControl x:Name="TableHost" />
     </DockPanel>
 </UserControl>

@@ -12,7 +12,7 @@ using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
 
-public static partial class BuiltinCommands
+internal static partial class BuiltinCommands
 {
     private static void RegisterLog(CommandRegistry r, ShellCommandServices s)
     {
@@ -205,6 +205,33 @@ public static partial class BuiltinCommands
             Summary = "复制控制台选中行",
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(s.Console.CopySelected())),
+        });
+
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.log.prefill",
+            Domain = "aurora",
+            CommandClass = "log",
+            Summary = "把一条指令填进控制台输入框（不执行）",
+            Example = "aurora.log.prefill text=vulcan.module.list",
+            RequiresUiThread = true,
+            Parameters =
+            [
+                new ParameterSpec
+                {
+                    Name = "text",
+                    Description = "要填入的文本",
+                    Required = true,
+                    Position = 0,
+                },
+            ],
+            Handler = CommandDescriptor.Sync(ctx =>
+            {
+                var text = ctx.RequireString("text");
+                s.Docking.Show(StandardWindowIds.Console);
+                s.Console.Prefill(text);
+                return CommandResult.Ok("已填入控制台，未执行");
+            }),
         });
 
         RegisterFrontend(r, new CommandDescriptor

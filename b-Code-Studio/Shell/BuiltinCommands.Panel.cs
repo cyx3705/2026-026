@@ -12,7 +12,7 @@ using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
 
-public static partial class BuiltinCommands
+internal static partial class BuiltinCommands
 {
     private static void RegisterPanel(CommandRegistry r, ShellCommandServices s, PanelManager panels)
     {
@@ -69,7 +69,7 @@ public static partial class BuiltinCommands
                     var state = states.TryGetValue(d.Id, out var w)
                         ? (w.IsVisible ? (w.IsFloating ? "浮动" : "停靠") : "隐藏")
                         : "未注册";
-                    sb.Append($"\n  {d.Id,-12} {state}  {d.Title}({d.Controls.Count} 控件)");
+                    sb.Append($"\n  {d.Id,-12} {state}  {d.Title}({d.Widgets.Count} 小组件)");
                 }
 
                 return CommandResult.Ok(sb.ToString());

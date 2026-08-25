@@ -16,7 +16,7 @@ using AvalonDock.Layout.Serialization;
 
 namespace HistoryAurora.Shell.Docking;
 
-public sealed partial class DockingHost
+internal sealed partial class DockingHost
 {
     private void BuildDefaultLayout()
     {

@@ -271,9 +271,8 @@ public sealed class DockingContractTests
                 ShowInTaskbar = false,
                 WindowStyle = WindowStyle.ToolWindow,
             };
-            // DEC-023:中央命令集页由 HistoryMercury 的 CommandSurfaceFeature 提供,不在本仓库门禁内。
-            // 这里注册一个等价的中央工具页,断言的是 Vulcan 自己的主文档区几何与页签行为。
-            window.Docking.RegisterWindow(Tool(StandardWindowIds.Mcp, DockSide.Center, 1), "test");
+            // 1.7.0 起命令集由 Aurora 自建并在构造期注册（REQ-UI-014），因此这里不再补一个等价页——
+            // 补了会撞 id。这条断言的仍然是主文档区的几何与页签行为，只是主文档现在真的有内容。
             window.Docking.Show(StandardWindowIds.Mcp);
 
             try

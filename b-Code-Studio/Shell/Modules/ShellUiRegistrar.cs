@@ -6,7 +6,7 @@ using HistoryAurora.Shell.Modules;
 namespace HistoryAurora.Shell.Modules;
 
 /// <summary>把模块界面注册请求编组到 Shell UI 线程。</summary>
-public sealed class ShellUiRegistrar : IShellUiRegistrar
+internal sealed class ShellUiRegistrar : IShellUiRegistrar
 {
     private readonly IDockingService _docking;
     private readonly Dispatcher _dispatcher;

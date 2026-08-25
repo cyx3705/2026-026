@@ -19,7 +19,7 @@ using AvalonDock.Layout;
 
 namespace HistoryAurora.Shell;
 
-public partial class ShellWindow
+internal partial class ShellWindow
 {
     private void ApplyTheme(string mode, bool persist)
     {

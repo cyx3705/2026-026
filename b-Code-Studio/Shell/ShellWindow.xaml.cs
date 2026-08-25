@@ -28,7 +28,7 @@ namespace HistoryAurora.Shell;
 /// M2 起指令总线为一切操作的汇聚点:菜单项点击同样是发指令(S-02),
 /// 控制台手输、脚本、布局手势与派生应用共用同一张指令注册表。
 /// </summary>
-public partial class ShellWindow : Window, IShellCommandWorkbenchHost
+internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 {
     private readonly ShellConfig _config;
     private readonly IShellLog _log;
@@ -38,7 +38,10 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly CommandSelectionState _commandSelection;
     private readonly CommandHistory _history;
     private readonly DeferredCommandCatalogSession _catalogSession;
+    private readonly LocalCommandCatalogSession _catalog;
     private readonly ConsoleView _console;
+    private readonly Actions.ActionRegistry _actions;
+
     private readonly Panels.PanelManager _panels;
 
     private readonly Pages.ModulePageLoader _pageLoader;
@@ -134,6 +137,13 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             settings.GetInt(ConsoleView.KeyHistory, 500));
         // 传入本地注册表:Mercury 未挂接时控制台的域/类过滤仍按本地权威目录工作(DEC-023)。
         _catalogSession = new DeferredCommandCatalogSession(registry);
+
+        // 命令目录会话由 Aurora 自建并当场挂上（REQ-UI-014）。
+        // 5.0 之前这个会话来自 Mercury 的命令工作台，宿主拆掉界面 SDK 后没人再挂，
+        // 于是命令集与指令详情两页消失、控制台的 Tab 补全也一并成了死路。
+        // 模块日后仍可 Attach 自己的实现覆盖它，但"没有模块"不再等于"没有目录"。
+        _catalog = new LocalCommandCatalogSession(_bus, log);
+        _catalogSession.Attach(_catalog);
         _console = new ConsoleView(
             log,
             _bus,
@@ -153,9 +163,23 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
                 () => new Views.ModulesView(() => _bus));
         }
 
-        // 控制窗口群(§4.5,M4):JSON + C# 通道合并,每个面板一个可停靠窗口
+        // 命令集是中央主文档（DockingHost 按这个 id 认"主窗口"）；指令详情停在右侧与它联动。
+        TakeOverDescriptor(StandardWindowIds.Mcp, "命令集", DockSide.Center, 0.5,
+            () => new Views.CommandCatalogView(_catalog, _bus, log, _commandSelection));
+        TakeOverDescriptor(StandardWindowIds.CommandDetail, "指令详情", DockSide.Right, 0.28,
+            () => new Views.CommandDetailView(_catalog, _bus, _commandSelection));
+
+        // 动作声明台账要早于面板:面板按钮绑的是动作 id,构建时就要能解析。
+        // 首次拉取不在这里做——那时模块还没装载,问谁都是空。见 DiscoverModuleSurfacesAsync。
+        _actions = new Actions.ActionRegistry(_bus, log);
+
+        // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
         _panels = new Panels.PanelManager(
-            HistoryVulcan.Services.AppPaths.GetPanelsDir(dataDirectory), config.Panels, _bus, log);
+            HistoryVulcan.Services.AppPaths.GetPanelsDir(dataDirectory),
+            config.Panels,
+            _bus,
+            log,
+            _actions);
         _panels.RegisterWindows(config.ToolWindows);
 
         _docking = new DockingHost(DockManager, config.ToolWindows, layoutStore, log, settings);
@@ -217,7 +241,8 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 页面注册协议 V1：拉取器要早于内置指令组构造，指令组才能拿到它。
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
         _componentRequests = new Pages.ComponentRequestStore(settings, log);
-        _pageLoader = new Pages.ModulePageLoader(_bus, _docking, log, _componentRequests);
+        _pageLoader = new Pages.ModulePageLoader(
+            _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
@@ -230,6 +255,7 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
             Bus = _bus,
             DataDirectory = dataDirectory,
             Panels = _panels,
+            Actions = _actions,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
         });
@@ -387,6 +413,10 @@ public partial class ShellWindow : Window, IShellCommandWorkbenchHost
     {
         try
         {
+            // 动作声明先于页面:页面按钮与泳道的点击都要按 id 解析动作,
+            // 顺序反了会在冷启动那一轮把每个按钮都判成「未声明」。
+            await _actions.ReloadAsync().ConfigureAwait(true);
+            _panels.RebuildAll();
             await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
                 await _annotationClaimer.ClaimAsync().ConfigureAwait(true);

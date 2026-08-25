@@ -10,7 +10,7 @@ namespace HistoryAurora.Shell.Modules;
 /// 认领带 <c>ui.window</c> 注解的命令：执行后把 <see cref="CommandResult.Data"/> 里的
 /// 活对象停靠进布局。5.0 起宿主不再转发 IShellUiRegistrar，这是模块露出窗格的路径。
 /// </summary>
-public sealed class UiAnnotationClaimer(
+internal sealed class UiAnnotationClaimer(
     CommandBus bus,
     IDockingService docking,
     IShellLog log)

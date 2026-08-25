@@ -480,6 +480,27 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+
+        <!--
+            GridView 的表头行**总会**在最右侧多渲染一个 Role=Padding 的表头,
+            用来盖住"列宽之和"与"表宽"之间的余量。它不是列,却和列共用同一个容器样式,
+            于是背景、悬停高亮和右缘那条发丝线一并套上去 —— 看起来就是
+            「表格最右边多注册了一列空的」。1.6.0 真机上尤其明显:星号列刻意留了
+            20px 滚动余量,那块占位正好显形。
+            这里把它单独换成一块纯背景:表头栏在整行连成一条,不再多出一格。
+        -->
+        <Style.Triggers>
+            <Trigger Property="Role" Value="Padding">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="GridViewColumnHeader">
+                            <Border Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                                    SnapsToDevicePixels="True" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style TargetType="GridViewColumnHeader">
@@ -994,6 +1015,295 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ================================================================ 表格组件 -->
+
+    <!--
+        REQ-UI-007:表格外观的唯一定义处。AuroraTable 按键引用这一组样式,
+        宿主传不进颜色、行高与字号 —— 它只提供数据和列宽。
+        每个页面各自拼 ListView 的时代就此结束:改一次外观只改这里。
+    -->
+
+    <Style x:Key="Aurora.Table.Surface" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Aurora.Table.ListView" TargetType="ListView">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Aurora.Table.Cell" TargetType="TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!--
+        文本样式不写 BasedOn:Aurora.Text.* 定义在 AuroraTokens.xaml,而本字典不合并它。
+        跨字典的 StaticResource 在解析期就抛 XamlParseException,整份控件字典随之失效。
+        令牌仍走 DynamicResource,主题切换照常跟随。
+    -->
+    <Style x:Key="Aurora.Table.Empty" TargetType="TextBlock">
+        <Setter Property="Margin" Value="12" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+    </Style>
+
+    <!--
+        行:固定 30px 高、无圆角、底部一条发丝线。
+        不复用 Aurora.Item.Base —— 那条是列表项样式,每行自带 8px 圆角,
+        连成表格后每一行都像一张卡片,列也就对不齐了。
+    -->
+    <Style x:Key="Aurora.Table.Row" TargetType="ListViewItem">
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListViewItem">
+                    <Border x:Name="Bd"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
+                            BorderThickness="0,0,0,1"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <GridViewRowPresenter x:Name="Row"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              Columns="{Binding View.Columns,
+                                                        RelativeSource={RelativeSource AncestorType=ListView}}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ================================================================ 面板组件 -->
+
+    <!--
+        REQ-UI-008:面板只有三种小组件 —— 文字、文本框(输入/选择)、按钮。
+        样式同样封在组件里,声明侧只写"是什么",不写"长什么样"。
+    -->
+
+    <Style x:Key="Aurora.Panel.Text" TargetType="TextBlock">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+    </Style>
+
+    <Style x:Key="Aurora.Panel.Label" TargetType="TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+    </Style>
+
+    <!--
+        动作未声明时按钮的样子。做成看得见的一块而不是灰按钮:
+        "按钮点了没反应"是本轮要消灭的失败形态,它必须在界面上自己说出原因。
+    -->
+    <Style x:Key="Aurora.Panel.Unbound" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Warning}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- ================================================================ 泳道图组件 -->
+
+    <!--
+        REQ-UI-010:泳道图的字号与颜色。节点框、边、端点由 AuroraSwimlane 直接按
+        Aurora.Brush.* 取色 —— 它们是画出来的图元,不是控件,套 Style 反而绕。
+    -->
+
+    <Style x:Key="Aurora.Graph.NodeTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.MonoFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style x:Key="Aurora.Graph.NodeSubtitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style x:Key="Aurora.Graph.LaneTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- 已合并的泳道:仍然画出来,但退到次级文本色,一眼能分出哪几条还在推进。 -->
+    <Style x:Key="Aurora.Graph.LaneTitleClosed" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextDisabled}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ================================================================ 行操作 -->
+
+    <!--
+        REQ-UI-011:表格的行操作。行内按钮与右键菜单是**同一份声明**的两种出口 ——
+        一处声明,两处可用;而不是让页面作者在两种控件之间挑一个,挑完还要各写一遍参数。
+
+        为什么要有它:1.6.0 的表格只能选行,行动作只好放到表格下面排成一排,
+        于是「看着哪行点哪行」变成「先上去选行、再下来点按钮」,行数一多就是来回移动
+        (见 b-Office/前端组件缺失需求书 C1/C2)。
+    -->
+    <Style x:Key="Aurora.Table.RowAction" TargetType="Button" BasedOn="{StaticResource Aurora.Button.Base}">
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Margin" Value="0,0,4,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style x:Key="Aurora.Table.RowActionDanger" TargetType="Button" BasedOn="{StaticResource Aurora.Table.RowAction}">
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.Danger}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.DangerSoft}" />
+    </Style>
+
+    <!-- ================================================================ 弹出层 -->
+
+    <!--
+        REQ-UI-012:低频编辑器的容身处。常驻面板会长期占着纵向版面,而它一周也用不到一次
+        (需求书 C3)。弹出层用完即收,并且**内容仍是面板那三种小组件** —— 不另立一套声明。
+    -->
+    <Style x:Key="Aurora.Flyout.Surface" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.ControlBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Effect" Value="{DynamicResource Aurora.Shadow.Flyout}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- ================================================================ 补全输入框 -->
+
+    <!--
+        REQ-UI-013:带候选的输入框。指令名要手打全名、打错要等到执行时才知道,
+        是加常驻指令这类操作最常见的一处返工(需求书 C4)。
+        候选表的样子归组件,取候选的口径归会话 —— 与控制台补全共用同一个 ICommandCatalogSession。
+    -->
+    <Style x:Key="Aurora.Suggest.Surface" TargetType="Border" BasedOn="{StaticResource Aurora.Flyout.Surface}">
+        <Setter Property="Padding" Value="2" />
+    </Style>
+
+    <Style x:Key="Aurora.Suggest.Item" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.MonoFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Aurora.Suggest.Hint" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="Margin" Value="10,0,0,0" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ================================================================ 指令详情 -->
+
+    <!--
+        REQ-UI-014:命令集与指令详情两页由 Aurora 自建。宿主 5.0 拆掉界面 SDK 之后
+        这两页整体消失过一轮 —— 它们是控制台以外唯一能查"这条指令收什么参数"的地方,
+        不能挂在任何模块在不在场上。
+    -->
+    <Style x:Key="Aurora.Detail.Title" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.MonoFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="Aurora.Detail.Key" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="Margin" Value="0,0,10,0" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+
+    <Style x:Key="Aurora.Detail.Value" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="Aurora.Detail.Mono" TargetType="TextBlock" BasedOn="{StaticResource Aurora.Detail.Value}">
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.MonoFamily}" />
     </Style>
 
     <!-- ================================================================ 提示 -->

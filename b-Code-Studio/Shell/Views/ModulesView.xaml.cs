@@ -1,5 +1,6 @@
 using HistoryVulcan.Services.Modules;
 using System.Windows.Controls;
+using HistoryAurora.Shell.Table;
 using HistoryVulcan.Core.Commands;
 
 namespace HistoryAurora.Shell.Views;
@@ -12,12 +13,14 @@ namespace HistoryAurora.Shell.Views;
 public partial class ModulesView : UserControl
 {
     private readonly Func<CommandBus?> _busAccessor;
+    private readonly AuroraTable _table = new() { EmptyText = "当前无已装载模块" };
     private bool _initialLoadDone;
 
     public ModulesView(Func<CommandBus?> busAccessor)
     {
         InitializeComponent();
         _busAccessor = busAccessor;
+        TableHost.Content = _table;
         // 0.4.4 上抛框架:内联首次加载守卫,不再依赖 App 层 ViewKit(停靠重排会反复触发 Loaded)
         Loaded += async (_, _) =>
         {
@@ -26,7 +29,7 @@ public partial class ModulesView : UserControl
             _initialLoadDone = true;
             await RefreshAsync();
             // 热重载曾在 Show 时快照仍空；若这一帧仍是空列表，等闲时再读一次。
-            if (ModuleList.ItemsSource is System.Collections.ICollection { Count: > 0 })
+            if (_table.RowCount > 0)
                 return;
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             await RefreshAsync();
@@ -40,7 +43,7 @@ public partial class ModulesView : UserControl
     /// （DEC-007，ModuleInfo.MainClassType = null）。列里显示 0 会让人以为它坏了。
     /// </summary>
     public sealed record ModuleRow(
-        string ModuleName, string Version, string Mode, int DomainCommandCount,
+        string ModuleName, string Version, bool Open, int DomainCommandCount,
         string AssemblyFile, string Description);
 
     /// <summary>按域统计当前注册表里的指令条数；域名取自模块名（History 前缀剥离）。</summary>
@@ -168,14 +171,26 @@ public partial class ModulesView : UserControl
             if (result.Success && result.Snapshot is { } snapshot)
             {
                 var rows = snapshot.Modules.Select(m => new ModuleRow(
-                        m.ModuleName, m.Version, m.Open ? "全暴露" : "精准暴露",
+                        m.ModuleName, m.Version, m.Open,
                         DomainCommandCount(bus.Registry, m.ModuleName), m.AssemblyFile, m.Description))
                     .ToList();
-                ModuleList.ItemsSource = rows;
+
+                // 列宽是本页唯一提供的外观信息；行高、字号、颜色、分隔线归组件。
+                _table.SetData(AuroraTableData.FromItems(
+                    rows,
+                    ("模块", "160", row => row.ModuleName),
+                    ("版本", "80", row => row.Version),
+                    ("域指令数", "72", row => row.DomainCommandCount.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)),
+                    ("描述", AuroraTableColumn.Star, row => row.Description)));
+
                 StatusText.Text = rows.Count == 0
                     ? "当前无已装载模块；运行区为空或包未通过校验"
                     : $"已装载 {rows.Count} 个模块,合计 {rows.Sum(row => row.DomainCommandCount)} 条域指令"
-                      + $"（其中经模块路径注册 {snapshot.Modules.Sum(module => module.CommandCount)} 条）";
+                      + $"（其中经模块路径注册 {snapshot.Modules.Sum(module => module.CommandCount)} 条）"
+                      // 暴露口径不再占一列（1.7.0）：它对四个业务模块几乎恒定，
+                      // 却把星号的描述列挤到只剩"前端…"。计数放在状态行里，信息没丢。
+                      + $"；全暴露 {rows.Count(row => row.Open)} 个";
             }
             else
             {
@@ -190,7 +205,7 @@ public partial class ModulesView : UserControl
 
     private void ClearModules(string status)
     {
-        ModuleList.ItemsSource = null;
+        _table.SetData(null);
         StatusText.Text = status;
     }
 
