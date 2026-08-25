@@ -38,6 +38,7 @@ internal sealed class DockingDragProbe : IDisposable
     private readonly DockingManager _manager;
     private readonly IShellLog _log;
     private readonly string _source;
+    private readonly Action<Window>? _repairOverlay;
 
     private HwndSource? _hwnd;
     private int _moving;
@@ -57,6 +58,9 @@ internal sealed class DockingDragProbe : IDisposable
     private string _dominant = "无";
     private int _overlayZ = -1;
     private int _mainZ = -1;
+    private int _overlayDicts = -1;
+    private int _overlayKeys = -1;
+    private bool _repaired;
     private int _treeWalks;
     private string _dropTarget = "无";
     private string _exitWithButtonDown = string.Empty;
@@ -76,8 +80,10 @@ internal sealed class DockingDragProbe : IDisposable
         LayoutFloatingWindowControl floating,
         DockingManager manager,
         IShellLog log,
-        string source)
+        string source,
+        Action<Window>? repairOverlay = null)
     {
+        _repairOverlay = repairOverlay;
         _floating = floating;
         _manager = manager;
         _log = log;
@@ -130,7 +136,8 @@ internal sealed class DockingDragProbe : IDisposable
         _log.Info(
             _source,
             $"停靠探针：覆盖窗实绘像素={_drawnPixels}/{_totalPixels} 主色={_dominant} " +
-            $"Z序 覆盖窗={_overlayZ} 主窗体={_mainZ}");
+            $"Z序 覆盖窗={_overlayZ} 主窗体={_mainZ} " +
+            $"覆盖窗字典={_overlayDicts} 自有键={_overlayKeys}");
         _log.Info(
             _source,
             $"停靠探针：光标进过停靠区={(_trueCursorInside ? "是" : "否")} " +
@@ -214,6 +221,15 @@ internal sealed class DockingDragProbe : IDisposable
 
             // 第一次真正可见时定格：这是"指示到底画没画出来"的唯一可信证据。
             _overlayEverVisible = true;
+            _overlayDicts = overlay.Resources.MergedDictionaries.Count;
+            _overlayKeys = overlay.Resources.Count;
+            if (!_repaired && _repairOverlay != null)
+            {
+                _repaired = true;
+                _repairOverlay(overlay);
+                _log.Info(_source, "停靠探针：已按 DEC-009 给覆盖窗补挂主题字典");
+            }
+
             var template = overlay is Control { Template: not null } ? "有" : "无";
             WalkOverlay(overlay);
             RenderOverlay(overlay);
@@ -273,11 +289,13 @@ internal sealed class DockingDragProbe : IDisposable
                 counts[key] = seen + 1;
             }
 
+            // 总数无论如何都要记：画了 0 个像素时提前 return 会报出 "0/0"，
+            // 分不清"渲染过但全透明"和"根本没渲染"。1.7.9 真机日志就是这么含糊的。
+            _totalPixels = width * height;
             if (drawn <= _drawnPixels)
                 return;
 
             _drawnPixels = drawn;
-            _totalPixels = width * height;
             if (counts.Count > 0)
             {
                 var top = counts.OrderByDescending(pair => pair.Value).First();

@@ -774,7 +774,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
         // 浮窗才需要观测：只有它走停靠链路。探针只读，拖动结束时报出断点所在环。
         using var probe = hostWindow is LayoutFloatingWindowControl floating
-            ? new DockingDragProbe(floating, _manager, _log, ChromeLogSource)
+            ? new DockingDragProbe(
+                floating,
+                _manager,
+                _log,
+                ChromeLogSource,
+                Themes.AuroraComponentResources.EnsureTheme)
             : null;
         probe?.Start();
 
