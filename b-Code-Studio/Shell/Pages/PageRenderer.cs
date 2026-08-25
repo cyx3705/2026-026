@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.CommandSurface;
 using HistoryAurora.Shell.Graph;
@@ -602,10 +603,28 @@ public static class PageRenderer
             AuroraTable table,
             IReadOnlyList<AuroraTableColumn> columns,
             PageDataSource source)
-            => _ = LoadRowsAsync(table, columns, Compose(source));
+            => WhenLoaded(table, () => LoadRowsAsync(table, columns, Compose(source)));
 
         public void LoadSwimlane(AuroraSwimlane swimlane, PageDataSource source)
-            => _ = LoadSwimlaneAsync(swimlane, Compose(source));
+            => WhenLoaded(swimlane, () => LoadSwimlaneAsync(swimlane, Compose(source)));
+
+        private static void WhenLoaded(FrameworkElement element, Func<Task> load)
+        {
+            var started = false;
+            RoutedEventHandler? handler = null;
+            handler = (_, _) =>
+            {
+                if (started)
+                    return;
+
+                started = true;
+                element.Loaded -= handler;
+                element.Dispatcher.BeginInvoke(
+                    DispatcherPriority.Background,
+                    new Action(() => _ = load()));
+            };
+            element.Loaded += handler;
+        }
 
         private static string Compose(PageDataSource source)
         {
@@ -620,7 +639,9 @@ public static class PageRenderer
             IReadOnlyList<AuroraTableColumn> columns,
             string text)
         {
-            var payload = await FetchAsync(text).ConfigureAwait(true);
+            // 模块取数可能在第一次 await 前做同步磁盘/Git 工作。放在线程池执行，
+            // 避免模块实现细节阻塞 Aurora 的 UI 线程；await 后回 UI 线程更新控件。
+            var payload = await Task.Run(() => FetchAsync(text)).ConfigureAwait(true);
             if (payload == null)
                 return;
 
@@ -639,7 +660,7 @@ public static class PageRenderer
 
         private async Task LoadSwimlaneAsync(AuroraSwimlane swimlane, string text)
         {
-            var payload = await FetchAsync(text).ConfigureAwait(true);
+            var payload = await Task.Run(() => FetchAsync(text)).ConfigureAwait(true);
             if (payload == null)
             {
                 swimlane.ShowMessage("取数失败：" + text);
