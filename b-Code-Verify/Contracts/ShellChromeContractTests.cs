@@ -511,13 +511,13 @@ public sealed class ShellChromeContractTests
             var floating = Assert.Single(manager.FloatingWindows.ToList());
             var chrome = WindowChrome.GetWindowChrome(floating);
             Assert.NotNull(chrome);
-            // 这里原先断言 CaptionHeight == 0，把"没有第二条标题行"和"没有标题命中区"
-            // 当成了同一件事。**不是**：CaptionHeight 只管命中测试，一个像素都不画；
-            // 那条多余的行是被下面几条断言管着的模板去掉的（Border + ContentPresenter，
-            // 没有 FloatingWindowControlChrome）。
-            // 而 CaptionHeight=0 会让浮窗永远收不到 WM_NCLBUTTONDOWN/HTCAPTION，
-            // AvalonDock 因此不创建 DragService——拖得出去、叠不回来（2026-08-25 真机）。
-            Assert.True(chrome.CaptionHeight > 0);
+            // CaptionHeight 必须是 0。1.7.1/1.7.2 曾把它抬到 35，理由是
+            // 「AvalonDock 要收到 WM_NCLBUTTONDOWN/HTCAPTION 才建 DragService」——
+            // 反编译 FilterMessage 后确认那条理由是错的：它只看 WM_SYSCOMMAND(仅最大化/还原)、
+            // WM_LBUTTONUP、WM_MOVING、WM_EXITSIZEMOVE。
+            // 抬高它反而有害：页头变成非客户区，WPF 收不到鼠标按下，
+            // Aurora 自己那条会去调 DragMove 的拖动手势根本起不来。
+            Assert.Equal(0, chrome.CaptionHeight);
             var root = Assert.IsType<Border>(floating.Template.LoadContent());
             var presenter = Assert.Single(FindLogicalDescendants<ContentPresenter>(root));
             Assert.Null(presenter.DataContext);

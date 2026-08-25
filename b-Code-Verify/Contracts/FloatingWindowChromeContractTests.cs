@@ -7,17 +7,20 @@ using Xunit;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 浮窗必须留着一条**真正的**标题栏高度，否则拖出去就叠不回来。
+/// 浮窗的窗口外观契约，以及它与"能不能叠回布局"的真实关系。
 ///
-/// AvalonDock 的 <c>LayoutFloatingWindowControl</c> 是在收到 <c>WM_NCLBUTTONDOWN</c>
-/// 且命中 <c>HTCAPTION</c> 时才创建 DragService——显示停靠指示器、松手时把窗口叠回布局，
-/// 全靠那个服务。<c>WindowChrome.CaptionHeight="0"</c> 会让整个窗口都算客户区，
-/// 那条消息永远不会到达。
-///
-/// 症状因此是"只坏了一半"：拖**出**是在主窗体里由 DockingManager 发起的，走另一条路，
-/// 照常能用；拖**回**没有任何反应。2026-08-25 真机报的正是这个。
-///
-/// 拖放本身在自动化里驱动不了（要真实的 Win32 移动循环），所以这条门禁只钉住前提条件。
+/// 这一条被改错过两轮，所以把结论写在这里：
+/// <list type="number">
+///   <item>AvalonDock 的 <c>LayoutFloatingWindowControl.FilterMessage</c> 只处理
+///         <c>WM_SYSCOMMAND</c>（且仅最大化/还原）、<c>WM_LBUTTONUP</c>、
+///         <c>WM_MOVING</c>、<c>WM_EXITSIZEMOVE</c>。**它不看任何非客户区消息。**
+///         建 DragService（那组蓝色停靠指示）的是 <c>WM_MOVING → UpdateDragPosition</c>，
+///         也就是"窗口正被系统的移动循环拖着"这件事本身。</item>
+///   <item>因此 <c>WindowChrome.CaptionHeight</c> 与停靠无关，必须保持 0：
+///         抬高它会把页头变成非客户区，WPF 收不到鼠标按下，
+///         Aurora 那条会去调 <c>DragMove()</c> 的拖动手势就起不来了。</item>
+/// </list>
+/// 拖放本身在自动化里驱动不了（要真实的 Win32 移动循环），所以这里只钉外观前提。
 /// </summary>
 [Collection(TestCollections.Ui)]
 public sealed class FloatingWindowChromeContractTests
@@ -25,22 +28,43 @@ public sealed class FloatingWindowChromeContractTests
     [Theory]
     [InlineData(typeof(LayoutAnchorableFloatingWindowControl))]
     [InlineData(typeof(LayoutDocumentFloatingWindowControl))]
-    public void FloatingWindowKeepsACaptionAvalonDockCanSee(Type floatingWindowType)
+    public void FloatingWindowKeepsItsHeaderInTheClientArea(Type floatingWindowType)
     {
         UiTestHost.RunSta(() =>
         {
-            var docking = DockingDictionary();
-
-            var style = Assert.IsType<Style>(docking[floatingWindowType]);
+            var style = Assert.IsType<Style>(DockingDictionary()[floatingWindowType]);
             var setter = Assert.Single(
                 style.Setters.OfType<Setter>(),
                 candidate => candidate.Property == WindowChrome.WindowChromeProperty);
             var chrome = Assert.IsType<WindowChrome>(setter.Value);
 
-            Assert.True(
-                chrome.CaptionHeight > 0,
-                $"{floatingWindowType.Name} 的 CaptionHeight 是 {chrome.CaptionHeight}，"
-                + "浮窗将收不到 WM_NCLBUTTONDOWN/HTCAPTION，也就叠不回布局里");
+            Assert.Equal(0, chrome.CaptionHeight);
+        });
+    }
+
+    [Fact]
+    public void TabsAndPaneButtonsDeclareTheirChromeExemption()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var docking = DockingDictionary();
+
+            // 这几条豁免眼下不起作用（CaptionHeight 是 0，整窗都是客户区），
+            // 但它们是"页签和窗格按钮必须永远可点"这条意图的落点：
+            // 谁再想动 CaptionHeight，先会看到它们，也就会看到上面那段结论。
+            foreach (var key in new[]
+                     {
+                         "Aurora.Docking.DocumentTabItemStyle",
+                         "Aurora.Docking.AnchorableTabItemStyle",
+                         "Aurora.Docking.PaneActionButton",
+                     })
+            {
+                var style = Assert.IsType<Style>(docking[key]);
+                var setter = Assert.Single(
+                    style.Setters.OfType<Setter>(),
+                    candidate => candidate.Property == WindowChrome.IsHitTestVisibleInChromeProperty);
+                Assert.Equal(true, setter.Value);
+            }
         });
     }
 
@@ -58,30 +82,5 @@ public sealed class FloatingWindowChromeContractTests
                 "/HistoryAurora;component/Themes/AuroraDocking.xaml",
                 UriKind.Relative),
         };
-    }
-
-    [Fact]
-    public void TabsAndPaneButtonsStayClickableInsideThatCaption()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var docking = DockingDictionary();
-
-            // 标题栏高度一旦 > 0，落在里面的东西默认全变成"拖窗口"的手柄。
-            // 页签与窗格动作按钮必须显式声明豁免，否则页签点不动、关闭按钮按不了。
-            foreach (var key in new[]
-                     {
-                         "Aurora.Docking.DocumentTabItemStyle",
-                         "Aurora.Docking.AnchorableTabItemStyle",
-                         "Aurora.Docking.PaneActionButton",
-                     })
-            {
-                var style = Assert.IsType<Style>(docking[key]);
-                var setter = Assert.Single(
-                    style.Setters.OfType<Setter>(),
-                    candidate => candidate.Property == WindowChrome.IsHitTestVisibleInChromeProperty);
-                Assert.Equal(true, setter.Value);
-            }
-        });
     }
 }

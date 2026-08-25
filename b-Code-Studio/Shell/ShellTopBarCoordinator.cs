@@ -749,55 +749,34 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
     }
 
+    /// <summary>
+    /// 开始拖动一个窗口。浮窗走这条路时，AvalonDock 会顺势接管停靠。
+    ///
+    /// 关键是**必须先放掉 Win32 捕获**。WPF 的 <c>Mouse.Capture</c> 底层就是 SetCapture；
+    /// 捕获还在时 <c>DefWindowProc</c> 的移动循环根本不会启动，`DragMove()` 于是
+    /// 静默地什么都不做——不抛异常，也不移动窗口。
+    ///
+    /// 为什么这件事决定"浮窗能不能叠回去"：AvalonDock 的
+    /// <c>LayoutFloatingWindowControl.FilterMessage</c> 只处理
+    /// WM_SYSCOMMAND（仅最大化/还原）、WM_LBUTTONUP、**WM_MOVING**、WM_EXITSIZEMOVE。
+    /// 建 DragService（也就是那组蓝色停靠指示）的是 WM_MOVING → UpdateDragPosition。
+    /// 而 WM_MOVING 只在系统的移动循环里才发。移动循环起不来 = 一次都不发 =
+    /// 指示不出现、松手也无从停靠。
+    /// （2026-08-25 反编译确认；此前以为它认 WM_NCLBUTTONDOWN/HTCAPTION，那是错的。）
+    /// </summary>
     private void TryDragWindow(Window hostWindow)
     {
-        // 浮窗要走**非客户区标题拖动**，不能用 DragMove()。
-        //
-        // AvalonDock 的 LayoutFloatingWindowControl 是在 FilterMessage 里收到
-        // WM_NCLBUTTONDOWN 且命中 HTCAPTION 时才创建 DragService——那个服务才是
-        // 「拖到主窗体上方时冒出来的蓝色停靠指示」和「松手把窗口叠回布局」。
-        // DragMove() 发的是 WM_SYSCOMMAND/SC_MOVE，那条消息永远不会到，
-        // 于是浮窗只能被搬来搬去、叠不回去，蓝色标识也一次都不出现。
-        //
-        // 这不是绕过 AvalonDock：它自己的 AttachDrag（拖出去那一半）用的就是同一招——
-        // 收到 WM_ACTIVATE 后 SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, …)。
-        // 拖出去一直好用、拖回来从来不行，差别就在这里。
-        if (hostWindow is LayoutFloatingWindowControl floating && TryStartCaptionDrag(floating))
-            return;
-
         try
         {
             hostWindow.Activate();
+            Mouse.Capture(null);
+            NativeMethods.ReleaseCapture();
             hostWindow.DragMove();
         }
         catch (InvalidOperationException ex)
         {
             _log.Warn(ChromeLogSource, $"窗口拖动未启动：{ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// 把这次拖动交回给窗口管理器的标题栏拖动，AvalonDock 借此接手停靠。
-    /// 返回 false 表示没接上（拿不到窗口句柄等），调用方退回 DragMove()。
-    /// </summary>
-    private bool TryStartCaptionDrag(LayoutFloatingWindowControl floating)
-    {
-        var handle = new System.Windows.Interop.WindowInteropHelper(floating).Handle;
-        if (handle == IntPtr.Zero)
-            return false;
-
-        if (!NativeMethods.GetCursorPos(out var cursor))
-            return false;
-
-        floating.Activate();
-
-        // WPF 这时还抓着鼠标；不放掉的话系统的移动循环起不来。
-        Mouse.Capture(null);
-        NativeMethods.ReleaseCapture();
-
-        var lParam = (IntPtr)((cursor.Y << 16) | (cursor.X & 0xFFFF));
-        NativeMethods.SendMessage(handle, NativeMethods.WmNcLButtonDown, NativeMethods.HtCaption, lParam);
-        return true;
     }
 
     internal static WindowState GetToggledWindowState(WindowState state)

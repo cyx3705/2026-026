@@ -508,24 +508,23 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
         <!--
-            CaptionHeight 必须 > 0，否则**浮窗拖不回去**。
+            CaptionHeight 必须是 0。
 
-            AvalonDock 的 LayoutFloatingWindowControl 是在收到
-            `WM_NCLBUTTONDOWN` 且命中 `HTCAPTION` 时才创建它的 DragService——
-            那个服务才是显示停靠指示器、并在松手时把窗口叠回布局的东西。
-            CaptionHeight="0" 让整个窗口都是客户区，这条消息永远不会到达，
-            于是「拖得出去、叠不回来」：拖出是在主窗体里由 DockingManager 发起的，
-            走的是另一条路，所以看起来只有一半坏了。（2026-08-25 真机报告）
+            1.7.1/1.7.2 曾把它抬到 35，理由是「AvalonDock 要收到
+            WM_NCLBUTTONDOWN/HTCAPTION 才会建 DragService」。**那条理由是错的**：
+            反编译 LayoutFloatingWindowControl.FilterMessage 后确认，它只处理
+            WM_SYSCOMMAND(0x0112，且仅 SC_MAXIMIZE/SC_RESTORE)、WM_LBUTTONUP(0x0202)、
+            WM_MOVING(0x0216)、WM_EXITSIZEMOVE(0x0232)——**根本不看非客户区消息**。
+            真正建 DragService 的是 WM_MOVING → UpdateDragPosition，
+            也就是"窗口正在被系统的移动循环拖着"这件事本身。
 
-            高度取页签条：Aurora.Size.Tab(32) + Aurora.Space.TabStrip 上边距(3)。
-            这里写字面量而不是 DynamicResource——WindowChrome 是 Freezable，
-            在 Setter.Value 里冻结后动态键不再更新，两处必须与令牌同步改。
-            页签与窗格动作按钮都已声明 WindowChrome.IsHitTestVisibleInChrome=True，
-            因此它们在这条"标题栏"里照常可点：那批声明本来就是为这一刻准备的。
+            而抬高 CaptionHeight 有害：页头那一条随即变成非客户区，
+            WPF 不再收到鼠标按下，Aurora 自己的拖动手势（它才会去调 DragMove）
+            压根起不来。所以这里回到 0。
         -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
-                <WindowChrome CaptionHeight="35"
+                <WindowChrome CaptionHeight="0"
                               ResizeBorderThickness="6"
                               GlassFrameThickness="0"
                               CornerRadius="0"
@@ -557,24 +556,23 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
         <!--
-            CaptionHeight 必须 > 0，否则**浮窗拖不回去**。
+            CaptionHeight 必须是 0。
 
-            AvalonDock 的 LayoutFloatingWindowControl 是在收到
-            `WM_NCLBUTTONDOWN` 且命中 `HTCAPTION` 时才创建它的 DragService——
-            那个服务才是显示停靠指示器、并在松手时把窗口叠回布局的东西。
-            CaptionHeight="0" 让整个窗口都是客户区，这条消息永远不会到达，
-            于是「拖得出去、叠不回来」：拖出是在主窗体里由 DockingManager 发起的，
-            走的是另一条路，所以看起来只有一半坏了。（2026-08-25 真机报告）
+            1.7.1/1.7.2 曾把它抬到 35，理由是「AvalonDock 要收到
+            WM_NCLBUTTONDOWN/HTCAPTION 才会建 DragService」。**那条理由是错的**：
+            反编译 LayoutFloatingWindowControl.FilterMessage 后确认，它只处理
+            WM_SYSCOMMAND(0x0112，且仅 SC_MAXIMIZE/SC_RESTORE)、WM_LBUTTONUP(0x0202)、
+            WM_MOVING(0x0216)、WM_EXITSIZEMOVE(0x0232)——**根本不看非客户区消息**。
+            真正建 DragService 的是 WM_MOVING → UpdateDragPosition，
+            也就是"窗口正在被系统的移动循环拖着"这件事本身。
 
-            高度取页签条：Aurora.Size.Tab(32) + Aurora.Space.TabStrip 上边距(3)。
-            这里写字面量而不是 DynamicResource——WindowChrome 是 Freezable，
-            在 Setter.Value 里冻结后动态键不再更新，两处必须与令牌同步改。
-            页签与窗格动作按钮都已声明 WindowChrome.IsHitTestVisibleInChrome=True，
-            因此它们在这条"标题栏"里照常可点：那批声明本来就是为这一刻准备的。
+            而抬高 CaptionHeight 有害：页头那一条随即变成非客户区，
+            WPF 不再收到鼠标按下，Aurora 自己的拖动手势（它才会去调 DragMove）
+            压根起不来。所以这里回到 0。
         -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
-                <WindowChrome CaptionHeight="35"
+                <WindowChrome CaptionHeight="0"
                               ResizeBorderThickness="6"
                               GlassFrameThickness="0"
                               CornerRadius="0"
