@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Media.Imaging;
 using AvalonDock;
 using AvalonDock.Controls;
@@ -49,6 +50,9 @@ internal sealed class DockingDragProbe : IDisposable
     private int _maxOverlayElements;
     private int _maxOverlayVisible;
     private int _maxNamedTargets;
+    private int _maxBrushed;
+    private string _sample = string.Empty;
+    private string _overlayPaint = "未测";
     private int _maxImages;
     private int _maxImagesWithoutSource;
     private int _renders;
@@ -129,13 +133,13 @@ internal sealed class DockingDragProbe : IDisposable
         _log.Info(
             _source,
             $"停靠探针：停靠区={_maxAreas} 覆盖窗元素={_maxOverlayElements} 其中可见={_maxOverlayVisible} " +
-            $"具名投放件={_maxNamedTargets} 覆盖窗图像={_maxImages} 其中无源={_maxImagesWithoutSource} " +
+            $"具名投放件={_maxNamedTargets} 有画刷={_maxBrushed} 无画刷样本={_sample} " +
             $"最终投放目标={_dropTarget}");
         _log.Info(
             _source,
             $"停靠探针：覆盖窗实绘像素={_drawnPixels}/{_totalPixels} 主色={_dominant} " +
             $"Z序 覆盖窗={_overlayZ} 主窗体={_mainZ} " +
-            $"覆盖窗字典={_overlayDicts} 自有键={_overlayKeys}");
+            $"覆盖窗字典={_overlayDicts} 自有键={_overlayKeys} {_overlayPaint}");
         _log.Info(
             _source,
             $"停靠探针：光标进过停靠区={(_trueCursorInside ? "是" : "否")} " +
@@ -236,6 +240,30 @@ internal sealed class DockingDragProbe : IDisposable
         }
     }
 
+    /// <summary>某个元素是否真的拿到了能画出东西的画刷。</summary>
+    private static bool HasPaint(FrameworkElement element)
+    {
+        var brushes = element switch
+        {
+            Shape shape => new[] { shape.Fill, shape.Stroke },
+            Border border => new[] { border.Background, border.BorderBrush },
+            Control control => new[] { control.Background, control.BorderBrush },
+            Panel panel => new[] { panel.Background },
+            _ => Array.Empty<Brush>(),
+        };
+
+        foreach (var brush in brushes)
+        {
+            if (brush is null || brush.Opacity <= 0)
+                continue;
+            if (brush is SolidColorBrush { Color.A: 0 })
+                continue;
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// 把覆盖窗渲染成位图，数非透明像素。
     ///
@@ -260,6 +288,9 @@ internal sealed class DockingDragProbe : IDisposable
                 return;
 
             _renders++;
+            _overlayPaint =
+                $"不透明度={overlay.Opacity} 底色={(overlay.Background is SolidColorBrush b ? b.Color.ToString() : overlay.Background?.ToString() ?? "空")} " +
+                $"透明窗={overlay.AllowsTransparency}";
             var bitmap = new RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
             bitmap.Render(overlay);
 
@@ -416,6 +447,8 @@ internal sealed class DockingDragProbe : IDisposable
         var named = 0;
         var images = 0;
         var imagesWithoutSource = 0;
+        var brushed = 0;
+        var names = new List<string>();
         var stack = new Stack<DependencyObject>();
         stack.Push(root);
         while (stack.Count > 0)
@@ -434,6 +467,13 @@ internal sealed class DockingDragProbe : IDisposable
                 // 蓝色方位指示是图片。图片资源在可回收上下文里解析失败时，Image 照常
                 // 参与布局、照常"可见"、尺寸也对，就是一个像素都不画。投放预览框是纯色
                 // 边框、不吃图片资源，所以它能画出来——真机截图正是"白框在、箭头没有"。
+                // 画刷到底解析到没有。元素排布正常而一个像素都不画，只可能是画刷为空
+                // 或全透明——把"有几个元素真的拿到了不透明画刷"直接数出来，不再推断。
+                if (HasPaint(element))
+                    brushed++;
+                else if (names.Count < 6 && element.ActualWidth >= 8 && element.ActualHeight >= 8)
+                    names.Add(element.GetType().Name);
+
                 if (element is Image image)
                 {
                     images++;
@@ -450,6 +490,13 @@ internal sealed class DockingDragProbe : IDisposable
         _maxOverlayElements = Math.Max(_maxOverlayElements, total);
         _maxOverlayVisible = Math.Max(_maxOverlayVisible, visible);
         _maxNamedTargets = Math.Max(_maxNamedTargets, named);
+        if (brushed > _maxBrushed || _sample.Length == 0)
+        {
+            _maxBrushed = Math.Max(_maxBrushed, brushed);
+            if (names.Count > 0)
+                _sample = string.Join("/", names);
+        }
+
         _maxImages = Math.Max(_maxImages, images);
         _maxImagesWithoutSource = Math.Max(_maxImagesWithoutSource, imagesWithoutSource);
     }
@@ -509,9 +556,12 @@ internal sealed class DockingDragProbe : IDisposable
             return "断在第 5 环——停靠区算出来了，但覆盖窗里几乎没有可见元素（模板内容没渲染出来）";
         if (_renders > 0 && _drawnPixels == 0 && _overlayDicts <= 0)
             return "断在第 6 环——覆盖窗一个非透明像素都没画，且字典数为 0：主题字典没挂上去";
+        if (_renders > 0 && _drawnPixels == 0 && _maxBrushed == 0)
+            return $"断在第 6 环——字典有 {_overlayDicts} 份，但覆盖窗里没有任何一个元素拿到画刷：" +
+                   "按键查画刷这一步失败了（无画刷样本见上一行）";
         if (_renders > 0 && _drawnPixels == 0)
-            return $"断在第 6 环——字典有 {_overlayDicts} 份，仍然一个非透明像素都没画：" +
-                   "画刷不是 DynamicResource，事后并入不生效";
+            return $"断在第 6 环——有 {_maxBrushed} 个元素拿到了画刷，渲染出来仍是 0 像素：" +
+                   "画刷有了但没画上，看不透明度与透明窗设置";
         if (_drawnPixels > 0 && _overlayZ >= 0 && _mainZ >= 0 && _overlayZ > _mainZ)
             return $"断在第 6 环——覆盖窗画了 {_drawnPixels} 个像素，但 Z 序在主窗体之后" +
                    $"（{_overlayZ} > {_mainZ}），被主窗体压住了";
