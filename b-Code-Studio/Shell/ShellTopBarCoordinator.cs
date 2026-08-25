@@ -772,6 +772,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             ChromeLogSource,
             $"开始拖动窗口 {hostWindow.GetType().Name}（浮窗={hostWindow is LayoutFloatingWindowControl}）");
 
+        // 浮窗才需要观测：只有它走停靠链路。探针只读，拖动结束时报出断点所在环。
+        using var probe = hostWindow is LayoutFloatingWindowControl floating
+            ? new DockingDragProbe(floating, _manager, _log, ChromeLogSource)
+            : null;
+        probe?.Start();
+
         try
         {
             hostWindow.Activate();
