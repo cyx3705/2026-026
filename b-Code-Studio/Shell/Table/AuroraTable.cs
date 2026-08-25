@@ -33,6 +33,9 @@ public sealed class AuroraTable : UserControl
     /// <summary>给纵向滚动条留出的余量，避免星号列把内容顶出可视区后又长出横向滚动条。</summary>
     private const double ScrollAllowance = 20;
 
+    /// <summary>星号列复算的次数上限。两轮就够（声明值 → 实际值），第三轮兜底。</summary>
+    private const int MaxStarPasses = 3;
+
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
@@ -44,6 +47,9 @@ public sealed class AuroraTable : UserControl
 
     private AuroraTableData _data = AuroraTableData.Empty;
     private bool _headerStyleApplied;
+    private bool _starRecheckQueued;
+    private int _starPasses;
+    private ScrollViewer? _scrollHost;
 
     /// <summary>右键按下时命中的那一行；空白处按下则为 null，菜单随之不弹。</summary>
     private IReadOnlyDictionary<string, string>? _menuRow;
@@ -65,7 +71,11 @@ public sealed class AuroraTable : UserControl
         _list.SetResourceReference(StyleProperty, "Aurora.Table.ListView");
         _list.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "Aurora.Table.Row");
         _list.SelectionChanged += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
-        _list.SizeChanged += (_, _) => ApplyStarWidths();
+        _list.SizeChanged += (_, _) =>
+        {
+            _starPasses = 0;
+            ApplyStarWidths();
+        };
         _list.PreviewMouseRightButtonDown += OnRowRightButtonDown;
         _list.ContextMenuOpening += OnRowContextMenuOpening;
 
@@ -134,6 +144,7 @@ public sealed class AuroraTable : UserControl
     public void SetData(AuroraTableData? data)
     {
         _data = data ?? AuroraTableData.Empty;
+        _starPasses = 0;
         RebuildColumns();
         _list.ItemsSource = BuildRows(_data);
         _empty.Visibility = _data.RowCount == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -159,6 +170,7 @@ public sealed class AuroraTable : UserControl
                 _rowActions.Add(action);
         }
 
+        _starPasses = 0;
         _list.ContextMenu = _rowActions.Count == 0 ? null : BuildContextMenu();
         RebuildColumns();
         ApplyStarWidths();
@@ -207,7 +219,45 @@ public sealed class AuroraTable : UserControl
         var cell = new FrameworkElementFactory(typeof(TextBlock));
         cell.SetBinding(TextBlock.TextProperty, new Binding("[" + key + "]"));
         cell.SetResourceReference(StyleProperty, "Aurora.Table.Cell");
+
+        // 被省略号吃掉的那半句不能就此消失：列窄的时候整整一列都可能只剩「前…」。
+        // 提示的内容就是本格文字，开关到悬停那一刻再算——只有真的放不下才弹。
+        cell.SetBinding(
+            ToolTipProperty,
+            new Binding(nameof(TextBlock.Text)) { RelativeSource = RelativeSource.Self });
+        cell.AddHandler(MouseEnterEvent, new MouseEventHandler(OnCellMouseEnter));
+
         return new DataTemplate { VisualTree = cell };
+    }
+
+    private static void OnCellMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is TextBlock cell)
+            ToolTipService.SetIsEnabled(cell, IsTrimmed(cell));
+    }
+
+    /// <summary>
+    /// 这一格的文字是不是真的放不下。
+    ///
+    /// 不用 <c>TextBlock.IsTextTrimmed</c>：那个属性只有 .NET Framework 4.8 的 WPF 有，
+    /// 本仓是 net8.0-windows，写进 Style 触发器会在 XAML 编译期直接报错。
+    /// 量一次文字宽度即可，而且只在指针进入时量。
+    /// </summary>
+    internal static bool IsTrimmed(TextBlock cell)
+    {
+        if (string.IsNullOrEmpty(cell.Text) || cell.ActualWidth <= 0)
+            return false;
+
+        var formatted = new FormattedText(
+            cell.Text,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            cell.FlowDirection,
+            new Typeface(cell.FontFamily, cell.FontStyle, cell.FontWeight, cell.FontStretch),
+            cell.FontSize,
+            Brushes.Black,
+            VisualTreeHelper.GetDpi(cell).PixelsPerDip);
+
+        return formatted.Width > cell.ActualWidth + 0.5;
     }
 
     /// <summary>
@@ -349,6 +399,34 @@ public sealed class AuroraTable : UserControl
         return rows;
     }
 
+    /// <summary>列表模板里的滚动视图；进入可视树后才有，取到后缓存。</summary>
+    private ScrollViewer? ScrollHost()
+    {
+        if (_scrollHost != null)
+            return _scrollHost;
+        if (!_list.IsLoaded)
+            return null;
+
+        _scrollHost = FindDescendant<ScrollViewer>(_list);
+        return _scrollHost;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+                return match;
+            if (FindDescendant<T>(child) is { } nested)
+                return nested;
+        }
+
+        return null;
+    }
+
     private void ApplyHeaderStyle()
     {
         if (_headerStyleApplied || !IsLoaded)
@@ -380,9 +458,45 @@ public sealed class AuroraTable : UserControl
                 taken += column.Width;
         }
 
-        var remaining = _list.ActualWidth - ScrollAllowance - taken;
+        // 可用宽度以**滚动视口**为准，拿不到时才退回"表宽减去滚动条余量"。
+        // 视口宽度是权威值：它已经扣掉了纵向滚动条，也扣掉了列表自己的边框与内距，
+        // 而那几像素正是 1.7.0 那条横向滚动条的来源。
+        var scroll = ScrollHost();
+        var available = scroll is { ViewportWidth: > 0 }
+            ? scroll.ViewportWidth
+            : _list.ActualWidth - ScrollAllowance;
+
+        // 上一轮排完之后仍然溢出多少，直接减掉。不去追问是谁多占的——
+        // 表头最小宽度、分隔条命中区、行操作按钮的外边距都可能贡献几像素，
+        // 逐个建模只会漏掉下一个。反馈一次就够，且下一轮会验证它。
+        var overflow = scroll is { ViewportWidth: > 0 }
+            ? Math.Max(0, scroll.ExtentWidth - scroll.ViewportWidth)
+            : 0;
+
+        var remaining = available - taken - overflow;
         var share = Math.Max(MinStarWidth, remaining / _starColumns.Count);
+
         foreach (var column in _starColumns)
             column.Width = share;
+
+        // 定宽列的**实际**宽度要等一次布局才知道：列宽声明小于表头文字所需时，
+        // GridView 会把那一列撑开。几列各多出两三像素，加起来就够让表格长出一条
+        // 横向滚动条（1.7.0 真机上命令集那张表就是这么来的）。
+        // 所以要在布局跑完之后按实际宽度再算一遍。
+        //
+        // 收敛用**次数**兜底而不是"宽度不再变化"：后者会在"这一轮刚好没变、
+        // 而同一轮布局又把定宽列撑开了"时提前停下，正是本缺陷的成因。
+        if (_starPasses >= MaxStarPasses || _starRecheckQueued)
+            return;
+
+        _starRecheckQueued = true;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Loaded,
+            new Action(() =>
+            {
+                _starRecheckQueued = false;
+                _starPasses++;
+                ApplyStarWidths();
+            }));
     }
 }

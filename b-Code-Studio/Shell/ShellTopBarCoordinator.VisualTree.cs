@@ -203,8 +203,36 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     private static class NativeMethods
     {
+        /// <summary>非客户区左键按下。AvalonDock 靠它开始一次可停靠的浮窗拖动。</summary>
+        internal const int WmNcLButtonDown = 0x00A1;
+
+        /// <summary>命中标题栏。</summary>
+        internal static readonly IntPtr HtCaption = new(2);
+
         [DllImport("user32.dll")]
         internal static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetCursorPos(out CursorPoint point);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern IntPtr SendMessage(
+            IntPtr window,
+            int message,
+            IntPtr wParam,
+            IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct CursorPoint
+        {
+            internal int X;
+            internal int Y;
+        }
     }
 }
 

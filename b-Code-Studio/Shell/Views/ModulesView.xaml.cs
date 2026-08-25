@@ -178,9 +178,12 @@ public partial class ModulesView : UserControl
                 // 列宽是本页唯一提供的外观信息；行高、字号、颜色、分隔线归组件。
                 _table.SetData(AuroraTableData.FromItems(
                     rows,
-                    ("模块", "160", row => row.ModuleName),
-                    ("版本", "80", row => row.Version),
-                    ("域指令数", "72", row => row.DomainCommandCount.ToString(
+                    // 左侧停靠区真机实测约 370px。定宽列越宽，星号的描述列越没得剩——
+                    // 1.7.0 去掉「暴露」之后仍然只剩几十像素，只能显示「前…」。
+                    // 这里把三列各收一档；截断部分由单元格的悬停提示兜底（Aurora.Table.Cell）。
+                    ("模块", "132", row => row.ModuleName),
+                    ("版本", "62", row => row.Version),
+                    ("域指令", "56", row => row.DomainCommandCount.ToString(
                         System.Globalization.CultureInfo.InvariantCulture)),
                     ("描述", AuroraTableColumn.Star, row => row.Description)));
 

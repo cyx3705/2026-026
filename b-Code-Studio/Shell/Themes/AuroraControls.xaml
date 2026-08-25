@@ -1046,12 +1046,25 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
+    <!--
+        单元格。省略号是列宽不够时的必然结果，但"被省略掉的那半句"不能就此消失——
+        真机上模块管理的描述列被挤成「前…」，那一列等于白占地方。
+        因此：**只在真的被截断时**挂提示（`IsTextTrimmed` 是 WPF 自己算的，
+        不需要我们去量字宽）。没截断时把提示整个关掉，否则悬停会弹出一模一样的一行字。
+    -->
     <Style x:Key="Aurora.Table.Cell" TargetType="TextBlock">
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
         <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
         <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <!--
+            提示的开关由 AuroraTable 在悬停那一刻按实际文字宽度算（见 CellTemplate）。
+            这里不写 IsTextTrimmed 触发器：那个属性只有 .NET Framework 4.8 的 WPF 有，
+            本仓是 net8.0-windows，XAML 编译期就会报「找不到 Style Property」。
+        -->
+        <Setter Property="ToolTipService.InitialShowDelay" Value="400" />
+        <Setter Property="ToolTipService.IsEnabled" Value="False" />
     </Style>
 
     <!--
