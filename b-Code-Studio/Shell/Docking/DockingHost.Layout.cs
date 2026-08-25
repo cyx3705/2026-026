@@ -140,6 +140,27 @@ internal sealed partial class DockingHost
         root.CollectGarbage();
     }
 
+    /// <summary>
+    /// 尽力序列化当前布局；不可用时返回 null 并记一条，不抛。
+    ///
+    /// 在宿主里它**总是**不可用：AvalonDock 随模块包装进可回收 ALC，
+    /// `XmlSerializer` 为其中的类型生成代码时报
+    /// 「非可回收程序集不能引用可回收程序集」。布局持久化因此是坏的，
+    /// 但那件事不该连累"聚焦某一页"。
+    /// </summary>
+    private string? TrySerializeLayout()
+    {
+        try
+        {
+            return SerializeLayout();
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(LayoutSource, $"布局序列化不可用（{ex.GetType().Name}），本次不保存布局快照");
+            return null;
+        }
+    }
+
     private string SerializeLayout()
     {
         // A close/save can race the 500 ms gesture debounce. Preserve any tool page that the

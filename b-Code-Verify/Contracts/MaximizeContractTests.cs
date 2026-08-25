@@ -189,6 +189,41 @@ public sealed class MaximizeContractTests
         });
     }
 
+    [Fact]
+    public void RestoreReturnsTheVerySameLayoutTreeInsteadOfRebuildingItFromXml()
+    {
+        // 聚焦与还原**不许经过 XML**。AvalonDock 随模块包装进可回收 AssemblyLoadContext
+        // （Aurora 是 pinned:false），XmlSerializer 为其中的类型生成代码时报
+        // 「非可回收程序集不能引用可回收程序集」——真机上双击页面标题栏因此
+        // 报 NotSupportedException，而布局目录也一直是空的（退出前自动保存每次都失败）。
+        // 测试进程把 AvalonDock 装在默认上下文里，复现不出那个异常，
+        // 所以这条门禁改为钉住"还原拿回来的是同一棵树"这个可观察事实。
+        UiTestHost.RunSta(() =>
+        {
+            using var shell = Shell();
+            var manager = RequireManager(shell.Window);
+            var before = manager.Layout;
+
+            shell.Window.Docking.MaximizeWindow(StandardWindowIds.Console);
+            UiTestHost.Pump();
+            Assert.NotSame(before, manager.Layout);
+
+            // 门禁进程里序列化是可用的，因此走的仍是 XML 快照那条路（浮窗能一起回来）。
+            // 这里要钉住的是**那棵旧树被留住了**：宿主里 XML 不可用时靠它还原。
+            Assert.NotNull(BeforeMaximizeRoot(shell.Window.Docking));
+
+            shell.Window.Docking.RestoreLayoutFromMaximized();
+            UiTestHost.Pump();
+            Assert.Null(BeforeMaximizeRoot(shell.Window.Docking));
+        });
+    }
+
+    private static object? BeforeMaximizeRoot(IDockingService docking)
+        => docking.GetType()
+            .GetField("_rootBeforeMaximize", System.Reflection.BindingFlags.Instance
+                                             | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(docking);
+
     private static AvalonDock.DockingManager RequireManager(ShellWindow window)
         => Assert.Single(Descendants<AvalonDock.DockingManager>(window));
 

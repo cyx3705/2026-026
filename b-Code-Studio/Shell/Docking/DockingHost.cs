@@ -48,6 +48,22 @@ internal sealed partial class DockingHost : IDockingService
     private LayoutRoot? _attachedRoot;
     private int _suppress;
     private string? _maximizedId;
+    /// <summary>
+    /// 聚焦（最大化某一页）之前的布局树本身。
+    ///
+    /// 这里**不能**存 XML。`XmlLayoutSerializer` 走 `XmlSerializer`，而 Aurora 是
+    /// `pinned:false` 的模块，AvalonDock 随包装进可回收 AssemblyLoadContext；
+    /// 序列化时运行时要为这些类型生成代码，直接报
+    /// `NotSupportedException: A non-collectible assembly may not reference a collectible assembly.`
+    /// ——这正是真机上双击页面标题栏报 `aurora.ui.max 执行异常(NotSupportedException)` 的原因，
+    /// 也是 `%AppData%\HistoryVulcan\layout` 一直是空目录（退出前自动保存布局每次都失败）的原因。
+    /// 门禁里复现不出来：测试进程把 AvalonDock 装在默认上下文里，不是可回收的。
+    ///
+    /// 聚焦与还原本来就不需要跨进程持久化——留住这棵树的引用，还原时装回去即可。
+    /// </summary>
+    private LayoutRoot? _rootBeforeMaximize;
+
+    /// <summary>同一时刻的 XML，仅供"保存布局"用；序列化不可用时为 null。</summary>
     private string? _layoutBeforeMaximize;
     private bool _centerRepairPending;
     private bool _presentationRefreshPending;
@@ -643,13 +659,16 @@ internal sealed partial class DockingHost : IDockingService
             // 留着它就等于把一份**过期的**布局当成当前布局写回磁盘。
             try
             {
-                _layoutBeforeMaximize = SerializeLayout();
+                _rootBeforeMaximize = _manager.Layout;
+                // 布局持久化是另一件事，失败不该拖垮"聚焦这一页"。
+                _layoutBeforeMaximize = TrySerializeLayout();
                 BuildMaximizedLayout(id);
                 AttachLayout();
                 _maximizedId = id;
             }
             catch
             {
+                _rootBeforeMaximize = null;
                 _layoutBeforeMaximize = null;
                 throw;
             }
@@ -661,19 +680,28 @@ internal sealed partial class DockingHost : IDockingService
 
     public void RestoreLayoutFromMaximized()
     {
-        if (_maximizedId == null || _layoutBeforeMaximize == null)
+        if (_maximizedId == null || (_layoutBeforeMaximize == null && _rootBeforeMaximize == null))
             return;
 
         using (Suppress())
         {
-            var xml = _layoutBeforeMaximize;
-            ApplyLayoutXml(xml);
+            // 有 XML 就用 XML：它是聚焦**之前**那一刻的完整快照，浮窗也在里面。
+            // 拿不到 XML（宿主里的可回收 ALC，见 _rootBeforeMaximize 的说明）时，
+            // 退回装回那棵树本身——代价是聚焦期间已经拖出去的浮窗不会被重建，
+            // 但那远好过整条路径抛异常、连聚焦都做不成。
+            if (_layoutBeforeMaximize is { } xml)
+                ApplyLayoutXml(xml);
+            else
+                _manager.Layout = _rootBeforeMaximize!;
+
             if (!LayoutHasMainDocumentPane())
                 throw new InvalidOperationException("布局中缺少中央主文档区");
+            // 聚焦期间新注册的窗口不在那棵旧树里，补一遍。
             EnsureRegisteredWindows();
             EnsureCentralWorkspace();
             AttachLayout();
             _maximizedId = null;
+            _rootBeforeMaximize = null;
             _layoutBeforeMaximize = null;
             _seedRatiosFromLayout = true;
         }
