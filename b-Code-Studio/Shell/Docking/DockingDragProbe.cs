@@ -50,6 +50,11 @@ internal sealed class DockingDragProbe : IDisposable
     private int _treeWalks;
     private string _dropTarget = "无";
     private string _exitWithButtonDown = string.Empty;
+    private Rect _managerRect;
+    private bool _rectCached;
+    private bool _trueCursorInside;
+    private double _minDistance = double.MaxValue;
+    private Point _lastCursor;
     private bool _overlayEverNonNull;
     private bool _overlayEverVisible;
     private string _overlayState = "未观测";
@@ -111,6 +116,11 @@ internal sealed class DockingDragProbe : IDisposable
             _source,
             $"停靠探针：停靠区={_maxAreas} 覆盖窗元素={_maxOverlayElements} 其中可见={_maxOverlayVisible} " +
             $"具名投放件={_maxNamedTargets} 最终投放目标={_dropTarget}");
+        _log.Info(
+            _source,
+            $"停靠探针：光标进过停靠区={(_trueCursorInside ? "是" : "否")} " +
+            $"最近距离={(_minDistance is double.MaxValue ? "未测" : Math.Round(_minDistance).ToString())}px " +
+            $"末位置=({Math.Round(_lastCursor.X)},{Math.Round(_lastCursor.Y)})");
         _log.Info(_source, $"停靠探针结论：{Conclude()}{_exitWithButtonDown}");
     }
 
@@ -145,6 +155,7 @@ internal sealed class DockingDragProbe : IDisposable
     {
         try
         {
+            TrackCursor();
             if (_drag == null && ReadField(_floating, "_dragService") is { } drag)
             {
                 _drag = drag;
@@ -194,6 +205,62 @@ internal sealed class DockingDragProbe : IDisposable
         {
             _log.Warn(_source, $"停靠探针取样失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 全程跟踪光标与停靠区的关系。
+    ///
+    /// 只在"发现覆盖窗为空"那一刻记一次坐标是不够的：浮窗起手时光标本来就在主窗体外，
+    /// 那个读数只能证明起手在外面，证明不了后来有没有拖进去。必须记"**进没进过**"。
+    ///
+    /// 用 GetCursorPos 的真实光标，不用 WPF 口径（Mouse.GetPosition 换算到屏幕）。
+    /// 实测：门禁那条能正常合并的链路上，两者偏差最大到 956px，WPF 口径全程没进过停靠区，
+    /// 合并却照常成功——**AvalonDock 的命中测试用的是真实光标**。一度按 WPF 口径写了条
+    /// "移动循环里 WPF 鼠标位置陈旧"的结论，正对照当场证伪，否则会引着去修一个不存在的病。
+    /// </summary>
+    private void TrackCursor()
+    {
+        if (!_rectCached)
+        {
+            _rectCached = true;
+            _managerRect = ComputeManagerRect();
+        }
+
+        if (_managerRect.IsEmpty)
+            return;
+
+        var cursor = FloatingWindowGeometry.GetCursorPosition();
+        _lastCursor = cursor;
+        if (_managerRect.Contains(cursor))
+            _trueCursorInside = true;
+        _minDistance = Math.Min(_minDistance, DistanceToRect(_managerRect, cursor));
+
+    }
+
+    private Rect ComputeManagerRect()
+    {
+        try
+        {
+            if (!_manager.IsVisible)
+                return Rect.Empty;
+
+            var origin = _manager.PointToScreen(new Point(0, 0));
+            var dpi = VisualTreeHelper.GetDpi(_manager);
+            return new Rect(
+                origin,
+                new Size(_manager.ActualWidth * dpi.DpiScaleX, _manager.ActualHeight * dpi.DpiScaleY));
+        }
+        catch (InvalidOperationException)
+        {
+            return Rect.Empty;
+        }
+    }
+
+    private static double DistanceToRect(Rect rect, Point point)
+    {
+        var dx = Math.Max(Math.Max(rect.Left - point.X, 0), point.X - rect.Right);
+        var dy = Math.Max(Math.Max(rect.Top - point.Y, 0), point.Y - rect.Bottom);
+        return Math.Sqrt((dx * dx) + (dy * dy));
     }
 
     /// <summary>
@@ -276,8 +343,11 @@ internal sealed class DockingDragProbe : IDisposable
             return "断在第 2 环——移动循环起来了，但一条 WM_MOVING 都没收到";
         if (!_sawDragService)
             return "断在第 3 环——收到 WM_MOVING，但 AvalonDock 没建 DragService（消息钩子没挂到这个浮窗上）";
+        if (!_overlayEverNonNull && !_trueCursorInside)
+            return $"不是故障——整个拖动过程中光标就没进过停靠区（最近还差 {Math.Round(_minDistance)}px），" +
+                   "指示本来就不该出现。请把浮窗拖进主窗体中央再试。";
         if (!_overlayEverNonNull)
-            return "断在第 4 环——DragService 建了，覆盖窗没建（命中测试没落在停靠管理器上，比对上面的矩形与光标）";
+            return "断在第 4 环——光标进过停靠区，覆盖窗仍未创建（命中测试的矩形算歪了，多半是 DPI）";
         if (!_overlayEverVisible)
             return "断在第 4 环——覆盖窗建了但全程没显示";
         if (_overlayState.Contains("尺寸=0x0", StringComparison.Ordinal))
