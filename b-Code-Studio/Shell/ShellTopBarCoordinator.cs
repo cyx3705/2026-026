@@ -766,12 +766,19 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     /// </summary>
     private void TryDragWindow(Window hostWindow)
     {
+        // 这条日志是给真机排查用的：浮窗停靠一旦不灵，第一件要确认的就是
+        // "这次拖动到底有没有走到这里"。缺了它只能靠猜。
+        _log.Info(
+            ChromeLogSource,
+            $"开始拖动窗口 {hostWindow.GetType().Name}（浮窗={hostWindow is LayoutFloatingWindowControl}）");
+
         try
         {
             hostWindow.Activate();
             Mouse.Capture(null);
             NativeMethods.ReleaseCapture();
             hostWindow.DragMove();
+            _log.Info(ChromeLogSource, "窗口拖动结束");
         }
         catch (InvalidOperationException ex)
         {
