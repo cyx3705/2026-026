@@ -187,6 +187,35 @@ public sealed class ActionDeclarationContractTests
         Assert.Contains("target", error);
     }
 
+    [Fact]
+    public async Task Reload_DoesNotAskAuroraItself()
+    {
+        // Aurora 自己注册了一条 aurora.ui.actions——那是**查询**动作台账的命令，
+        // 与协议槽位同名。不排除的话每一轮探测都会去调它自己那条查询命令，
+        // 再拿一段人话去做 JSON 解析并失败；模块热重载的窗口期里更会留下一条
+        // `✗ 未知指令: aurora.ui.actions`（2026-08-25 真机实测）。
+        var registry = new CommandRegistry();
+        registry.Register(new CommandDescriptor
+        {
+            Name = HistoryAurora.Shell.Modules.ModuleCommandProbe.SelfDomain
+                   + ActionRegistry.ActionsSuffix,
+            Domain = HistoryAurora.Shell.Modules.ModuleCommandProbe.SelfDomain,
+            CommandClass = "ui",
+            Summary = "列出模块声明的动作",
+            Readonly = true,
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("尚无模块声明动作")),
+        });
+        Declare(registry, "demo", MinimalActions);
+
+        var log = new MemoryLog();
+        var actions = new ActionRegistry(new CommandBus(registry, log), log);
+        var report = await actions.ReloadAsync();
+
+        Assert.Equal(1, report.ModulesAsked);
+        Assert.Empty(report.Skipped);
+        Assert.Equal("demo.rename", Assert.Single(actions.Actions).Id);
+    }
+
     private static void Declare(CommandRegistry registry, string domain, string payload)
         => registry.Register(new CommandDescriptor
         {

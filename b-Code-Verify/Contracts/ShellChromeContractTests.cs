@@ -511,7 +511,13 @@ public sealed class ShellChromeContractTests
             var floating = Assert.Single(manager.FloatingWindows.ToList());
             var chrome = WindowChrome.GetWindowChrome(floating);
             Assert.NotNull(chrome);
-            Assert.Equal(0, chrome.CaptionHeight);
+            // 这里原先断言 CaptionHeight == 0，把"没有第二条标题行"和"没有标题命中区"
+            // 当成了同一件事。**不是**：CaptionHeight 只管命中测试，一个像素都不画；
+            // 那条多余的行是被下面几条断言管着的模板去掉的（Border + ContentPresenter，
+            // 没有 FloatingWindowControlChrome）。
+            // 而 CaptionHeight=0 会让浮窗永远收不到 WM_NCLBUTTONDOWN/HTCAPTION，
+            // AvalonDock 因此不创建 DragService——拖得出去、叠不回来（2026-08-25 真机）。
+            Assert.True(chrome.CaptionHeight > 0);
             var root = Assert.IsType<Border>(floating.Template.LoadContent());
             var presenter = Assert.Single(FindLogicalDescendants<ContentPresenter>(root));
             Assert.Null(presenter.DataContext);

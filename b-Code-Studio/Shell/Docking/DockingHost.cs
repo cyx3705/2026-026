@@ -637,10 +637,22 @@ internal sealed partial class DockingHost : IDockingService
 
         using (Suppress())
         {
-            _layoutBeforeMaximize = SerializeLayout();
-            BuildMaximizedLayout(id);
-            AttachLayout();
-            _maximizedId = id;
+            // 中途抛出时必须把暂存的布局丢掉：_maximizedId 还是 null，
+            // RestoreLayoutFromMaximized 会直接返回，而保存布局与关闭窗口那两条路径
+            // 写的是 `_layoutBeforeMaximize ?? SerializeLayout()`——
+            // 留着它就等于把一份**过期的**布局当成当前布局写回磁盘。
+            try
+            {
+                _layoutBeforeMaximize = SerializeLayout();
+                BuildMaximizedLayout(id);
+                AttachLayout();
+                _maximizedId = id;
+            }
+            catch
+            {
+                _layoutBeforeMaximize = null;
+                throw;
+            }
         }
 
         WindowsChanged?.Invoke(this, EventArgs.Empty);

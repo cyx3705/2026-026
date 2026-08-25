@@ -21,21 +21,69 @@ public static class AuroraComponentResources
     private static readonly Uri ControlsUri =
         new("/HistoryAurora;component/Themes/AuroraControls.xaml", UriKind.Relative);
 
+    // **按线程**缓存，不是按进程。字典里装的是 Style / ControlTemplate / Brush，
+    // 它们都是 DispatcherObject：在 A 线程建好、拿到 B 线程用，会抛
+    // 「调用线程无法访问此对象，因为另一个线程拥有该对象」。
+    // 正式运行时只有一个界面线程，所以效果仍然是"整个进程加载一次"；
+    // 而门禁里每个用例各起一条 STA 线程，共享一份会让测试宿主直接崩掉（实测）。
+    [ThreadStatic]
+    private static ResourceDictionary? _controls;
+
+    [ThreadStatic]
+    private static string? _failure;
+
+    /// <summary>
+    /// 字典加载失败的原因；从未失败时为 null。
+    ///
+    /// 加载**不抛**：这个方法被组件构造函数调用，而组件构造函数又被停靠系统的
+    /// 内容工厂调用——在那里抛异常会让"最大化某一页"这种无关操作整个失败，
+    /// 且经指令总线回来的只剩一个异常类型名（总线刻意不外发 Message）。
+    /// 失败时组件退回继承容器的字典：在主窗体里那本来就够用，只有浮窗里才会退化。
+    /// 所以失败要记下来、可查，但不能炸。
+    /// </summary>
+    public static string? LoadFailure => _failure;
+
     /// <summary>
     /// 把控件字典并进元素自己的资源。幂等：重复调用不会叠加。
-    /// <c>ResourceDictionary.Source</c> 相同的字典由 WPF 缓存复用，
-    /// 因此每个组件实例并不会各自解析一遍那一千多行。
+    ///
+    /// 字典**每条界面线程只加载一次**并共享同一个实例。此前每个组件各自
+    /// `new ResourceDictionary { Source = … }`：那条路径每次都要按 URI 重新解析资源，
+    /// 而按 URI 解析依赖 WPF 的应用级资源上下文——在模块被装进可回收 ALC、
+    /// 且入口程序集不是本程序集的宿主进程里，它并不是任何时候都成立的。
+    /// 共享单例把这件事收敛成一次，且发生在启动期第一个视图构造时。
     /// </summary>
     public static void Ensure(FrameworkElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
 
+        var controls = Load();
+        if (controls == null)
+            return;
+
         foreach (var merged in element.Resources.MergedDictionaries)
         {
-            if (merged.Source == ControlsUri)
+            if (ReferenceEquals(merged, controls) || merged.Source == ControlsUri)
                 return;
         }
 
-        element.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = ControlsUri });
+        element.Resources.MergedDictionaries.Add(controls);
+    }
+
+    private static ResourceDictionary? Load()
+    {
+        if (_controls != null || _failure != null)
+            return _controls;
+
+        try
+        {
+            _controls = new ResourceDictionary { Source = ControlsUri };
+        }
+        catch (Exception ex)
+        {
+            _failure = ex.GetType().Name + ": " + ex.Message;
+            System.Diagnostics.Debug.WriteLine("AuroraControls.xaml 加载失败: " + ex);
+        }
+
+        return _controls;
     }
 }

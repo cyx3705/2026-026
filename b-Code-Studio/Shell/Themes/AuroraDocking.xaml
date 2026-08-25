@@ -507,9 +507,25 @@
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!--
+            CaptionHeight 必须 > 0，否则**浮窗拖不回去**。
+
+            AvalonDock 的 LayoutFloatingWindowControl 是在收到
+            `WM_NCLBUTTONDOWN` 且命中 `HTCAPTION` 时才创建它的 DragService——
+            那个服务才是显示停靠指示器、并在松手时把窗口叠回布局的东西。
+            CaptionHeight="0" 让整个窗口都是客户区，这条消息永远不会到达，
+            于是「拖得出去、叠不回来」：拖出是在主窗体里由 DockingManager 发起的，
+            走的是另一条路，所以看起来只有一半坏了。（2026-08-25 真机报告）
+
+            高度取页签条：Aurora.Size.Tab(32) + Aurora.Space.TabStrip 上边距(3)。
+            这里写字面量而不是 DynamicResource——WindowChrome 是 Freezable，
+            在 Setter.Value 里冻结后动态键不再更新，两处必须与令牌同步改。
+            页签与窗格动作按钮都已声明 WindowChrome.IsHitTestVisibleInChrome=True，
+            因此它们在这条"标题栏"里照常可点：那批声明本来就是为这一刻准备的。
+        -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
-                <WindowChrome CaptionHeight="0"
+                <WindowChrome CaptionHeight="35"
                               ResizeBorderThickness="6"
                               GlassFrameThickness="0"
                               CornerRadius="0"
@@ -540,9 +556,25 @@
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!--
+            CaptionHeight 必须 > 0，否则**浮窗拖不回去**。
+
+            AvalonDock 的 LayoutFloatingWindowControl 是在收到
+            `WM_NCLBUTTONDOWN` 且命中 `HTCAPTION` 时才创建它的 DragService——
+            那个服务才是显示停靠指示器、并在松手时把窗口叠回布局的东西。
+            CaptionHeight="0" 让整个窗口都是客户区，这条消息永远不会到达，
+            于是「拖得出去、叠不回来」：拖出是在主窗体里由 DockingManager 发起的，
+            走的是另一条路，所以看起来只有一半坏了。（2026-08-25 真机报告）
+
+            高度取页签条：Aurora.Size.Tab(32) + Aurora.Space.TabStrip 上边距(3)。
+            这里写字面量而不是 DynamicResource——WindowChrome 是 Freezable，
+            在 Setter.Value 里冻结后动态键不再更新，两处必须与令牌同步改。
+            页签与窗格动作按钮都已声明 WindowChrome.IsHitTestVisibleInChrome=True，
+            因此它们在这条"标题栏"里照常可点：那批声明本来就是为这一刻准备的。
+        -->
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
-                <WindowChrome CaptionHeight="0"
+                <WindowChrome CaptionHeight="35"
                               ResizeBorderThickness="6"
                               GlassFrameThickness="0"
                               CornerRadius="0"

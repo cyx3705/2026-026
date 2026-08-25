@@ -113,8 +113,11 @@ internal static partial class BuiltinCommands
                     w.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
                 if (!exists)
                     return CommandResult.Fail($"没有名为 {id} 的窗口");
-                s.Docking.MaximizeWindow(id);
-                return CommandResult.Ok($"{id} 已最大化");
+                return Docking(s, "aurora.ui.max", () =>
+                {
+                    s.Docking.MaximizeWindow(id);
+                    return $"{id} 已最大化";
+                });
             }),
         });
 
@@ -154,11 +157,11 @@ internal static partial class BuiltinCommands
             CommandClass = "ui",
             Summary = "退出窗口最大化并恢复原布局",
             RequiresUiThread = true,
-            Handler = CommandDescriptor.Sync(_ =>
+            Handler = CommandDescriptor.Sync(_ => Docking(s, "aurora.ui.restore", () =>
             {
                 s.Docking.RestoreLayoutFromMaximized();
-                return CommandResult.Ok("已恢复原布局");
-            }),
+                return "已恢复原布局";
+            })),
         });
 
         RegisterFrontend(r, new CommandDescriptor
@@ -254,6 +257,29 @@ internal static partial class BuiltinCommands
         });
     }
 
+    /// <summary>
+    /// 跑一次停靠动作，并**把真实异常先记进本端日志**。
+    ///
+    /// 指令总线对外只回「执行异常(类型名)」——它刻意不把 Message 与堆栈发出去
+    /// （`CommandBus` 里 `safeError = ex.GetType().Name`）。这条策略对远端是对的，
+    /// 但本机排查也只剩一个类型名：2026-08-25 真机报
+    /// `aurora.ui.max 执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
+    /// 而这一条在自动化里复现不出来（浮窗、模块页、逐个窗口最大化都试过，全绿）。
+    /// 所以停靠动作在这里先把完整异常写进 Aurora 自己的控制台，再让它照常抛出去。
+    /// </summary>
+    private static CommandResult Docking(ShellCommandServices s, string command, Func<string> action)
+    {
+        try
+        {
+            return CommandResult.Ok(action());
+        }
+        catch (Exception ex)
+        {
+            s.Log.Error("dock", $"{command} 失败: {ex}");
+            throw;
+        }
+    }
+
     private static void RegisterWindowVerb(
         CommandRegistry r,
         ShellCommandServices s,
@@ -287,10 +313,10 @@ internal static partial class BuiltinCommands
                 if (ResolveWindow(s, ctx) is { } error)
                     return error;
                 var id = ctx.RequireString("name");
-                var message = action(s.Docking, id);
+                var result = Docking(s, name, () => action(s.Docking, id));
                 if (name.Equals("aurora.ui.show", StringComparison.OrdinalIgnoreCase))
                     s.Window.ActivateToolContent(id);
-                return CommandResult.Ok(message);
+                return result;
             }),
         });
     }
