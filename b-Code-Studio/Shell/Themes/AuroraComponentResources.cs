@@ -29,6 +29,12 @@ public static class AuroraComponentResources
     [ThreadStatic]
     private static ResourceDictionary? _controls;
 
+    private static readonly Uri ThemeUri =
+        new("/HistoryAurora;component/Themes/AuroraTheme.xaml", UriKind.Relative);
+
+    [ThreadStatic]
+    private static ResourceDictionary? _theme;
+
     [ThreadStatic]
     private static string? _failure;
 
@@ -67,6 +73,53 @@ public static class AuroraComponentResources
         }
 
         element.Resources.MergedDictionaries.Add(controls);
+    }
+
+    /// <summary>
+    /// 把**主题**字典（令牌 + 停靠画刷）并进元素自己的资源。幂等。
+    ///
+    /// 给 AvalonDock 的覆盖窗（拖动时那组蓝色方位指示）用。覆盖窗是独立 `Window`，
+    /// 按 DEC-009 属于"能离开主窗体的东西"，本该自带字典，此前漏了。它的画刷靠
+    /// AvalonDock 自己按 URI 重新解析主题字典，而按 URI 解析依赖 WPF 的应用级资源
+    /// 上下文——模块被装进可回收 ALC、入口程序集不是本程序集时并不总成立。
+    ///
+    /// 解析不到画刷时 WPF **不抛异常**，只是不套用：元素照常排布、照常"可见"、尺寸
+    /// 也对，就是一个像素都不画。真机实测覆盖窗 210 个元素、105 个可见、Z 序在主窗体
+    /// 之上，渲染成位图后非透明像素为 0——正是这个形态。
+    /// </summary>
+    public static void EnsureTheme(FrameworkElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+
+        var theme = LoadTheme();
+        if (theme == null)
+            return;
+
+        foreach (var merged in element.Resources.MergedDictionaries)
+        {
+            if (ReferenceEquals(merged, theme) || merged.Source == ThemeUri)
+                return;
+        }
+
+        element.Resources.MergedDictionaries.Add(theme);
+    }
+
+    private static ResourceDictionary? LoadTheme()
+    {
+        if (_theme != null || _failure != null)
+            return _theme;
+
+        try
+        {
+            _theme = new ResourceDictionary { Source = ThemeUri };
+        }
+        catch (Exception ex)
+        {
+            _failure = ex.GetType().Name + ": " + ex.Message;
+            System.Diagnostics.Debug.WriteLine("AuroraTheme.xaml 加载失败: " + ex);
+        }
+
+        return _theme;
     }
 
     private static ResourceDictionary? Load()
