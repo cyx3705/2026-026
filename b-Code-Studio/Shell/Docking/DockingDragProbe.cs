@@ -38,7 +38,6 @@ internal sealed class DockingDragProbe : IDisposable
     private readonly DockingManager _manager;
     private readonly IShellLog _log;
     private readonly string _source;
-    private readonly Action<Window>? _repairOverlay;
 
     private HwndSource? _hwnd;
     private int _moving;
@@ -59,8 +58,9 @@ internal sealed class DockingDragProbe : IDisposable
     private int _overlayZ = -1;
     private int _mainZ = -1;
     private int _overlayDicts = -1;
+
     private int _overlayKeys = -1;
-    private bool _repaired;
+
     private int _treeWalks;
     private string _dropTarget = "无";
     private string _exitWithButtonDown = string.Empty;
@@ -80,10 +80,8 @@ internal sealed class DockingDragProbe : IDisposable
         LayoutFloatingWindowControl floating,
         DockingManager manager,
         IShellLog log,
-        string source,
-        Action<Window>? repairOverlay = null)
+        string source)
     {
-        _repairOverlay = repairOverlay;
         _floating = floating;
         _manager = manager;
         _log = log;
@@ -223,12 +221,6 @@ internal sealed class DockingDragProbe : IDisposable
             _overlayEverVisible = true;
             _overlayDicts = overlay.Resources.MergedDictionaries.Count;
             _overlayKeys = overlay.Resources.Count;
-            if (!_repaired && _repairOverlay != null)
-            {
-                _repaired = true;
-                _repairOverlay(overlay);
-                _log.Info(_source, "停靠探针：已按 DEC-009 给覆盖窗补挂主题字典");
-            }
 
             var template = overlay is Control { Template: not null } ? "有" : "无";
             WalkOverlay(overlay);
@@ -515,9 +507,11 @@ internal sealed class DockingDragProbe : IDisposable
             return "断在第 5 环——覆盖窗好的，但一个停靠区都没算出来（GetDropAreas 返回空）";
         if (_maxOverlayVisible <= 1)
             return "断在第 5 环——停靠区算出来了，但覆盖窗里几乎没有可见元素（模板内容没渲染出来）";
+        if (_renders > 0 && _drawnPixels == 0 && _overlayDicts <= 0)
+            return "断在第 6 环——覆盖窗一个非透明像素都没画，且字典数为 0：主题字典没挂上去";
         if (_renders > 0 && _drawnPixels == 0)
-            return "断在第 6 环——覆盖窗一个非透明像素都没画（元素排布正常但画刷全透明，" +
-                   "模板内容在可回收上下文里没拿到真正的画刷）";
+            return $"断在第 6 环——字典有 {_overlayDicts} 份，仍然一个非透明像素都没画：" +
+                   "画刷不是 DynamicResource，事后并入不生效";
         if (_drawnPixels > 0 && _overlayZ >= 0 && _mainZ >= 0 && _overlayZ > _mainZ)
             return $"断在第 6 环——覆盖窗画了 {_drawnPixels} 个像素，但 Z 序在主窗体之后" +
                    $"（{_overlayZ} > {_mainZ}），被主窗体压住了";

@@ -778,8 +778,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
                 floating,
                 _manager,
                 _log,
-                ChromeLogSource,
-                Themes.AuroraComponentResources.EnsureTheme)
+                ChromeLogSource)
             : null;
         probe?.Start();
 
