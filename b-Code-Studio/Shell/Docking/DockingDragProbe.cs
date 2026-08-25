@@ -1,9 +1,11 @@
+using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using AvalonDock;
 using AvalonDock.Controls;
 using HistoryVulcan.Core.Logging;
@@ -47,6 +49,14 @@ internal sealed class DockingDragProbe : IDisposable
     private int _maxOverlayElements;
     private int _maxOverlayVisible;
     private int _maxNamedTargets;
+    private int _maxImages;
+    private int _maxImagesWithoutSource;
+    private int _renders;
+    private int _drawnPixels;
+    private int _totalPixels;
+    private string _dominant = "无";
+    private int _overlayZ = -1;
+    private int _mainZ = -1;
     private int _treeWalks;
     private string _dropTarget = "无";
     private string _exitWithButtonDown = string.Empty;
@@ -115,7 +125,12 @@ internal sealed class DockingDragProbe : IDisposable
         _log.Info(
             _source,
             $"停靠探针：停靠区={_maxAreas} 覆盖窗元素={_maxOverlayElements} 其中可见={_maxOverlayVisible} " +
-            $"具名投放件={_maxNamedTargets} 最终投放目标={_dropTarget}");
+            $"具名投放件={_maxNamedTargets} 覆盖窗图像={_maxImages} 其中无源={_maxImagesWithoutSource} " +
+            $"最终投放目标={_dropTarget}");
+        _log.Info(
+            _source,
+            $"停靠探针：覆盖窗实绘像素={_drawnPixels}/{_totalPixels} 主色={_dominant} " +
+            $"Z序 覆盖窗={_overlayZ} 主窗体={_mainZ}");
         _log.Info(
             _source,
             $"停靠探针：光标进过停靠区={(_trueCursorInside ? "是" : "否")} " +
@@ -189,7 +204,11 @@ internal sealed class DockingDragProbe : IDisposable
             if (_overlayEverVisible)
             {
                 if (_treeWalks < 5 && _moving % 40 == 0)
+                {
                     WalkOverlay(overlay);
+                    RenderOverlay(overlay);
+                    MeasureZOrder(overlay);
+                }
                 return;
             }
 
@@ -197,6 +216,8 @@ internal sealed class DockingDragProbe : IDisposable
             _overlayEverVisible = true;
             var template = overlay is Control { Template: not null } ? "有" : "无";
             WalkOverlay(overlay);
+            RenderOverlay(overlay);
+            MeasureZOrder(overlay);
             _overlayState = $"模板={template} " +
                             $"位置=({Math.Round(overlay.Left)},{Math.Round(overlay.Top)}) " +
                             $"尺寸={Math.Round(overlay.ActualWidth)}x{Math.Round(overlay.ActualHeight)}";
@@ -205,6 +226,110 @@ internal sealed class DockingDragProbe : IDisposable
         {
             _log.Warn(_source, $"停靠探针取样失败：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 把覆盖窗渲染成位图，数非透明像素。
+    ///
+    /// 这是唯一不依赖"模板长什么样"的测法。元素数、可见数、图像数都只能证明东西被排进了
+    /// 布局，证明不了屏幕上有像素——真机上 105 个可见元素、16 个具名投放件，用户截图里
+    /// 却什么都没有。按 Image 数过一轮，门禁里覆盖窗图像=0，说明指示压根不是图片画的。
+    /// 与其继续猜是 Path 还是 Rectangle、哪个画刷被主题改没了，不如直接问："画了几个像素"。
+    ///
+    /// 按 1/4 缩放渲染，够数像素又不至于在拖动中途分配 4MB。最多渲染两次。
+    /// </summary>
+    private void RenderOverlay(Window overlay)
+    {
+        if (_renders >= 2)
+            return;
+
+        try
+        {
+            const double scale = 0.25;
+            var width = (int)Math.Ceiling(overlay.ActualWidth * scale);
+            var height = (int)Math.Ceiling(overlay.ActualHeight * scale);
+            if (width <= 0 || height <= 0)
+                return;
+
+            _renders++;
+            var bitmap = new RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            bitmap.Render(overlay);
+
+            var stride = width * 4;
+            var buffer = new byte[stride * height];
+            bitmap.CopyPixels(buffer, stride, 0);
+
+            var drawn = 0;
+            var counts = new Dictionary<uint, int>();
+            for (var i = 0; i + 3 < buffer.Length; i += 4)
+            {
+                if (buffer[i + 3] == 0)
+                    continue;
+
+                drawn++;
+                var key = ((uint)buffer[i + 3] << 24) | ((uint)buffer[i + 2] << 16) |
+                          ((uint)buffer[i + 1] << 8) | buffer[i];
+                counts.TryGetValue(key, out var seen);
+                counts[key] = seen + 1;
+            }
+
+            if (drawn <= _drawnPixels)
+                return;
+
+            _drawnPixels = drawn;
+            _totalPixels = width * height;
+            if (counts.Count > 0)
+            {
+                var top = counts.OrderByDescending(pair => pair.Value).First();
+                _dominant = $"#{top.Key:X8}({top.Value})";
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OverflowException or OutOfMemoryException)
+        {
+            _log.Warn(_source, $"停靠探针渲染取样失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 覆盖窗在 Z 序里的位置。画出来了却被主窗体压在下面，看到的同样是"没有指示"。
+    /// 序号越小越靠前。
+    /// </summary>
+    private void MeasureZOrder(Window overlay)
+    {
+        try
+        {
+            var overlayHandle = new WindowInteropHelper(overlay).Handle;
+            var main = Window.GetWindow(_manager);
+            var mainHandle = main == null ? IntPtr.Zero : new WindowInteropHelper(main).Handle;
+            if (overlayHandle == IntPtr.Zero || mainHandle == IntPtr.Zero)
+                return;
+
+            var index = 0;
+            for (var h = NativeMethods.GetTopWindow(IntPtr.Zero);
+                 h != IntPtr.Zero && index < 4000;
+                 h = NativeMethods.GetWindow(h, NativeMethods.GwHwndNext), index++)
+            {
+                if (h == overlayHandle)
+                    _overlayZ = index;
+                else if (h == mainHandle)
+                    _mainZ = index;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // 窗口这一刻没有句柄，跳过。
+        }
+    }
+
+    private static class NativeMethods
+    {
+        internal const uint GwHwndNext = 2;
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetTopWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
     }
 
     /// <summary>
@@ -279,6 +404,8 @@ internal sealed class DockingDragProbe : IDisposable
         var total = 0;
         var visible = 0;
         var named = 0;
+        var images = 0;
+        var imagesWithoutSource = 0;
         var stack = new Stack<DependencyObject>();
         stack.Push(root);
         while (stack.Count > 0)
@@ -293,6 +420,16 @@ internal sealed class DockingDragProbe : IDisposable
                 {
                     named++;
                 }
+
+                // 蓝色方位指示是图片。图片资源在可回收上下文里解析失败时，Image 照常
+                // 参与布局、照常"可见"、尺寸也对，就是一个像素都不画。投放预览框是纯色
+                // 边框、不吃图片资源，所以它能画出来——真机截图正是"白框在、箭头没有"。
+                if (element is Image image)
+                {
+                    images++;
+                    if (image.Source == null)
+                        imagesWithoutSource++;
+                }
             }
 
             var count = VisualTreeHelper.GetChildrenCount(node);
@@ -303,6 +440,8 @@ internal sealed class DockingDragProbe : IDisposable
         _maxOverlayElements = Math.Max(_maxOverlayElements, total);
         _maxOverlayVisible = Math.Max(_maxOverlayVisible, visible);
         _maxNamedTargets = Math.Max(_maxNamedTargets, named);
+        _maxImages = Math.Max(_maxImages, images);
+        _maxImagesWithoutSource = Math.Max(_maxImagesWithoutSource, imagesWithoutSource);
     }
 
     /// <summary>
@@ -358,7 +497,15 @@ internal sealed class DockingDragProbe : IDisposable
             return "断在第 5 环——覆盖窗好的，但一个停靠区都没算出来（GetDropAreas 返回空）";
         if (_maxOverlayVisible <= 1)
             return "断在第 5 环——停靠区算出来了，但覆盖窗里几乎没有可见元素（模板内容没渲染出来）";
-        return "五环齐全——指示已经画出来了";
+        if (_renders > 0 && _drawnPixels == 0)
+            return "断在第 6 环——覆盖窗一个非透明像素都没画（元素排布正常但画刷全透明，" +
+                   "模板内容在可回收上下文里没拿到真正的画刷）";
+        if (_drawnPixels > 0 && _overlayZ >= 0 && _mainZ >= 0 && _overlayZ > _mainZ)
+            return $"断在第 6 环——覆盖窗画了 {_drawnPixels} 个像素，但 Z 序在主窗体之后" +
+                   $"（{_overlayZ} > {_mainZ}），被主窗体压住了";
+        if (_drawnPixels > 0)
+            return $"六环齐全——覆盖窗确实画了 {_drawnPixels} 个像素且在主窗体之上";
+        return "五环齐全但未取到渲染样本";
     }
 
     private static object? ReadField(object target, string name)
