@@ -1,0 +1,2150 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>HistoryAurora</name>
+    </assembly>
+    <members>
+        <member name="T:HistoryAurora.Module.AuroraShellHost">
+             <summary>
+             在宿主进程内把界面开起来（DEC-008）。
+            
+             Aurora 不再有独立 exe：界面是宿主装载的一个模块，启动、显示、隐藏一律走注册的指令，
+             桌面入口由 Mercury 活动坞承担。本类是那条路径的落点。
+            
+             热重载要求宿主先 DestroyUi 再装新包。本类在 Shutdown 里关掉窗口、停 Dispatcher、
+             汇合 STA 线程，静态字段归零；下一轮 <see cref="M:HistoryAurora.Module.AuroraShellHost.EnsureStarted(HistoryVulcan.Core.Modules.IModuleContext,System.TimeSpan)"/> 会再开一条界面线程。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Module.AuroraShellHost.Ready">
+            <summary>界面就绪信号。宿主在 CreateUi 阶段就要取注册器，那时 STA 线程可能还没建完窗口。</summary>
+        </member>
+        <member name="P:HistoryAurora.Module.AuroraShellHost.Registrar">
+            <summary>
+            界面注册器，供宿主转交给其余 UI 模块。
+            界面尚未就绪时为 null——宿主据此整段跳过 UI 生命周期，不会崩在空引用上。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Module.AuroraShellHost.Window">
+            <summary>当前主窗口；仅供本模块的指令使用。</summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.EnsureStarted(HistoryVulcan.Core.Modules.IModuleContext,System.TimeSpan)">
+            <summary>
+            幂等启动。同一轮装载里 Attach 可能被叫两次，不得开出第二套界面。
+            热重载会先 Shutdown，静态字段归零后再进来，那时应当新开线程。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.PublishShellCommands(HistoryVulcan.Core.Modules.IModuleContext)">
+             <summary>
+             把界面自己注册的那批命令登记进**宿主**注册表。
+            
+             界面有一张自己的注册表（它当初是独立进程）。进程外时代靠网关把目录同步过去，
+             宿主再按 ConnectedShells &gt; 0 决定中继；进程内既没有连接也没有 socket，
+             那条闸门永远是 0，症状是任何 aurora.ui.* 都答"前端不可用"——
+             而 `vulcan.command.domains` 里却能看到它们（那是旧缓存留下的幽灵代理）。
+            
+             这里改为直接登记：命令随模块进宿主注册表，由宿主随模块一起回收，
+             执行时编组到界面线程。中继与目录同步在进程内彻底不参与。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.Marshalled(HistoryVulcan.Core.Commands.CommandDescriptor,HistoryAurora.Shell.ShellWindow)">
+            <summary>
+            代理描述符：元数据照抄，执行体编组到界面线程。
+            直接把原 Handler 挂进宿主注册表是不行的——宿主的命令跑在线程池上，
+            而这些命令要碰窗口。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.CreateConfig">
+            <summary>
+            进程内界面的配置。与迁入前独立进程版的关键差别是**两个模块开关都关掉**：
+            宿主自己的 ModuleHost 才是模块生命周期的所有者，界面再建一套就会把每个模块装载两遍。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.WireBuses(HistoryAurora.Shell.ShellWindow,HistoryVulcan.Core.Modules.IModuleContext)">
+             <summary>
+             把界面的指令总线接到宿主总线上。
+            
+             ShellWindow 自带一套注册表与总线——它当初是独立进程，靠 RemoteExecutor 经 IPC
+             打到宿主。进程内没有 IPC 了，但那条路由仍然有用：把"远端"换成宿主的总线对象即可，
+             不必让界面直接改用宿主注册表（那会让界面自己的 aurora.ui.* 与宿主命令挤在一张表里，
+             卸载时也无法整体回收）。
+            
+             不接的症状很具体：界面上点"刷新模块"报 `未知指令: vulcan.module.reload`——
+             那条命令在宿主注册表里，而界面查的是自己那张。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.ShowMainWindowIdle">
+            <summary>
+            Attach 返回后排队显示。此时宿主往往还在提交模块快照；
+            ApplicationIdle 让 Show 落到快照提交之后，模块管理页才能读到清单。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.ShowMainWindow">
+            <summary>
+            宿主 <c>CreateUi</c> 阶段再 Show。模块清单此时已经 Finalize，
+            模块管理页 Loaded 读 <c>vulcan.module.list</c> 才能看见运行区里的包。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.Invoke(System.Action)">
+            <summary>把动作编组到界面线程；界面未就绪时返回 false。</summary>
+        </member>
+        <member name="M:HistoryAurora.Module.AuroraShellHost.Shutdown(HistoryVulcan.Core.Logging.IShellLog)">
+            <summary>
+            关掉窗口、停 Dispatcher、汇合 STA 线程。热重载与宿主退出都走这里。
+            已在界面线程上时不得 Join 自己。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Module.ModuleInfo">
+             <summary>
+             Aurora 在 Vulcan 注册表里的身份(MD-02)。
+            
+             Aurora 是前端应用，但它不因此享有特例：与 Diana / Janus / Mercury / Minerva 一样
+             登记进宿主的模块注册表，在「模块管理」里作为平级条目出现。宿主之所以是宿主，
+             只因为它持有指令总线与注册表本身，前端并不属于宿主。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Module.ModuleInfo.ModuleName">
+            <summary>
+            必须显式覆写。基类默认取程序集名，而本模块的程序集名是 HistoryAurora.Module
+            ——它不能叫 HistoryAurora，否则会与 App 同名并遮蔽 pack URI 的资源解析
+            (见 HistoryAurora.Module.csproj 的注释)。ModuleName 同时是指令域名，
+            若随程序集名漂成 HistoryAuroraModule，域就会从 aurora 变成别的东西。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Module.ModuleInfo.CommandPrefix">
+            <summary>指令域短拼：宿主按此投影模块指令，产出 aurora.*。</summary>
+        </member>
+        <member name="P:HistoryAurora.Module.ModuleInfo.MainClassType">
+            <summary>
+            暂不经模块注册指令。前端的 aurora.ui.* / aurora.log.* 由 Aurora 进程自持
+            (它们要求 UI 线程与活动窗口)，经前端注册表上报宿主，来源标记 frontend:*。
+            本模块目前只承担注册表身份；页面注册契约(模块间调用)属于 C 阶段。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Module.AuroraBusinessComposition">
+             <summary>
+             HistoryAurora 的模块装配入口。
+            
+             5.0 起宿主只注入总线与指令登记口，不再编排 CreateUi / DestroyUi，
+             也不再向其余模块转发 IShellUiProvider。界面在 Attach 里启动，
+             卸载走 <see cref="T:System.IDisposable"/>。
+             </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionDeclarationSet">
+             <summary>
+             动作声明协议 V1（REQ-UI-009）。模块以 <c>&lt;域&gt;.ui.actions</c> 返回本结构，
+             声明"我这里有哪些可被按钮绑定的方法"。
+            
+             **为什么按钮不能直接写指令名**：面板声明与页面描述是两份独立的东西，
+             而指令名归模块所有。模块改一次指令名，所有写死该名字的按钮同时变成哑巴——
+             点了没反应、没有报错、也没有任何地方记下这件事。
+             改成"按钮绑动作 id、动作由模块自己声明"之后，改名只需模块改自己的声明，
+             按钮那一侧一个字都不用动；反过来,如果模块把声明删了，
+             Aurora 立刻知道这个按钮没有落点，并在界面上直说，而不是装作还能用。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Actions.ActionDeclarationSet.SupportedSchemaVersion">
+            <summary>当前支持的唯一 schema 版本。文本协议没有编译器保护，版本必须显式比对。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclarationSet.Owner">
+            <summary>提供方模块名，与宿主注册表里的 owner 一致。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionDeclaration">
+            <summary>一个可被按钮绑定的方法。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Id">
+            <summary>
+            动作标识。要求小写、无空格、体系内唯一；建议以自己的域起头（<c>janus.branch.rename</c>）。
+            **这是按钮唯一记住的东西**，因此它比指令名更需要稳定。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Title">
+            <summary>按钮上的默认文字；声明侧可以覆盖。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Command">
+            <summary>真正执行的指令名。改名只改这里。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Args">
+            <summary>
+            固定参数与占位参数。值里的 <c>{控件id}</c> 由 Aurora 用同面板控件的当前值替换。
+            占位符引用了不存在的控件时按钮拒绝执行并报错，不静默把 <c>{x}</c> 当字面量发出去。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Danger">
+            <summary>危险档：按钮用 danger 样式。是否再弹确认由指令自己经宿主 ConfirmPrompt 决定。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Summary">
+            <summary>一句话说明，作为按钮 ToolTip。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionDeclaration.Owner">
+            <summary>声明方模块名，由 Aurora 在收下时填入，不由模块自报。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionDeclarationParse">
+            <summary>解析结果：成功带声明集，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionDeclarationParse.#ctor(HistoryAurora.Shell.Actions.ActionDeclarationSet,System.String)">
+            <summary>解析结果：成功带声明集，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionDeclarationReader.Read(System.String,System.String)">
+            <summary>
+            解析模块返回的动作声明。校验口径与页面描述协议一致：
+            版本不对、owner 冒名、id 不规范或重复，整份作废，不做部分接受。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionLoadReport">
+            <summary>一次动作声明拉取的结果。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionLoadReport.#ctor(System.Int32,System.Int32,System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>一次动作声明拉取的结果。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionBinding">
+            <summary>解析一次绑定的结果。失败一定带一句能直接显示给人看的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionBinding.#ctor(HistoryAurora.Shell.Actions.ActionDeclaration,System.String)">
+            <summary>解析一次绑定的结果。失败一定带一句能直接显示给人看的原因。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Actions.ActionRegistry">
+             <summary>
+             动作声明台账（REQ-UI-009）。按钮绑的是这里的 id，不是指令名。
+            
+             与页面描述同为"拉取"模型：Aurora 主动问 <c>&lt;域&gt;.ui.actions</c>，
+             宿主不持有声明。声明是派生状态，模块卸载后台账跟着空，不会留下幽灵动作。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionRegistry.#ctor(HistoryVulcan.Core.Commands.CommandBus,HistoryVulcan.Core.Logging.IShellLog)">
+             <summary>
+             动作声明台账（REQ-UI-009）。按钮绑的是这里的 id，不是指令名。
+            
+             与页面描述同为"拉取"模型：Aurora 主动问 <c>&lt;域&gt;.ui.actions</c>，
+             宿主不持有声明。声明是派生状态，模块卸载后台账跟着空，不会留下幽灵动作。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Actions.ActionRegistry.ActionsSuffix">
+            <summary>协议约定的声明命令后缀；模块以自己的域注册，例如 janus.ui.actions。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionRegistry.Actions">
+            <summary>当前全部已声明动作，按 id 排序。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Actions.ActionRegistry.Broken">
+            <summary>
+            声明了、但其 <c>command</c> 在注册表里不存在的动作。
+            这正是"改指令导致按钮失效"的原形，只不过现在它有名有姓地记在账上，
+            而不是等用户点了按钮才发现。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionRegistry.ReloadAsync(System.Threading.CancellationToken)">
+            <summary>重新向全部模块拉取动作声明。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionRegistry.Resolve(System.String)">
+            <summary>
+            按 id 取动作。取不到时返回**为什么**取不到，调用方必须把它显示出来——
+            「按钮点了没反应」是本轮要消灭的形态，静默禁用只是把它换了个样子。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionRegistry.BuildCommandText(HistoryAurora.Shell.Actions.ActionDeclaration,System.Func{System.String,System.String},System.String@)">
+            <summary>
+            组装动作对应的指令文本。<paramref name="lookup"/> 按控件 id 取当前值，
+            返回 null 表示没有这个控件。占位符引用不存在的控件时整条拒绝执行，
+            不把 <c>{x}</c> 原样发上总线——那会变成一条参数明显错误、却成功执行的指令。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Actions.ActionRegistry.PlaceholderPattern">
+            <remarks>
+            Pattern:<br/>
+            <code>\\{(\\w+)\\}</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match '{'.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match a word character atomically at least once.<br/>
+            ○ Match '}'.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:HistoryAurora.Shell.BuiltinCommands">
+             <summary>
+             动作声明协议的 Aurora 侧命令（REQ-UI-009）。
+            
+             模块只连宿主总线、不认识 Aurora：它注册 <c>&lt;域&gt;.ui.actions</c> 与注册自己的命令
+             没有区别，宿主只负责路由，不解释载荷。因此模块无需引用 Aurora 的任何程序集。
+             </summary>
+            <summary>
+            框架内置指令组(§5.3 / 附录 B):help / history / run /
+            app.* / log.* / win.* / layout.* 与 panel.*；cls 仅为 aurora.log.clear 的兼容别名。
+            </summary>
+            <summary>
+            页面注册协议之外的弹窗命令。弹窗不是停靠页，不能进 <c>PageRenderer</c> 组件集；
+            模块下一轮用本命令替换自己的 <c>Window</c>，本轮只把能力做出来。
+            </summary>
+             <summary>
+             页面注册协议 V1 的 Aurora 侧命令（协议 §1.4）。
+            
+             模块只连宿主总线、不认识 Aurora：它调 <c>aurora.ui.invalidate</c> 与调自己的命令没有区别，
+             宿主只负责路由，不解释载荷。因此模块无需引用 Aurora 的任何程序集。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.BuiltinCommands.DisplaySettingValue(System.String,System.String)">
+             <summary>
+             令牌类设置值一律以占位符回报(FZR-01)。
+            
+             脱敏必须落在指令结果本身,而不是总线的日志回显:`vulcan.app.get` 声明了 Readonly,
+             因而对 scope=read 的远程设备放行,并在默认 readonly 策略下作为 MCP 工具可见。
+             结果对象会原样序列化进 HTTP 响应体与 tools/call 载荷,只脱敏日志挡不住这两条路径。
+            
+             判定谓词与 <c>CommandBus.IsSensitiveSettingKey</c> 同源。冻结期不为共享它新增
+             公开 API 或 InternalsVisibleTo,故此处保留一份副本;3.1 统一到单一真值(见整改清单 FZR-22)。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.BuiltinCommands.ResolveWindow(HistoryAurora.Shell.ShellCommandServices,HistoryVulcan.Core.Commands.CommandContext)">
+            <summary>窗口名存在性校验;返回 null 表示通过。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.ShellCommandServices">
+            <summary>内置指令组的依赖集(注册时一次性提供)。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellCommandServices.Panels">
+            <summary>控制窗口群管理器;null 时 panel.* 指令组不注册。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellCommandServices.Actions">
+            <summary>动作声明台账;null 时 aurora.ui.actions 指令组不注册。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellCommandServices.PageLoader">
+            <summary>页面注册协议的拉取器;null 时 aurora.ui.reloadpages 等指令组不注册。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellCommandServices.ComponentRequests">
+            <summary>组件申请台账;与 PageLoader 同进同出。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider">
+            <summary>
+            取补全候选的口径（REQ-UI-013）。控制台、命令集的搜索框与页面里的补全输入框
+            共用同一个签名，因此"控制台里补得出来、页面里补不出来"这种不一致不成立。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession">
+            <summary>
+            Console-side proxy created before Mercury CreateUi. Forwards to the real session after Attach.
+            未挂接真实会话时（无 Mercury 的宿主）不再整体失效：域/类分类直接回退到本地
+            <see cref="T:HistoryVulcan.Core.Commands.CommandRegistry"/>，使 <c>aurora.log.source</c> / <c>aurora.log.class</c>
+            这类控制台自有过滤在缺少命令工作台时仍然可用（DEC-023）。
+            补全、检索和选择仍需 Mercury，回退实现只覆盖分类。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession.#ctor(HistoryVulcan.Core.Commands.CommandRegistry)">
+            <param name="registry">
+            本地权威注册表；为 null 时退化为 3.3.1 之前的纯代理行为（仅用于不关心分类的测试）。
+            </param>
+        </member>
+        <member name="T:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession">
+             <summary>
+             分段补全（REQ-UI-013）。三段之间的边界就是指令名本身的结构：
+             <c>&lt;域&gt;.&lt;类&gt;.&lt;方法&gt; 参数=值</c>。
+            
+             光标落在第一段（指令名）上时补指令名；落在其后时补参数名，
+             已经写了 <c>=</c> 就补该参数的允许值。参数表本地拿不到时向宿主问一次
+             <c>vulcan.command.show</c> 并缓存——每敲一个键都去问一遍宿主是不必要的，
+             而参数表在一次会话里不会变。
+             </summary>
+             <summary>
+             命令目录会话的 Aurora 自建实现（REQ-UI-014）。
+            
+             为什么必须自建：这套会话原先由 HistoryMercury 的命令工作台提供，
+             宿主 5.0 拆掉界面 SDK 之后挂载点消失，命令集与指令详情两页**整体不见了**，
+             控制台的 Tab 补全也随之变成死路（<c>aurora.ui.show name=mcp</c> 报窗口不存在）。
+             而"这条指令收什么参数"是控制台以外唯一能查的地方——它不能挂在某个模块在不在场上。
+            
+             数据来源是两处的并集：
+             <list type="bullet">
+               <item>Aurora 自己的注册表（<c>aurora.*</c>，界面内自持）；</item>
+               <item>接了远端执行器时，宿主的 <c>vulcan.command.list</c>（模块与宿主的全部指令）。</item>
+             </list>
+             同名以本地为准：本地那条才是真正会被执行到的。
+             </summary>
+            <summary>参数表的取用：补全与指令详情页共用同一条路径与同一份缓存。</summary>
+            <summary>取数、筛选与选中。渲染侧只读这里的结果，不自己再过滤一遍。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.CompleteCommandName(System.String,System.Int32,System.Int32)">
+            <summary>
+            指令名补全。前缀匹配优先；一条都不匹配时退回包含匹配——
+            只记得中间一段（"想不起来是 dock 还是 layout"）是这里最常见的用法。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.CompleteParameterName(System.String,System.String,System.Collections.Generic.IReadOnlyList{HistoryVulcan.Services.Commands.CommandParameterInfo},System.Int32,System.Int32)">
+            <summary>参数名补全。已经写过的参数不再列出——重复给同一个参数赋值是语法错。</summary>
+        </member>
+        <member name="E:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.ConsoleQueryChanged">
+            <summary>
+            控制台输入框的内容变了。**不走 <see cref="E:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.Changed"/>**：控制台正是 Changed 的订阅方，
+            而它在处理 Changed 时又会回头设置这个查询串——两者接在一起就是一个自激回路。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.Classes">
+            <summary>严格两级：域为「全部」时不列类，否则类的取值范围随域收敛（DEC-021）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.ParametersAsync(System.String,System.Threading.CancellationToken)">
+            <summary>参数表：本地注册表优先，缺则问宿主一次并缓存。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.DetailAsync(System.String,System.Threading.CancellationToken)">
+            <summary>取一条指令的完整详情，供指令详情页显示。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.Visible">
+            <summary>按当前筛选可见的行。命令集页据此渲染，与控制台的域/类筛选是同一份口径。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.RefreshAsync(System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            重建快照。本地注册表直接读；接了远端执行器时再并入宿主目录——
+            界面自己那张表里没有模块与宿主的指令，只看本地的话命令集会少掉九成。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.LocalCommandCatalogSession.NormalizeFilter">
+            <summary>筛选值随快照收敛：域没了就退回「全部」，否则页面会一直显示 0 行而看不出原因。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.CommandSurface.CatalogEntry">
+            <summary>目录里的一行：一条指令的注册事实，本地与宿主两侧归一成同一个形状。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.CommandSurface.CatalogEntry.#ctor(System.String,System.String,System.String,System.String,System.String,System.Boolean,System.Boolean,System.String,System.String)">
+            <summary>目录里的一行：一条指令的注册事实，本地与宿主两侧归一成同一个形状。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Console.ConsoleRow">
+            <summary>控制台一行的显示模型:预先算好文本与颜色,渲染零逻辑。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Console.ConsoleRow.SourceKey">
+            <summary>来源键(过滤用):UI / 手动 / 脚本 / layout / result / 或日志类别。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleRow.From(HistoryVulcan.Core.Logging.ShellLogEntry)">
+            <summary>
+            一条日志记录 → 一到多个显示行:多行消息(如 proj.tree 的树形结果)逐行拆分。
+            单个超高项会让按项滚动永远看不到项的下半截,且拖累虚拟化,故在入口处拆平。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleRow.SourceKeyOf(System.String)">
+            <summary>脚本来源统一归入 “脚本” 键(具体文件名保留在显示文本中)。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Console.ConsoleView">
+            <summary>
+            控制台窗口(§4.4):程序的“素颜”。
+            输出区 = 指令回显 + 执行结果 + 运行日志(共用 IShellLog 管道);
+            输入区 = 手动指令入口。仅靠本窗口即可驱动整个程序(架构不变量 2)。
+            承压设计(N-03):日志事件先进并发队列,UI 以 100ms 批量合并刷新;
+            列表虚拟化 + 环形缓冲上限(C-05)。
+            </summary>
+            <summary>
+            ConsoleView
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Console.ConsoleView.MinLevel">
+            <summary>当前控制台显示级别(aurora.log.level,L-04;文件始终全量)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.SetMinLevel(HistoryVulcan.Core.Logging.ShellLogLevel)">
+            <summary>aurora.log.level 指令入口:调整显示级别过滤。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.ActivateContent">
+            <inheritdoc />
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.ConfigureCompletionRouting(System.Func{System.Boolean},System.Action)">
+            <summary>由 ShellWindow 注入聚焦判定和非聚焦命令集切换；保持为内部接线，不进入公开 API。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.RefreshCompletionFocus">
+            <summary>停靠布局改变后刷新候选模式；非聚焦时不显示候选 Popup。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.Cls">
+            <summary>cls 指令入口:清空显示(不清日志文件,C-06)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.ExportVisible(System.String)">
+            <summary>
+            导出控制台可见内容。REQ-CMD-012:成功路径不得依赖人工点击——省略 <paramref name="path"/>
+            时写入数据目录下带时间戳的默认文件并回报绝对路径,而不是弹 <c>SaveFileDialog</c>。
+            否则 <c>aurora.log.export</c> 经 MCP / Web / 前端转发调用会阻塞 UI 线程等待一个不会到来的点击。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.BuildDefaultExportPath">
+            <summary>
+            默认导出落点:<c>%AppData%/&lt;应用名&gt;/exports/console-&lt;时间戳&gt;.txt</c>,
+            与 <c>AppPaths</c> 的数据根目录约定一致。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.Prefill(System.String)">
+            <summary>
+            把一段文字填进输入框但**不执行**（aurora.log.prefill）。
+            命令集与指令详情用它把指令名交回控制台：那两页只负责"找到它"，
+            按不按回车是人的决定——目录页替人执行一条会改东西的指令是不可接受的。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.FocusInput">
+            <summary>聚焦输入框(C-15 全局快捷键落点)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.FilterErrorsOnly">
+            <summary>把仅 Error 级别可见设为当前过滤(状态栏错误计数跳转用,S-03)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.ResetFilters">
+            <summary>错误自动跳转使用：清除过滤，保证输入回显与错误结果同时可见。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.ConsoleView.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Console.RingCollection`1">
+            <summary>
+            控制台滚动缓冲专用集合(C-05):
+            追加发单条 Add 通知(虚拟化列表增量更新);
+            超上限的头部裁剪以“偏移量 + 定期压实”摊销为 O(1),并发 Reset 通知。
+            仅供 UI 线程使用。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.RingCollection`1.TrimTo(System.Int32)">
+            <summary>把总量裁剪到 capacity(丢弃最旧);发生裁剪时发 Reset。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Console.RingCollection`1.ToList">
+            <summary>当前内容快照(导出用)。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.AuroraDialogKind">
+            <summary>
+            弹窗种类。覆盖前端独立后坏掉的两类模块对话框，以及 Aurora 自己的确认/关于框：
+            <list type="bullet">
+              <item><see cref="F:HistoryAurora.Shell.AuroraDialogKind.Message"/>：一段说明 + 关闭（关于）</item>
+              <item><see cref="F:HistoryAurora.Shell.AuroraDialogKind.Confirm"/>：确认/取消，可倒计时、可标危险</item>
+              <item><see cref="F:HistoryAurora.Shell.AuroraDialogKind.Prompt"/>：带输入的确认（如填写恢复提交说明）</item>
+              <item><see cref="F:HistoryAurora.Shell.AuroraDialogKind.Content"/>：大段只读等宽正文（如历史预览）</item>
+            </list>
+            模块本轮不要自己 <c>new Window</c>；下一轮把现有对话框改走
+            <c>aurora.ui.dialog</c> 或本类型。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.AuroraDialogRequest">
+            <summary>一次弹窗的数据。不含任何样式键或颜色——外观由 Aurora 决定（DEC-005）。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.Body">
+            <summary>主文案。confirm / message / prompt 的说明，content 的摘要。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.Content">
+            <summary>content 种类的大段正文；其它种类忽略。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.Value">
+            <summary>prompt 种类的输入初值；其它种类忽略。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.Danger">
+            <summary>主按钮用危险档（删除、允许远程执行等）。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.DefaultCancel">
+            <summary>Enter 落到取消而不是主按钮。危险确认应当如此。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.AuroraDialogRequest.TimeoutSeconds">
+            <summary>
+            秒。大于 0 时显示倒计时，到期视为拒绝。
+            只对 <see cref="F:HistoryAurora.Shell.AuroraDialogKind.Confirm"/> 生效。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.AuroraDialogResult">
+            <summary>一次弹窗的结果。超时与点取消都是未接受，用 <see cref="P:HistoryAurora.Shell.AuroraDialogResult.TimedOut"/> 区分。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.AuroraDialogResult.#ctor(System.Boolean,System.Boolean,System.String)">
+            <summary>一次弹窗的结果。超时与点取消都是未接受，用 <see cref="P:HistoryAurora.Shell.AuroraDialogResult.TimedOut"/> 区分。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.AuroraDialogWindow">
+             <summary>
+             Aurora 自持的主题化弹窗。
+            
+             独立 <see cref="T:System.Windows.Window"/> 拿不到 <c>ShellWindow.Resources</c>。前端切到宿主进程后
+             <c>Application.Current</c> 经常为 null，令牌也不会挂到应用级字典——
+             模块自己 <c>new Window</c> 再写 <c>DynamicResource Aurora.*</c> 会静默退化成系统外观。
+             本窗口在构造时合并与主窗体同一套令牌/控件/弹窗字典，不依赖应用级资源。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.AuroraDialogWindow.Create(HistoryAurora.Shell.AuroraDialogRequest,System.Windows.Window,System.Boolean)">
+            <summary>按当前浅色/深色令牌构造，不显示。测试走这条，避免 <c>ShowDialog</c> 挂死 STA。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.AuroraDialogWindow.Show(HistoryAurora.Shell.AuroraDialogRequest,System.Windows.Window,System.Boolean)">
+            <summary>模态显示。编组到 owner 的 UI 线程；无 owner 时要求已在 UI 线程。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.ToolWindowInfo">
+            <summary>某个工具窗口的当前状态快照。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.ToolWindowInfo.#ctor(System.String,System.String,System.Boolean,System.Boolean,System.Nullable{HistoryAurora.Shell.Docking.DockSide},System.Nullable{System.Double},System.String)">
+            <summary>某个工具窗口的当前状态快照。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.IDockingService">
+            <summary>停靠系统对外门面。5.0 起由 Aurora 自持，不再来自宿主 Core。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.ILayoutStore">
+            <summary>布局文件存取。5.0 起从宿主 Core 迁入 Aurora。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.DockingHost">
+            <summary>
+            AvalonDock 二次封装(§14.2)。Shell 对外只暴露 IDockingService,
+            派生应用与四类标准窗口不接触任何 AvalonDock 类型。
+            职责:窗口注册、默认布局构建、布局持久化(含损坏回退 N-06)、
+            布局手势 → 等价指令(W-10,含防再入抑制)。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Docking.DockingHost.CurrentLayoutName">
+            <summary>当前布局方案名(状态栏显示用)。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Docking.DockingHost._seedRatiosFromLayout">
+            <summary>true 表示下一次比例处理应从已恢复的布局反向采集比例,而非施加记录值。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Docking.DockingHost.Descriptors">
+            <summary>已注册窗口(视图菜单构建用)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.Initialize">
+            <summary>启动时调用:恢复上次布局,失败或不存在则构建默认布局(W-07 / N-06)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.SaveCurrentLayout">
+            <summary>退出时调用:自动保存当前布局(W-07)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.Suppress">
+            <summary>防再入(§14.2 清单 4):指令/API 驱动的布局变更不回声成新指令。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.EnsureRegisteredWindows">
+            <summary>布局加载后补齐缺失的已注册窗口(旧布局文件兼容)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.UsesDocumentIdentity(HistoryAurora.Shell.Docking.ToolWindowDescriptor)">
+             <summary>
+             只有宿主自持的主命令页使用文档身份(<c>LayoutDocument</c>)；其余一律是工具窗口
+             (<c>LayoutAnchorable</c>)，声明 <see cref="F:HistoryAurora.Shell.Docking.DockSide.Center"/> 的窗口仍落在中央区，
+             但以中央页形态呈现(<c>ShowAnchorableAsCenterPage</c>)。
+            
+             为什么模块不再能注册文档页：文档页的拖动行为明显弱于工具窗口，且会引出一连串
+             停靠相关缺陷。与其逐个修复文档页的拖动路径，不如取消这条注册路径——**中央位置**
+             是模块真正需要的，**文档身份**只是当初取得该位置的手段。
+            
+             旧布局自动迁移：恢复时若存档中的 LayoutDocument 对应的描述符已不再是文档身份，
+             反序列化回调会取消该节点，随后由 EnsureRegisteredWindow 以工具窗口重建。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.EnsureCenterColumn">
+            <summary>找到包含主文档区的中央列;若中央区不是垂直面板,则就地包一层。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.EnsureCentralWorkspace">
+            <summary>
+            Keep the command catalog as the fixed main document. This repairs the early 3.0 candidate
+            topology that placed it in a narrow anchorable pane beside an empty document background.
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.DockLengthFor(System.Boolean,System.Double)">
+            <summary>
+            目标尺寸的表达:主窗体已量得实际尺寸时用像素(AvalonDock 对侧窗格
+            的原生语义),否则先用星值占位,待首次排布后由 ReapplyRatios 修正。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.ReapplyRatios">
+            <summary>
+            按记录的“占主程序窗体百分比”重设各停靠分区尺寸(W-05)。
+            恢复布局后的首次调用改为反向采集:以布局文件里的尺寸为准更新比例记录。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Docking.DockingHost.RatioOfSubtree(AvalonDock.Layout.ILayoutPanelElement)">
+            <summary>分区内第一个已注册窗口的目标比例(分区尺寸由其代表)。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.FileLayoutStore">
+            <summary>当前布局为 layout/current.layout.xml，命名方案为 layout/&lt;名称&gt;.layout.xml。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.FrontendCommandCatalog">
+            <summary>
+            服务端前端代理的框架目录。描述符由真实 <see cref="M:HistoryAurora.Shell.BuiltinCommands.Register(HistoryVulcan.Core.Commands.CommandRegistry,HistoryAurora.Shell.ShellCommandServices)"/>
+            装配结果投影，名称分类只在此保留一份。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.FrontendCommandCatalog.SharedBuiltinSourceDescriptors">
+            <summary>Actual desktop registrations for metadata shared with a service host.</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.AuroraSwimlane">
+             <summary>
+             泳道图组件（REQ-UI-010）。吃一份 <see cref="T:HistoryAurora.Shell.Graph.SwimlaneDescription"/>，
+             自己算布局（<see cref="T:HistoryAurora.Shell.Graph.SwimlaneLayout"/>）、自己画、自己管平移与视口裁剪。
+            
+             描述里没有任何坐标、颜色或尺寸——模块只说有哪些节点、谁是谁的父。
+             节点点击落到**动作 id**（描述的 <c>selectAction</c>），以 <c>{node}</c> 供动作取被点节点，
+             理由与面板按钮一致：写死指令名的话，模块改一次名这张图就点不动了。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Graph.AuroraSwimlane.CullPad">
+            <summary>视口外多画一圈，滚动时不会露出空白再补画。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.AuroraSwimlane.Layout">
+            <summary>当前布局结果；无数据时为 null。供测试与状态栏读取。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.AuroraSwimlane.SetDescription(HistoryAurora.Shell.Graph.SwimlaneDescription)">
+            <summary>换一份描述。传 null 等同清空。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.AuroraSwimlane.ShowMessage(System.String)">
+            <summary>显示一句话代替图：取数失败、尚未选择对象等。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.AuroraSwimlane.HitNode(System.Windows.DependencyObject)">
+            <summary>节点带 Tag，命中它就不算拖画布——否则点节点会变成一次微小平移。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneDescription">
+             <summary>
+             泳道图描述协议 V1（REQ-UI-010）。**模块只描述节点，不描述画法**：
+             泳道怎么排、节点落在哪一列、边怎么走、什么颜色多大字号，全部由 Aurora 决定。
+            
+             这条边界是这一轮从 HistoryJanus 收回来的：泳道布局与绘制此前长在 Janus 的
+             <c>GraphLayout</c> / <c>GraphView</c> 里（合计约 890 行），Janus 因此既要懂 Git，
+             又要懂 WPF 画布、视口裁剪与主题令牌。收进 Aurora 之后 Janus 只需回答
+             「有哪些节点、谁是谁的父、有哪几条泳道」，那正是它本来就知道的事。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Graph.SwimlaneDescription.SupportedSchemaVersion">
+            <summary>当前支持的唯一 schema 版本。文本协议没有编译器保护，版本必须显式比对。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneDescription.Title">
+            <summary>图上方的一行说明，例如「2026-026 · 4 条泳道 · 128 个节点」。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneDescription.Lanes">
+            <summary>
+            泳道。第 0 条视为主线。顺序有意义：靠前的泳道优先占据靠近主线的物理行。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneDescription.Edges">
+            <summary>
+            显式边。留空时 Aurora 按 <see cref="P:HistoryAurora.Shell.Graph.SwimlaneNode.Parents"/> 自行推导——
+            父子关系已经在节点里说过一遍，再要求模块重复列一遍边只会多一处能对不上的地方。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneDescription.SelectAction">
+            <summary>
+            点击节点时执行的动作 id（见 <see cref="T:HistoryAurora.Shell.Actions.ActionRegistry"/>）。
+            Aurora 以 <c>{node}</c> 提供被点节点的 id 供动作参数取值。
+            这里同样**不接受指令名**：理由与面板按钮一致。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneRef">
+            <summary>一条泳道。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneRef.Title">
+            <summary>泳道标题，显示在左侧行首。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneRef.Tip">
+            <summary>
+            泳道末端节点的 id。Aurora 从它沿首父回溯来认领本泳道的节点；
+            节点自带 <see cref="P:HistoryAurora.Shell.Graph.SwimlaneNode.Lane"/> 时以节点为准。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneRef.Open">
+            <summary>未合并（仍在推进）的泳道，末端画一个端点。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneNode">
+            <summary>一个节点。位置字段一个都没有——那是 Aurora 的事。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Parents">
+            <summary>父节点 id，第 0 个为首父。首父决定节点跟着哪条泳道走。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Title">
+            <summary>节点首行，通常是短标识。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Subtitle">
+            <summary>节点次行，通常是一句话摘要。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Tooltip">
+            <summary>悬停提示；为空时由 Aurora 用标题与副标题拼一条。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Lane">
+            <summary>显式泳道 id。不写则由首父回溯推断。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Tone">
+            <summary>语义档位：normal（缺省）/ accent / danger。**不是样式键**，映射写死在渲染器里。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneNode.Order">
+            <summary>排序用的次序键（时间戳、序号）。同层节点按它定先后；缺省按 id。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneEdge">
+            <summary>一条边。From 为父，To 为子。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Graph.SwimlaneEdge.Dashed">
+            <summary>非首父的边画成虚线。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneParse">
+            <summary>解析结果：成功带描述，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneParse.#ctor(HistoryAurora.Shell.Graph.SwimlaneDescription,System.String)">
+            <summary>解析结果：成功带描述，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneReader.Read(System.String)">
+            <summary>
+            解析泳道描述。校验口径与页面描述协议一致：版本不对或节点 id 重复整份作废。
+            节点为空**不是错误**——「这个项目还没有提交」是合法状态，画一张空图即可。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneLayout">
+             <summary>
+             泳道布局（REQ-UI-010）。X 由父边决定（左祖右孙），Y 优先贴主线并按水平占用复用空行。
+             **纯计算：不引用 WPF，不发指令**，因此可以脱离界面直接断言。
+            
+             算法承自 HistoryJanus 的 <c>GraphLayout</c>，但输入换成了与 Git 无关的泳道描述：
+             「首父」「合并父」这些概念在描述协议里是 <see cref="P:HistoryAurora.Shell.Graph.SwimlaneNode.Parents"/> 的下标，
+             布局不需要知道它们来自提交图谱还是别的什么。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Graph.SwimlaneLayout.LaneTitleWidth">
+            <summary>左侧泳道标题栏宽度。由组件决定，描述里传不进来。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneLayout.LaneRow">
+            <summary>一条物理泳道行。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.LaneRow.#ctor(System.Int32,System.String,System.Boolean)">
+            <summary>一条物理泳道行。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Graph.SwimlaneLayout.PlacedNode">
+            <summary>落好位置的节点。<paramref name="IsTip"/> 表示该节点是未合并泳道的末端。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.PlacedNode.#ctor(HistoryAurora.Shell.Graph.SwimlaneNode,System.Int32,System.Boolean,System.Double,System.Double)">
+            <summary>落好位置的节点。<paramref name="IsTip"/> 表示该节点是未合并泳道的末端。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.Intersects(System.Double,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+            <summary>矩形是否与视口相交。视口裁剪用；节点上千时不做裁剪会把画布整棵建出来。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.ResolveEdges(HistoryAurora.Shell.Graph.SwimlaneDescription,System.Collections.Generic.IReadOnlyDictionary{System.String,HistoryAurora.Shell.Graph.SwimlaneNode})">
+            <summary>显式边优先；模块没给就按父子关系推导，非首父画虚线。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.AssignLanes(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Graph.SwimlaneNode},System.Collections.Generic.IReadOnlyDictionary{System.String,HistoryAurora.Shell.Graph.SwimlaneNode},System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Graph.SwimlaneRef})">
+            <summary>
+            逻辑泳道认领。顺序刻意如此：
+            ① 节点自报的泳道最硬；② 主线从末端沿首父回溯；③ 其余泳道同样回溯，撞到已认领的就停；
+            ④ 合并进来的第二父自成一条历史泳道；⑤ 剩下的归主线。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.AssignColumns(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Graph.SwimlaneNode},System.Collections.Generic.IReadOnlyDictionary{System.String,HistoryAurora.Shell.Graph.SwimlaneNode},System.Collections.Generic.IReadOnlyDictionary{System.String,System.Int32})">
+            <summary>
+            每个节点紧挨其最右的父，同时不与同泳道的前一个重叠。
+            **次序键从不决定 X**：按时间平移整条泳道会让更长的历史行冲过分叉点。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Graph.SwimlaneLayout.PackTowardMainline(System.Collections.Generic.Dictionary{System.String,System.Int32},System.Collections.Generic.List{HistoryAurora.Shell.Graph.SwimlaneLayout.LaneMeta},System.Collections.Generic.IReadOnlyDictionary{System.String,System.Double})">
+            <summary>
+            尽量复用靠近主线的行：只有当后来的泳道与该行已有泳道的 X 区间重叠时才继续下移。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Logging.MemoryShellLog">
+            <summary>
+            界面进程内日志。不写宿主日志文件，避免与宿主 ShellLog 抢同一滚动文件。
+            控制台窗口订阅本实例；指令回显由总线 Executed 转发进来。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.MessageBoxConfirmation">
+            <summary>
+            二次确认的模态对话框实现(§5.2 拦截器;手输指令路径的危险操作闸口)。
+            编组到 UI 线程弹窗,任意线程可调用。走 Aurora 自持弹窗,不依赖系统 MessageBox。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.ModuleCommandProbe">
+             <summary>
+             "哪些模块声明了某类契约"的唯一判定处：直接看注册表里有没有 <c>&lt;域&gt;.&lt;后缀&gt;</c>。
+            
+             不用"先问 manifest 的 ui 标志再逐个试"——那要求宿主把 manifest 字段透出来，
+             而注册表本来就是权威且已经在手边；模块没注册该命令就是没有这项契约，不是错误。
+            
+             页面描述（<c>.ui.describe</c>）与动作声明（<c>.ui.actions</c>）用的是同一套判定，
+             因此收在一处：两份各写一遍的话，远程目录那段回退逻辑迟早只在其中一份里被修。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Modules.ModuleCommandProbe.ExpectedOwner(System.String)">
+            <summary>域名反推模块名，用于 owner 校验：mercury → HistoryMercury。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Modules.ModuleCommandProbe.OwnersWithSuffixAsync(HistoryVulcan.Core.Commands.CommandBus,HistoryVulcan.Core.Logging.IShellLog,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            列出注册了 <paramref name="suffix"/> 后缀命令的域。
+            挂了远程执行器时额外读一次宿主命令目录——本进程注册表里没有对端的模块命令。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.ModuleCommands">
+            <summary>module.* 管理指令：list / reload / install / remove / roots / open。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Modules.ModuleCommands.KeyModuleDir">
+            <summary>Legacy settings key retained for binary compatibility; standalone hosts ignore it.</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Modules.ModuleCommands.KeyModuleRoots">
+            <summary>Settings key containing automatic or explicit Z discovery roots.</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.IShellUiRegistrar">
+            <summary>模块向 Aurora 注册内嵌界面的门面。5.0 起由 Aurora 自持。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.IActivatableToolContent">
+            <summary>工具窗口被激活时应接收输入焦点时实现。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.IShellCommandWorkbenchHost">
+            <summary>命令工作台挂载点。5.0 宿主不再转发，由 Aurora 窗口自持。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.ShellUiRegistrar">
+            <summary>把模块界面注册请求编组到 Shell UI 线程。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.UiAnnotationClaimer">
+            <summary>
+            认领带 <c>ui.window</c> 注解的命令：执行后把 <see cref="P:HistoryVulcan.Core.Commands.CommandResult.Data"/> 里的
+            活对象停靠进布局。5.0 起宿主不再转发 IShellUiRegistrar，这是模块露出窗格的路径。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Modules.UiAnnotationClaimer.#ctor(HistoryVulcan.Core.Commands.CommandBus,HistoryAurora.Shell.Docking.IDockingService,HistoryVulcan.Core.Logging.IShellLog)">
+            <summary>
+            认领带 <c>ui.window</c> 注解的命令：执行后把 <see cref="P:HistoryVulcan.Core.Commands.CommandResult.Data"/> 里的
+            活对象停靠进布局。5.0 起宿主不再转发 IShellUiRegistrar，这是模块露出窗格的路径。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Modules.UiAnnotationKeys">
+            <summary>
+            模块用命令注解登记窗格时使用的键。5.0 起宿主不再提供 IShellUiRegistrar，
+            模块在命令描述符的 Annotations 里写下这些键；Aurora 认领后执行该命令，
+            把 <c>CommandResult.Data</c> 里的活对象停靠进布局。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.ComponentRequest">
+            <summary>一条组件申请。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.ComponentRequest.RequestedBy">
+            <summary>提出方，模块名或 explicit 调用者。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.ComponentRequest.Pages">
+            <summary>用到它的页面（`模块/页面 id`），自动申请时填，显式申请时可为空。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.ComponentRequestStore">
+             <summary>
+             组件申请台账（页面注册协议 §2.5 的落地）。
+            
+             「模块不得自建组件」是硬禁令，因此模块被缺件卡住时必须有一条**非自建的出口**，
+             否则禁令只会被绕过——自建版本一旦上线就不会有人回来删。
+            
+             申请有两个来源，都进同一本账：
+             <list type="bullet">
+               <item><b>用出来的</b>：页面描述引用了未支持的组件，渲染成占位的同时自动记一笔。
+                     这类申请最可信——它来自真实使用，不是设想。</item>
+               <item><b>提出来的</b>：`aurora.ui.request`，用于还没写进页面、但已知需要的组件。</item>
+             </list>
+            
+             台账**落盘**：一次会话内的缺件清单（`aurora.ui.missing`）重启即失，
+             那样的"通道"没人能据以排期。
+            
+             已交付的组件在列举时自动出账，不需要谁去销账——判据是渲染器是否已支持该类型，
+             而那是唯一权威，避免台账与实现各说各话。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ComponentRequestStore.#ctor(HistoryVulcan.Core.Storage.ISettingsService,HistoryVulcan.Core.Logging.IShellLog)">
+             <summary>
+             组件申请台账（页面注册协议 §2.5 的落地）。
+            
+             「模块不得自建组件」是硬禁令，因此模块被缺件卡住时必须有一条**非自建的出口**，
+             否则禁令只会被绕过——自建版本一旦上线就不会有人回来删。
+            
+             申请有两个来源，都进同一本账：
+             <list type="bullet">
+               <item><b>用出来的</b>：页面描述引用了未支持的组件，渲染成占位的同时自动记一笔。
+                     这类申请最可信——它来自真实使用，不是设想。</item>
+               <item><b>提出来的</b>：`aurora.ui.request`，用于还没写进页面、但已知需要的组件。</item>
+             </list>
+            
+             台账**落盘**：一次会话内的缺件清单（`aurora.ui.missing`）重启即失，
+             那样的"通道"没人能据以排期。
+            
+             已交付的组件在列举时自动出账，不需要谁去销账——判据是渲染器是否已支持该类型，
+             而那是唯一权威，避免台账与实现各说各话。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ComponentRequestStore.Record(System.String,System.String,System.String,System.String)">
+            <summary>记一笔申请；同一组件重复提交只更新 LastSeen 与页面清单。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ComponentRequestStore.ListOpen">
+            <summary>
+            列出仍未交付的申请，并顺手把已交付的出账。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageLoadReport">
+            <summary>一次拉取的结果，供命令回显与测试断言。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageLoadReport.#ctor(System.Int32,System.Int32,System.Collections.Generic.IReadOnlyList{System.String},System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Pages.MissingComponent})">
+            <summary>一次拉取的结果，供命令回显与测试断言。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.MissingComponent">
+            <summary>某个模块的某一页引用了组件库尚未提供的组件。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.MissingComponent.#ctor(System.String,System.String,System.String)">
+            <summary>某个模块的某一页引用了组件库尚未提供的组件。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.ModulePageLoader">
+             <summary>
+             按页面注册协议 V1 从模块拉取页面描述并建页。
+            
+             **方向是拉取，不是推送**：Aurora 主动问，宿主不持有页面描述。
+             这条是刻意的——宿主侧已有的 <c>web.frontendcatalog</c> 正是"宿主缓存 + 连上时重放"，
+             它按客户端名做键且不做存活性回收，前端改名一次就留下永久幽灵条目。
+             页面若照抄那条路，幽灵会从"命令数不准"升级成"界面上多出一个打不开的页面"。
+             拉取让注册成为派生状态，没有缓存可失效。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ModulePageLoader.#ctor(HistoryVulcan.Core.Commands.CommandBus,HistoryAurora.Shell.Docking.IDockingService,HistoryVulcan.Core.Logging.IShellLog,HistoryAurora.Shell.Pages.ComponentRequestStore,HistoryAurora.Shell.Actions.ActionRegistry,HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider)">
+             <summary>
+             按页面注册协议 V1 从模块拉取页面描述并建页。
+            
+             **方向是拉取，不是推送**：Aurora 主动问，宿主不持有页面描述。
+             这条是刻意的——宿主侧已有的 <c>web.frontendcatalog</c> 正是"宿主缓存 + 连上时重放"，
+             它按客户端名做键且不做存活性回收，前端改名一次就留下永久幽灵条目。
+             页面若照抄那条路，幽灵会从"命令数不准"升级成"界面上多出一个打不开的页面"。
+             拉取让注册成为派生状态，没有缓存可失效。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Pages.ModulePageLoader.DescribeSuffix">
+            <summary>协议约定的描述命令后缀；模块以自己的域注册，例如 mercury.ui.describe。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.ModulePageLoader.Missing">
+            <summary>最近一次拉取发现的缺件，供 aurora.ui.missing 查询。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ModulePageLoader.ReloadAsync(System.Threading.CancellationToken)">
+             <summary>
+             全量重拉，**合并重入请求**。
+            
+             启动期会连续触发多次：ModuleHost 初次装载一次，宿主的 moduleRevision 通知引发
+             <c>ReloadConfirmedSources</c> 又各一次——真机实测一次冷启动打了三遍。
+             不合并的话，等模块真有页面时就是三倍的 describe 调用与三轮建撤抖动。
+             已在跑时只置脏标记，跑完再补一轮，因此最后一次请求的结果一定被反映。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ModulePageLoader.ReloadOwnerAsync(System.String,System.Threading.CancellationToken)">
+             <summary>
+             只重拉一个模块（aurora.ui.invalidate）。模块内容变化时由模块自己触发。
+            
+             参数**同时接受模块名与域名**，因为这里有两个身份要用：撤旧页按 owner
+             （<c>HistoryMercury</c>），拉描述按域（<c>mercury.ui.describe</c>）。
+             两者按设计就不相等——域去掉 <c>History</c> 前缀（宿主手册 §3.3.1）。
+             1.6.0 把同一个字符串既当 owner 又当域使，结果是：传 <c>owner=HistoryMercury</c>
+             会去调不存在的 <c>HistoryMercury.ui.describe</c>；传 <c>owner=mercury</c> 拉得到描述，
+             却在 <c>_owners</c> 里撤不掉旧页，随后同 id 重注册失败。
+             **任何模块的这条上行通知都拉不到描述**，而全量拉取那条路探测的是注册表里的域，
+             因此一直是好的——缺陷只在这一条路径上，也只在真机上看得见。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ModulePageLoader.DescribableOwnersAsync(System.Threading.CancellationToken)">
+            <summary>哪些模块声明了页面：判定收在 <see cref="T:HistoryAurora.Shell.Modules.ModuleCommandProbe"/>，与动作声明同一口径。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.ModulePageLoader.Clamp(System.Double)">
+            <summary>比例必须严格落在 (0,1)，越界按缺省值处理而不是让停靠库抛。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageDescriptionSet">
+             <summary>
+             模块页面描述（协议 V1）。模块经指令总线返回本结构，Aurora 用自己的组件库渲染，
+             模块不再构造任何 WPF 对象——见 b-Office/current/页面注册协议方案.md。
+            
+             本结构是**数据**，不含任何外观信息：模块只能选语义档位（<see cref="P:HistoryAurora.Shell.Pages.PageNode.Style"/>），
+             具体长相由 Aurora 决定（DEC-005）。解析失败或版本不支持时整份描述作废，
+             不做部分接受——半张页面比没有页面更难排查。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Pages.PageDescriptionSet.SupportedSchemaVersion">
+            <summary>当前支持的唯一 schema 版本。文本协议没有编译器保护，版本必须显式比对。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageDescriptionSet.Owner">
+            <summary>提供方模块名，与宿主注册表里的 owner 一致。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageDescription">
+            <summary>一个可停靠页面。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageDescription.Id">
+            <summary>指令可寻址的窗口名，要求小写、无空格、进程内唯一。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PagePlacement">
+            <summary>
+            停靠位置。字段与 <c>ToolWindowDescriptor</c> 一一对应——那部分本来就是纯数据，
+            不重新设计，只是换成文本承载。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PagePlacement.Side">
+            <summary>left / right / top / bottom / center / tab；大小写不敏感。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PagePlacement.TabTarget">
+            <summary>Side 为 tab 时并入哪个窗口的标签组。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageNode">
+            <summary>
+            组件树节点。<see cref="P:HistoryAurora.Shell.Pages.PageNode.Type"/> 不在 V1 组件集内时渲染为显式占位，
+            **不静默省略**——静默省略正是改协议要消灭的失败形态。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Id">
+            <summary>节点在本页内的引用名，供 <see cref="T:HistoryAurora.Shell.Pages.PageInvoke"/> 取值与 enabledWhen 使用。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Style">
+            <summary>语义档位（accent / ghost / danger / caption / secondary…），不是样式键。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Orientation">
+            <summary>stack 专用：vertical（缺省）或 horizontal。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Gap">
+            <summary>stack 专用：间距档位 none / tight / normal。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Widgets">
+            <summary>panel 专用：面板内的小组件（文字 / 文本框 / 按钮），与控制面板同一套契约。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.RowActions">
+            <summary>
+            table 专用：行操作（REQ-UI-011）。一份声明同时给出行内按钮与右键菜单，
+            页面作者不必在两种控件之间挑一个、挑完还要各写一遍参数。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Suggest">
+            <summary>
+            input 专用：候选来源。目前只支持 <c>commands</c>（指令名与参数分段补全）。
+            声明了但当前拿不到补全会话时退回普通输入框，并记一条 Warn——不静默。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Min">
+            <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.DataSource">
+            <summary>表格数据源；组件按需回调模块取数，数据不内联进描述。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.Invoke">
+            <summary>有外部副作用的动作。视图行为（筛选、排序、选中）由组件自理，不走这里。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageNode.EnabledWhen">
+            <summary>启用条件；目前只支持 { "selected": "&lt;节点 id&gt;" }。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageRowAction">
+             <summary>
+             一条行操作。落点与按钮一样是**动作 id**：指令改名由模块自己的
+             <c>&lt;域&gt;.ui.actions</c> 吸收，页面描述一个字不动（REQ-UI-009）。
+            
+             动作里的占位符 <c>{列名}</c> 默认取**被操作那一行**的同名列——
+             行操作的作用域天然就是一行，让它去引用"某个节点的选中行"是绕远路。
+             <see cref="P:HistoryAurora.Shell.Pages.PageRowAction.Args"/> 只在需要写死值或跨节点取值时才用。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageRowAction.Style">
+            <summary>语义档位：danger 表示危险动作。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageRowAction.Inline">
+            <summary>是否同时在行内放一个按钮；false 表示只进右键菜单。缺省 true。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageColumn.Width">
+            <summary>像素宽；"*" 表示占满剩余。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageDataSource">
+            <summary>组件取数：一条只读命令加固定参数，分页与筛选由组件追加。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageInvoke">
+            <summary>
+            按钮的落点。二选一：
+            <list type="bullet">
+              <item><see cref="P:HistoryAurora.Shell.Pages.PageInvoke.Action"/>——模块声明的动作 id，**推荐**。指令改名不影响按钮；</item>
+              <item><see cref="P:HistoryAurora.Shell.Pages.PageInvoke.Command"/>——直接写指令名。模块改名时这里会静默失效，
+                    因此渲染器会记一条 Warn，让"哪些按钮还没换成动作"是可查的。</item>
+            </list>
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageInvoke.Action">
+            <summary>动作 id（见 <c>&lt;域&gt;.ui.actions</c>）。与 <see cref="P:HistoryAurora.Shell.Pages.PageInvoke.Command"/> 同时给出时以本项为准。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageArgument.From">
+            <summary>形如 "commands.selected.name"：取 id 为 commands 的节点当前选中行的 name 列。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageViewOptions">
+            <summary>视图行为开关。这些**不产生命令**——组件自理。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageViewOptions.Selection">
+            <summary>none / single；V1 不支持多选。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageEnabledWhen.Selected">
+            <summary>指定节点必须有选中行。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageDescriptionParse">
+            <summary>解析结果：成功带描述，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageDescriptionParse.#ctor(HistoryAurora.Shell.Pages.PageDescriptionSet,System.String)">
+            <summary>解析结果：成功带描述，失败带可直接写进日志的原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageDescriptionReader.Read(System.String,System.String)">
+            <summary>
+            解析模块返回的描述。任何一步失败都返回 <see cref="P:HistoryAurora.Shell.Pages.PageDescriptionParse.Error"/>，
+            调用方据此**跳过该模块**并记 Warn，其余模块照常建页（协议 §1.5 隔离要求）。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageRenderContext">
+            <summary>渲染一页所需的外部依赖。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageRenderContext.Owner">
+            <summary>提供方模块名，用于日志归因。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageRenderContext.Actions">
+            <summary>
+            动作声明台账。为 null 时按钮与泳道的动作绑定一律解析失败并渲染成显式占位——
+            静默变成不可点的按钮不算"降级"，那正是本轮要消灭的形态。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.PageRenderContext.Completions">
+            <summary>
+            补全候选的来源（REQ-UI-013）。为 null 时声明了 <c>suggest</c> 的输入框
+            退回普通输入框并记一条 Warn——静默地少掉补全，正是"只有这一页不一样"的老形态。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.RenderedPage">
+            <summary>渲染结果。缺件被记录下来而不是丢弃，供缺件清单查询。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Pages.RenderedPage.MissingComponents">
+            <summary>描述里引用了但组件库尚未提供的组件类型。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageRenderer">
+             <summary>
+             把页面描述渲染成 WPF 界面。**这是模块与 WPF 之间唯一的边界**：
+             模块只提交数据，控件全部由本类用 Aurora 组件库构造，因此模块无从自建组件（DEC-005）。
+            
+             三条硬规则：
+             <list type="bullet">
+               <item>描述里不接受任何样式键或颜色，只接受语义档位，映射表写死在本类里；</item>
+               <item>未知组件渲染为**显式占位**并计入缺件清单，绝不静默省略——
+                     静默省略正是 <c>DynamicResource</c> 时代的失败形态，改协议就是为了消灭它；</item>
+               <item>复合组件（表格、面板、泳道）不在本类里现拼控件，一律委派给组件本体。
+                     本类只做"描述 → 组件输入"的翻译，外观归组件（REQ-UI-007/008/010）。</item>
+             </list>
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Pages.PageRenderer.GapTight">
+            <summary>
+            间距不走 DynamicResource：间距令牌在浅色与深色里取值相同（PadTight=8 / Pad=12），
+            不随主题变化；而 Thickness 资源是四边统一值，用作 Margin 会给纵向栈额外撑出左右缩进。
+            画刷与文字样式仍然走 DynamicResource，主题切换必须跟随。
+            </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Pages.PageRenderer.SupportedComponents">
+            <summary>
+            V1 组件集。这是「某个申请是否已交付」的**唯一权威**——台账不另存一份状态，
+            否则两边会各说各话。新增组件时改这里与 <see cref="M:HistoryAurora.Shell.Pages.PageRenderer.Build(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)"/> 的分派，两处必须同步。
+            </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Pages.PageRenderer.SupportedCapabilities">
+             <summary>
+             已交付的**能力**：它们不是独立的节点类型，而是挂在某个节点上的字段
+             （表格的 <c>rowActions</c>、输入框的 <c>suggest</c>）。
+            
+             单独列一份，是因为组件申请台账按名字销账：Mercury 申请的是
+             <c>table.rowactions</c> / <c>menu</c> / <c>input.suggest</c> 这样的名字，
+             而把它们塞进 <see cref="F:HistoryAurora.Shell.Pages.PageRenderer.SupportedComponents"/> 会让
+             <c>type: "table.rowactions"</c> 一边被判为"已支持"、一边渲染成缺件占位。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.BuildTable(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>
+            表格：本类只把列声明翻译成组件输入，一个控件都不拼。
+            行高、字号、颜色、圆角、分隔线全归 <see cref="T:HistoryAurora.Shell.Table.AuroraTable"/>，描述里传不进来。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.BuildGrid(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>响应式栅格：只声明"一列至少多宽"，列数由可用宽度算（REQ-UI-015）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.BuildPopup(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>弹出层：内容仍是面板那三种小组件，只是不再常驻占版面（REQ-UI-012）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.BuildPanel(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>面板：直接复用控制面板那套组件与校验，不为页面另造一份。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.BuildSwimlane(HistoryAurora.Shell.Pages.PageNode,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>泳道图：描述由取数命令给，布局与绘制归组件（REQ-UI-010）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.Placeholder(System.String,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>
+            缺件占位。做成看得见的一块而不是空白：缺件必须能被发现，
+            而"这一页少了点东西"用肉眼是看不出来的。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.Unbound(System.String,HistoryAurora.Shell.Pages.PageRenderer.RenderState)">
+            <summary>动作没落点时的样子。与缺件区分开：组件是有的，缺的是声明。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Pages.PageRenderer.RenderState">
+            <summary>一次渲染的可变状态：节点表、缺件表与待连线的启用条件。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.#ctor(HistoryAurora.Shell.Pages.PageRenderContext)">
+            <summary>一次渲染的可变状态：节点表、缺件表与待连线的启用条件。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.BindRowAction(HistoryAurora.Shell.Table.AuroraTable,System.String,HistoryAurora.Shell.Pages.PageRowAction)">
+            <summary>
+            记住某张表的某条行操作声明。每张表只挂一次事件：
+            行操作的分派按 id 走，挂多次的话一次点击会发出多条命令。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.ResolveRowArgument(HistoryAurora.Shell.Pages.PageRowAction,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.String)">
+            <summary>
+            行操作的占位符默认取**被点那一行**的同名列——行操作的作用域天然就是一行。
+            显式写了 args 的以 args 为准（写死值，或跨节点取值）。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.WarnRawCommand(System.String)">
+            <summary>
+            直接写指令名的按钮不拦，但要留痕：模块改一次指令名它就会静默失效，
+            而"哪些按钮还没换成动作"必须是可查的，不能只存在于某次代码走查的印象里。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.Invoke(HistoryAurora.Shell.Pages.PageInvoke)">
+            <summary>组件调用走指令总线：按钮点击变成一条命令，参数可从视图状态取值。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.ResolveArgument(HistoryAurora.Shell.Pages.PageInvoke,System.String)">
+            <summary>动作占位符 <c>{name}</c> 从本按钮的 args 取值，取不到返回 null 让动作报错。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Pages.PageRenderer.RenderState.LoadRows(HistoryAurora.Shell.Table.AuroraTable,System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Table.AuroraTableColumn},HistoryAurora.Shell.Pages.PageDataSource)">
+             <summary>
+             取数：调模块的只读命令，把返回的 JSON 行灌进表格。
+            
+             优先读 <c>Data</c>；跨进程中继后结构化载荷不会原样存活，
+             因此协议要求同样的 JSON 也出现在 <c>Message</c> 里，这里回退到它。
+             </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelDefinition">
+             <summary>
+             控制面板声明（REQ-UI-008，协议 V2）。
+            
+             V2 把小组件收成**三种**：文字、文本框、按钮。V1 的 combo / check / slider /
+             file / dir / number 一并删除，不留兼容分支——那批控件里真正被用到的只有输入与选择两类，
+             其余各自带着一套校验规则，却从来没有第二个使用者。
+             更要紧的是 V1 的按钮直接写指令模板：模块一改指令名，按钮就静默变哑。V2 的按钮只认
+             动作 id，指令名归模块自己的声明管（见 <see cref="T:HistoryAurora.Shell.Actions.ActionRegistry"/>）。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelDefinition.Widgets">
+            <summary>面板内的小组件，按声明顺序自上而下排列。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelWidgetKind">
+            <summary>面板小组件的种类。这三种就是全部，不再有第四种。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Panels.PanelWidgetKind.Text">
+            <summary>一段说明文字，不参与取值。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Panels.PanelWidgetKind.TextBox">
+            <summary>文本框：<see cref="P:HistoryAurora.Shell.Panels.PanelWidget.Mode"/> 决定是输入还是选择。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Panels.PanelWidgetKind.Button">
+            <summary>按钮：绑一个由模块声明的动作。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelTextBoxMode">
+            <summary>文本框的两种形态。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Panels.PanelTextBoxMode.Input">
+            <summary>自由输入。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Panels.PanelTextBoxMode.Select">
+            <summary>在 <see cref="P:HistoryAurora.Shell.Panels.PanelWidget.Options"/> 里选一个。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelWidget">
+            <summary>一个小组件。字段按种类取用，不适用的字段被忽略。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Kind">
+            <summary>种类：text / textbox / button。大小写不敏感；无法识别时整个面板作废。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Id">
+            <summary>取值标识。文本框必须有，动作参数里的 <c>{id}</c> 就是指它。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Label">
+            <summary>左侧标签。文本框用；为空时退回 <see cref="P:HistoryAurora.Shell.Panels.PanelWidget.Id"/>。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Text">
+            <summary>text 的正文，或 button 的按钮文字（不写时用动作声明的标题）。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Mode">
+            <summary>textbox 专用：input（缺省）或 select。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Options">
+            <summary>textbox 且 mode=select 时的候选项。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Value">
+            <summary>初值。select 时若不在 <see cref="P:HistoryAurora.Shell.Panels.PanelWidget.Options"/> 内则退回第一项。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Required">
+            <summary>必填。按钮执行前校验，空值直接拒绝并报出是哪一项。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.Action">
+            <summary>
+            button 专用：动作 id。**这里不接受指令名**——写指令名正是 V1 会静默失效的原因。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.ResolvedKind">
+            <summary>解析后的种类；无法识别时为 null。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelWidget.ResolvedMode">
+            <summary>解析后的文本框形态；非 textbox 时无意义。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelDefinitionParse">
+            <summary>面板声明的校验结果。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelDefinitionParse.#ctor(HistoryAurora.Shell.Panels.PanelDefinition,System.String)">
+            <summary>面板声明的校验结果。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelDefinitionValidator.Validate(HistoryAurora.Shell.Panels.PanelDefinition)">
+            <summary>
+            校验一份面板声明。任何一处不合规整份作废：面板是一组互相取值的控件，
+            少掉其中一个的话按钮拿到的参数就是错的——半个面板比没有面板更危险。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelManager">
+             <summary>
+             控制面板群管理器（REQ-UI-008）：
+             从 &lt;数据目录&gt;/panels/*.json 加载面板声明，与 C# 注册通道（ShellConfig.Panels）合并；
+             每个面板注册为一个独立可停靠工具窗口（窗口名 = 面板 id），随布局一起持久化。
+             <c>aurora.ui.panelreload</c> 重读 JSON 并原地重建既有面板内容（新增面板需重启）。
+            
+             声明经 <see cref="T:HistoryAurora.Shell.Panels.PanelDefinitionValidator"/> 逐份校验，不合规的整份跳过并记一条错误——
+             半个面板会让按钮拿到错的参数，比没有面板更危险。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelManager.#ctor">
+            <summary>仅供框架命令目录生成；不读取文件，也不得执行面板处理器。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelManager.RegisterWindows(System.Collections.Generic.List{HistoryAurora.Shell.Docking.ToolWindowDescriptor})">
+            <summary>把每个面板注册为工具窗口描述符（启动时调用，先于停靠系统初始化）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelManager.TrySetValue(System.String,System.String,System.String,System.String@)">
+            <summary>aurora.ui.panelset 落点。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelManager.Reload">
+            <summary>aurora.ui.panelreload：重读 JSON，重建既有面板内容；新增面板提示重启。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelManager.RebuildAll">
+            <summary>
+            按当前声明重建全部已实例化的面板。动作声明刷新后必须调用：
+            按钮的「有没有落点」是在构建时决定的，声明变了而界面不重建，
+            就会留下一块已经过期的警示牌，或者反过来留一个其实已经失效的按钮。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Panels.PanelView">
+             <summary>
+             面板组件（REQ-UI-008）。按声明构建三种小组件——文字、文本框、按钮——
+             外观全部由组件决定，声明侧只说「是什么」。
+            
+             按钮的落点是**动作 id**，不是指令：点击时向 <see cref="T:HistoryAurora.Shell.Actions.ActionRegistry"/> 现取声明，
+             由声明给出真正的指令名与参数形状。模块改指令名只需改自己的声明，面板 JSON 一个字不动。
+             反过来，动作没被声明时按钮**不渲染成按钮**，而是一块写着原因的警示牌——
+             「点了没反应」是这一轮要消灭的东西，把它换成「看起来能点但其实不能」并没有变好。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Panels.PanelView.ControlIds">
+            <summary>可反向驱动的控件 id 清单（aurora.ui.panelset 报错提示用）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelView.Rebuild(HistoryAurora.Shell.Panels.PanelDefinition)">
+            <summary>按新声明原地重建内容（aurora.ui.panelreload，以及动作声明刷新后重绑按钮）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelView.TrySetValue(System.String,System.String)">
+            <summary>aurora.ui.panelset 落点：程序向面板控件回写值。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelView.Warning(System.String)">
+            <summary>缺件/断链的样子：看得见的一块，写清原因。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Panels.PanelView.Fire(System.String)">
+            <summary>
+            点击时**现取**声明，而不是构建时把指令名固化进闭包：
+            模块热重载后声明会变，固化下来的那份就是下一个「点了没反应」。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.ShellConfig">
+            <summary>
+            派生应用向 Shell 提交的装配清单(§9 开发流程第 2/7 条的入口)。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.ToolWindows">
+            <summary>要注册的工具窗口清单。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.ToolMenuActions">
+            <summary>派生应用放入“工具”菜单的命令入口。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.ConfigureCommands">
+            <summary>
+            派生应用注册自定义指令的挂点(§5.3,§9 流程第 3 条):
+            在内置指令组注册完成后调用;指令名冲突会在此时抛出。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.Panels">
+            <summary>
+            C# 通道声明的控制面板(P-01;与数据目录 panels/*.json 合并,JSON 优先加载在后)。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.EnableModules">
+            <summary>
+            模块托管(MD-01~08,0.4.4 由 HistoryJanus 反哺):
+            &lt;数据目录&gt;\Modules 热重载,DLL 即指令域;module.* 指令组随之注册。
+            默认关闭；消费方明确需要模块扫描、热重载和 module.* 时置 true。
+            false 时完全不创建宿主、不扫描目录、不注册 module.*。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.EnableUiModules">
+            <summary>
+            在本进程加载声明了 ui=true 的模块界面。默认由 EnableModules 隐式启用;
+            前端/服务分离应用可在 EnableModules=false 时单独置 true。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.ModuleDirectory">
+            <summary>
+            Optional module directory for a packaged host. When omitted, modules remain
+            under the application's standard AppData directory.
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.ModuleDiscoveryRoots">
+            <summary>
+            Z-level module discovery roots. When non-empty, module manifests are discovered from
+            direct <c>z-*</c> children and <see cref="P:HistoryAurora.Shell.ShellConfig.ModuleDirectory"/> is ignored.
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.RequireConfirmedModuleSources">
+            <summary>
+            Keeps a UI-only module host empty until the backend confirms the manifest paths to load.
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.EnableMaximizeOnDoubleClick">
+            <summary>双击工具窗口标题条时切换窗口最大化。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.EnableRemoteManagementViews">
+            <summary>
+            客户端模式下只创建命令集、指令详情和模块管理视图，不在本进程创建 MCP 或 ModuleHost。
+            视图经 CommandBus.RemoteExecutor 读取服务端结构化结果。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.CloseBehavior">
+            <summary>Determines whether a user close hides the frontend or exits it.</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.Identity">
+            <summary>
+            应用身份:null 时取 <c>AppIdentity.Current</c>(入口程序集)。
+            测试宿主等入口程序集不是应用本体的场景应显式提供。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellConfig.CommandSelection">
+            <summary>
+            命令集选中状态(0.4.4):框架的命令集窗口(McpToolsView)写入选中的指令名。
+            派生应用若有指令详情窗口需与之联动,应在此传入**同一个实例**,并把详情窗口也接到它;
+            null 时框架自建一个(此时派生侧无法与之联动)。
+            由派生应用创建并传入(而非框架创建后回取),是因为工具窗口内容工厂在 ShellWindow
+            构造期间(DockingHost 构建默认布局时)即被调用,那时派生应用尚拿不到 window 实例。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.ShellTopBarCoordinator">
+            <summary>
+            Keeps main-window chrome and page chrome on one input and command path.
+            Only AvalonDock public model and window APIs are used here.
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.ShellWindow">
+            <summary>
+            主程序窗体(Main Frame,§2)。3.1 起为自绘顶栏 + 停靠系统容器两段结构:
+            菜单折叠进顶栏右上角的菜单按钮(UI-03),常驻菜单行与底部状态栏均已取消
+            (UI-05,原状态栏信息改由顶栏徽章、布局文本和瞬时回执承担)。
+            M2 起指令总线为一切操作的汇聚点:菜单项点击同样是发指令(S-02),
+            控制台手输、脚本、布局手势与派生应用共用同一张指令注册表。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ApplyThemeToFloatingWindows(System.Uri)">
+            <summary>
+            R4-3:浮动窗口是独立 Window,自带一份 AvalonDock 主题字典(里面是浅色令牌),
+            优先级高于应用级资源 —— 不单独换,拖出来的工具页外框就一直是白的。
+            新浮动窗口在 WindowsChanged 后补一次。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.SwapTokens(System.Windows.ResourceDictionary,System.Uri,System.Boolean)">
+            <summary>
+            令牌字典换位。必须幂等:这个方法会被布局回调反复调用,
+            每次都无脑换字典会让资源全量失效 → 触发布局 → 再回调,直接转成死循环。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ApplyPaneStyles(System.Boolean)">
+            <summary>
+            窗格外观下发(W-04 标签条置顶 + UI-01 卡片化 + UI-04 专注形态)。
+            必须经 DockingManager.AnchorablePaneControlStyle / DocumentPaneControlStyle 属性下发:
+            主题字典里的隐式 Style 不会命中窗格控件,浮动窗口也走这两个属性。
+            以主题内置窗格样式为基底(继承 ItemContainerStyle 等),只覆盖标签位置与模板。
+            v5 迁移注意:基底样式的资源键随主题版本变化,需同步调整。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ReserveSpaceForChromeBar">
+            <summary>
+            窗口按钮组与页签同处一行(3.1 修订),因此必须把最右上那一排页签的右边距撑开,
+            否则页签会滑到按钮底下点不到。专注态没有页签行,不需要占位。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.AttachChromeBarToMainDocumentPane">
+            <summary>
+            将窗口控制栏挂到主窗口的中央文档窗格。AvalonDock 的浮动窗格位于独立
+            Window，不会出现在 DockManager 的视觉树中，因此不会获得这组按钮。
+            </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.ShellWindow.PaneHeaderTag">
+            <summary>窗格模板里页签行容器的标记(见 AuroraDocking.xaml)。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.ShellWindow.BaseTabStripRight">
+            <summary>页签条模板里的右边距基线(Aurora.Space.TabStrip 的右值)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ApplyFocusChrome">
+            <summary>
+            令牌字典整份替换:应用色与 AvalonDock 主题画刷键都在同一份令牌里,
+            因此不会出现「界面已深色、页签仍浅色」。三处都要换:
+            窗体(视图)、DockingManager(停靠区,压过 VS2013 主题)、应用级(浮动窗口是独立 Window)。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ToggleFocusMode">
+            <summary>F11:在当前活动页的专注态与常规态之间切换。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.IsTextInputFocused">
+            <summary>Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.Item(System.String,System.String)">
+            <summary>菜单项点击同样是发指令(S-02):统一经总线分发、回显、留痕。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.UpdateLayoutIndicator">
+            <summary>
+            UI-05.4:原状态栏右侧的布局名。3.1 取消独立标题栏后没有常驻文本位,
+            改挂菜单按钮提示 —— 需要时一悬停就能看到,不占任何常驻像素。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.IsDarkTheme">
+            <summary>弹窗与主窗体必须用同一套令牌；独立 Window 自己合并字典，但要知道此刻是哪一套。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.OnShellSourceInitialized(System.Object,System.EventArgs)">
+            <summary>
+            UI-02 / UI-09.1:非客户区接管必须推迟到窗体句柄就绪 —— 派生应用常在对象
+            初始化器里(即构造函数返回之后)设置 WindowStyle,构造期判定会误判成标准窗体。
+            用事件而非 override，避免仅为内部窗体时序扩大公开面。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.Docking">
+            <summary>停靠系统门面。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.Commands">
+            <summary>指令总线(派生应用 / 启动参数经此执行指令)。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.HostBus">
+            <summary>
+            宿主总线。进程内装载后由 AuroraShellHost 注入，用来扫描模块注解并执行活对象命令。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.DiscoverModuleSurfacesAsync">
+            <summary>拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.AddTransientLog(HistoryVulcan.Core.Logging.ShellLogEntry)">
+            <summary>Adds a backend log entry to the in-memory console without writing a second log file.</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.Modules">
+            <summary>模块托管宿主。5.0 起由 HistoryVulcan 独占，界面侧恒为 null。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.ShellUi">
+            <summary>
+            界面注册器。进程内形态下由模块交回宿主，宿主再转给其余 UI 模块——
+            宿主自己已不含任何界面实现，注册器只能来自这里（DEC-008）。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.CommandSelection">
+            <summary>
+            命令集选中状态(0.4.4):框架的命令集窗口写入,派生应用的指令详情窗口读取。
+            派生应用应把自己的详情视图接到本实例,避免各建一个导致联动失效。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.AttachCommandCatalogSession(HistoryAurora.Shell.CommandSurface.ICommandCatalogSession)">
+            <inheritdoc />
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ConfigureCommandCompletionRouting(System.Func{System.Boolean},System.Action)">
+            <inheritdoc />
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.RefreshCommandCompletionFocus">
+            <inheritdoc />
+        </member>
+        <member name="P:HistoryAurora.Shell.ShellWindow.AboutText">
+            <summary>关于对话框文本(aurora.app.about)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.TakeOverDescriptor(System.String,System.String,HistoryAurora.Shell.Docking.DockSide,System.Double,System.Func{System.Object},System.Boolean)">
+            <summary>
+            标准窗口内容接管:描述符的停靠位置仍由派生应用声明,内容工厂换成
+            Shell 实现;未声明时按缺省位置强制注册(控制台是架构不变量 2 的落点)。
+            窗口 ID 是框架与派生应用之间的对接约定：双方各自声明并按 Id 合并，
+            不得仅在一侧改名；新增窗口时须同步核对派生应用的 ToolWindows 表。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.UpdateErrorBadge">
+            <summary>UI-05.3:原状态栏错误计数,点击行为不变(聚焦控制台并只看错误)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ApplyWindowStateChrome">
+            <summary>窗体最大化图标切换 + WindowChrome 溢出补偿(UI-02.5)。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.ForceClose">
+            <summary>
+            热重载与宿主退出用：绕过「关闭即隐藏」，真正关掉窗口。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.ShellWindow.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Table.AuroraRowAction">
+             <summary>
+             表格的一条行操作（REQ-UI-011）。
+            
+             一条声明同时供两个出口使用：行内按钮与右键菜单。这不是两个组件，
+             而是同一件事的两种到达方式——把它们拆成两份声明，参数与可用条件迟早只在其中一份里被改。
+            
+             与页面里的按钮一样，落点是**动作 id**，不是指令名：指令改名由模块自己的
+             <c>&lt;域&gt;.ui.actions</c> 吸收，表格这边一个字不动（REQ-UI-009）。
+             </summary>
+             <param name="Id">动作 id；点击时由 <c>ActionRegistry</c> 现取声明。</param>
+             <param name="Title">按钮与菜单项上的文字。</param>
+             <param name="Danger">危险动作：行内按钮转危险色，菜单项同样。</param>
+             <param name="Inline">
+             是否在行内也放一个按钮。false 表示只进右键菜单——行操作多于两三条时，
+             全塞进行内会把数据列挤没，那正是本组件要解决的问题的反面。
+             </param>
+             <param name="Summary">悬停说明；为空时按 id 提示。</param>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraRowAction.#ctor(System.String,System.String,System.Boolean,System.Boolean,System.String)">
+             <summary>
+             表格的一条行操作（REQ-UI-011）。
+            
+             一条声明同时供两个出口使用：行内按钮与右键菜单。这不是两个组件，
+             而是同一件事的两种到达方式——把它们拆成两份声明，参数与可用条件迟早只在其中一份里被改。
+            
+             与页面里的按钮一样，落点是**动作 id**，不是指令名：指令改名由模块自己的
+             <c>&lt;域&gt;.ui.actions</c> 吸收，表格这边一个字不动（REQ-UI-009）。
+             </summary>
+             <param name="Id">动作 id；点击时由 <c>ActionRegistry</c> 现取声明。</param>
+             <param name="Title">按钮与菜单项上的文字。</param>
+             <param name="Danger">危险动作：行内按钮转危险色，菜单项同样。</param>
+             <param name="Inline">
+             是否在行内也放一个按钮。false 表示只进右键菜单——行操作多于两三条时，
+             全塞进行内会把数据列挤没，那正是本组件要解决的问题的反面。
+             </param>
+             <param name="Summary">悬停说明；为空时按 id 提示。</param>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowAction.Id">
+            <summary>动作 id；点击时由 <c>ActionRegistry</c> 现取声明。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowAction.Title">
+            <summary>按钮与菜单项上的文字。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowAction.Danger">
+            <summary>危险动作：行内按钮转危险色，菜单项同样。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowAction.Inline">
+            <summary>
+            是否在行内也放一个按钮。false 表示只进右键菜单——行操作多于两三条时，
+            全塞进行内会把数据列挤没，那正是本组件要解决的问题的反面。
+            </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowAction.Summary">
+            <summary>悬停说明；为空时按 id 提示。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Table.AuroraRowActionEventArgs">
+            <summary>行操作被触发：带上被操作的那一行。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraRowActionEventArgs.#ctor(HistoryAurora.Shell.Table.AuroraRowAction,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>行操作被触发：带上被操作的那一行。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraRowActionEventArgs.Row">
+            <summary>被操作的行。**总是**触发时那一行，与"当前选中行"无关——
+            行内按钮点的是它所在的行，右键菜单点的是指针底下那一行。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Table.AuroraTable">
+             <summary>
+             Aurora 表格组件（REQ-UI-007）。**全仓唯一的表格实现**：任何要画表的地方都用它，
+             不再各自拼 <c>ListView</c> + <c>GridView</c>。
+            
+             分工只有一条线：
+             <list type="bullet">
+               <item><b>宿主给什么</b>：一份行数组，外加可选的列声明（标题、取值键、列宽），
+                     以及可选的行操作声明（<see cref="T:HistoryAurora.Shell.Table.AuroraRowAction"/>）。
+                     行数与列数都从数据本身得出，不另传计数。</item>
+               <item><b>组件定什么</b>：颜色、圆角、行高、字号、表头、分隔线、悬停与选中态、
+                     空态文案、滚动与省略，以及行操作长成按钮还是菜单。这些**没有对外的入口**——
+                     不是"默认值可覆盖"，是根本传不进来。</item>
+             </list>
+            
+             为什么把外观封死：此前每个页面各自组装表格，字号行高各写一遍，改一次主题要逐页对齐，
+             而漏掉的那一页在浅色下看不出来、深色下才露馅。把外观收进组件后，
+             "只有这一页长得不一样"这种缺陷在结构上就不成立了。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Table.AuroraTable.MinStarWidth">
+            <summary>星号列的下限宽度：再窄也要看得见表头文字，否则列会缩成一条缝。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Table.AuroraTable.ScrollAllowance">
+            <summary>给纵向滚动条留出的余量，避免星号列把内容顶出可视区后又长出横向滚动条。</summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Table.AuroraTable._menuRow">
+            <summary>右键按下时命中的那一行；空白处按下则为 null，菜单随之不弹。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.SelectedRow">
+            <summary>当前选中行；无选中时为 null。列里没有的键不会出现在这里。</summary>
+        </member>
+        <member name="E:HistoryAurora.Shell.Table.AuroraTable.SelectionChanged">
+            <summary>选中行变化。<see cref="P:HistoryAurora.Shell.Table.AuroraTable.SelectedRow"/> 已经是新值。</summary>
+        </member>
+        <member name="E:HistoryAurora.Shell.Table.AuroraTable.RowActionInvoked">
+            <summary>行内按钮或右键菜单被点。事件里带着被操作的**那一行**，不必回头读选中态。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.SelectedIndex">
+            <summary>选中行的序号；-1 表示无选中。可写，供程序驱动选择。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.EmptyText">
+            <summary>行数为 0 时显示的文案。这是空态**唯一**的可调项。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.Data">
+            <summary>当前数据。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.RowCount">
+            <summary>行数，等于 <c>Data.RowCount</c>；供测试与状态栏读取。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.ColumnCount">
+            <summary>列数，等于 <c>Data.ColumnCount</c>。行操作列不计入——它不是数据。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTable.RowActions">
+            <summary>当前的行操作声明。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.Inspect">
+            <summary>
+            门禁用：列头文字与右键菜单。外观归组件、不对外开放，但"行操作真的出现了两个出口"
+            这条必须能被断言——否则它只能靠肉眼在真机上看，而那正是这一轮在消灭的验证方式。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.SetData(HistoryAurora.Shell.Table.AuroraTableData)">
+            <summary>换一份数据并重建列。传 null 等同清空。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.SetRows(System.Collections.Generic.IReadOnlyList{System.Collections.Generic.IReadOnlyDictionary{System.String,System.String}})">
+            <summary>只给行、列从数据推断。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.SetRowActions(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Table.AuroraRowAction})">
+            <summary>
+            声明行操作（REQ-UI-011）。同一份声明出两个口：
+            <see cref="P:HistoryAurora.Shell.Table.AuroraRowAction.Inline"/> 为 true 的进行内按钮列，全部动作都进右键菜单。
+            传 null 或空表清空——清空后右键不再弹菜单，而不是弹一个空菜单。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.CellTemplate(System.String)">
+            <summary>
+            单元格模板。不用 <c>DisplayMemberBinding</c>：那条路径下单元格文字继承行容器的字体，
+            组件就管不住字号与省略行为了，而"管住外观"正是本组件存在的理由。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.RowActionTemplate(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Table.AuroraRowAction})">
+            <summary>
+            行内按钮的单元格模板。按钮的 <c>DataContext</c> 由行继承而来，
+            因此点击时不必回头问"当前选中的是哪一行"——那正是 1.6.0 里
+            "先选行、再下去点按钮"的来源。动作 id 挂在 <c>Tag</c> 上，一个处理器认所有按钮。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.OnRowRightButtonDown(System.Object,System.Windows.Input.MouseButtonEventArgs)">
+            <summary>
+            右键先把指针底下那一行选中，再让菜单弹出来。
+            不选中的话菜单看起来作用于"上一次选的行"，而那一行可能根本不在视野里。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.OnRowContextMenuOpening(System.Object,System.Windows.Controls.ContextMenuEventArgs)">
+            <summary>空白处右键不弹菜单：弹一个"点了什么都不会发生"的菜单比不弹更费解。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.Fire(System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>供测试与键盘路径复用：按 id 触发某一行的动作。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.InlineWidth(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Table.AuroraRowAction})">
+            <summary>行内按钮列的宽度按标题估算：中日韩字符按 14px，其余按 8px，另加边框与间距。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.BuildRows(HistoryAurora.Shell.Table.AuroraTableData)">
+            <summary>
+            行按列声明补齐：缺的键填空串。
+            不补齐的话字典索引器会抛 <c>KeyNotFoundException</c>，WPF 把它吞成一条绑定错误，
+            表现为"这一格莫名其妙是空的"，而输出窗口以外看不到任何线索。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTable.ApplyStarWidths">
+            <summary>
+            星号列按剩余宽度均分。<c>GridView</c> 没有星号列的概念，只能自己算：
+            可用宽度减去定宽与自适应列的实际宽度，余下的平分给星号列。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Table.AuroraTableColumn">
+            <summary>
+            一列的声明。**这是宿主唯一能决定的表格外观**：标题、取值键与列宽。
+            颜色、圆角、行高、字号、分隔线、选中态全部由 <see cref="T:HistoryAurora.Shell.Table.AuroraTable"/> 自己决定
+            （REQ-UI-007）——宿主传不进来，也不该传。
+            </summary>
+            <param name="Key">取值键，对应行字典里的键名。</param>
+            <param name="Title">表头文字。</param>
+            <param name="Width">
+            像素宽；<c>"*"</c> 表示占满剩余宽度（可多列共享）；<c>null</c> 表示按内容自适应。
+            解析不出数字时按自适应处理，不抛——一列宽度写错不该让整张表消失。
+            </param>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTableColumn.#ctor(System.String,System.String,System.String)">
+            <summary>
+            一列的声明。**这是宿主唯一能决定的表格外观**：标题、取值键与列宽。
+            颜色、圆角、行高、字号、分隔线、选中态全部由 <see cref="T:HistoryAurora.Shell.Table.AuroraTable"/> 自己决定
+            （REQ-UI-007）——宿主传不进来，也不该传。
+            </summary>
+            <param name="Key">取值键，对应行字典里的键名。</param>
+            <param name="Title">表头文字。</param>
+            <param name="Width">
+            像素宽；<c>"*"</c> 表示占满剩余宽度（可多列共享）；<c>null</c> 表示按内容自适应。
+            解析不出数字时按自适应处理，不抛——一列宽度写错不该让整张表消失。
+            </param>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTableColumn.Key">
+            <summary>取值键，对应行字典里的键名。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTableColumn.Title">
+            <summary>表头文字。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTableColumn.Width">
+            <summary>
+            像素宽；<c>"*"</c> 表示占满剩余宽度（可多列共享）；<c>null</c> 表示按内容自适应。
+            解析不出数字时按自适应处理，不抛——一列宽度写错不该让整张表消失。
+            </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Table.AuroraTableColumn.Star">
+            <summary>占满剩余宽度的记号。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Table.AuroraTableColumn.FixedWidth">
+            <summary>固定像素宽；未声明、非法或为 <c>*</c> 时返回 null（按内容自适应或占满剩余）。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Table.AuroraTableData">
+            <summary>
+            表格的全部输入：列声明 + 行数组。行是字符串字典，**行数与列数都由数据自己决定**，
+            调用方不另外传计数——两处计数一旦能不一致，就一定会不一致。
+            </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Table.AuroraTableData.Empty">
+            <summary>没有列也没有行；用于清空而不是把 null 传进组件。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTableData.Create(System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Table.AuroraTableColumn},System.Collections.Generic.IReadOnlyList{System.Collections.Generic.IReadOnlyDictionary{System.String,System.String}})">
+            <summary>列声明齐全时直接组装。列为空则退回 <see cref="M:HistoryAurora.Shell.Table.AuroraTableData.FromRows(System.Collections.Generic.IReadOnlyList{System.Collections.Generic.IReadOnlyDictionary{System.String,System.String}})"/> 的推断。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTableData.FromRows(System.Collections.Generic.IReadOnlyList{System.Collections.Generic.IReadOnlyDictionary{System.String,System.String}})">
+            <summary>
+            只给行、不给列：列**从数据推断**——按各行键的首次出现顺序取并集，标题即键名。
+            「根据数据提供行列数」正是这条：模块给什么就画什么，不必再维护一份列清单。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Table.AuroraTableData.FromItems``1(System.Collections.Generic.IEnumerable{``0},System.ValueTuple{System.String,System.String,System.Func{``0,System.String}}[])">
+            <summary>
+            从强类型集合投影。列用委托取值而不是反射：反射的列顺序依赖成员声明顺序，
+            改一次字段顺序就悄悄换了列序，编译期毫无提示。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Themes.AuroraComponentResources">
+             <summary>
+             让一个组件在**任何宿主容器里**都能解析到 `Aurora.*` 具名样式。
+            
+             为什么需要这一步：具名样式住在 `AuroraControls.xaml`，而它只被
+             `ShellWindow.xaml` 与几个视图显式合并。AvalonDock 的浮动窗口是独立 `Window`，
+             拿到的是 `AuroraTheme.xaml`（令牌 + 停靠样式）与主题切换时补进去的令牌字典——
+             **里面没有控件字典**。组件被拖进浮动窗口后，`DynamicResource Aurora.Table.Row`
+             找不到键，而 WPF 对此**不抛异常**，只是不套用——表现为"只有这一页长得不一样"，
+             且浅色下几乎看不出来。
+            
+             这与 DEC-009 给弹窗定的规矩是同一条：**能离开主窗体的东西，自带字典**。
+             令牌不在这里合并——令牌随主题切换，仍应从容器（主窗体或浮动窗口）继承，
+             在组件上钉死一份反而会让它切不动主题。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Themes.AuroraComponentResources.Ensure(System.Windows.FrameworkElement)">
+            <summary>
+            把控件字典并进元素自己的资源。幂等：重复调用不会叠加。
+            <c>ResourceDictionary.Source</c> 相同的字典由 WPF 缓存复用，
+            因此每个组件实例并不会各自解析一遍那一千多行。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Themes.AuroraTheme">
+            <summary>
+            Shell 统一主题(§14.2 清单 7 主题挂钩):
+            以 VS2013 浅色为基底,叠加标签条置顶等 Shell 侧改造。
+            深色主题(S-04,P2)将来在此处扩展切换。
+            通过 Theme 机制下发可确保浮动窗口同样套用改造样式。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Views.CommandCatalogView">
+            <summary>命令集的行操作（REQ-UI-011）：一份声明，行内按钮与右键菜单两个出口。</summary>
+             <summary>
+             命令集（REQ-UI-014）。全部已注册指令的目录：搜、筛、看详情、填进控制台。
+            
+             这一页曾经由 HistoryMercury 的命令工作台挂上来，宿主 5.0 拆掉界面 SDK 之后
+             **整页消失**，连带控制台按 Tab 呼出目录也变成一条报错。它现在由 Aurora 自建：
+             目录是界面的基础设施，不能挂在某个模块在不在场上。
+            
+             页面自己不画表——表格、行操作、补全输入框都用组件库里的那一份（REQ-UI-007/011/013）。
+             </summary>
+        </member>
+        <member name="F:HistoryAurora.Shell.Views.CommandCatalogView.NameKey">
+            <summary>行里第一列是指令名，第三列是只读标记（列键由 FromItems 按顺序生成）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.CommandCatalogView.Run(System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>
+            只读指令直接跑；其余一律只填进输入框。
+            在目录里一键执行一条会改东西的指令——而且往往是在"我只是想看看它干什么"的时候——
+            是这一页最容易出事故的地方。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Views.CommandDetailView">
+             <summary>
+             指令详情（REQ-UI-014）。命令集选中哪条，这里就展开哪条：说明、标志、示例与参数表。
+            
+             与命令集是同一轮找回来的：宿主 5.0 之后这两页一起消失，
+             而"这条指令收什么参数、必填哪个、允许值有哪些"在控制台以外就无处可查了。
+            
+             联动经 <see cref="T:HistoryVulcan.Core.Commands.CommandSelectionState"/> —— 进程内共享的一个字符串，
+             只传指令名。传对象的话，两页各自持有的副本会在热重载后不一致。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.CommandDetailView.Describe(HistoryVulcan.Services.Commands.CommandParameterInfo)">
+            <summary>允许值并进说明列：它是"这个参数能填什么"的一部分，不该另占一列。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.ModuleCatalogReader.LoadModulesAsync(HistoryVulcan.Core.Commands.CommandBus,System.Threading.CancellationToken)">
+            <summary>
+            只读取模块清单供模块管理页使用。模块页不依赖 vulcan.command.list，避免命令目录修订期间
+            因计数短暂不一致而隐藏已经成功装载的模块。
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Views.ModulesView">
+            <summary>
+            模块管理页(V2.1.1):已装载模块清单。
+            数据经 vulcan.module.list 消费(Data = ModuleMeta 列表);动作按钮全部经总线
+            (vulcan.module.reload / vulcan.module.install / vulcan.module.open)。命令详情统一由命令集页面提供。
+            </summary>
+            <summary>
+            ModulesView
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Views.ModulesView.ModuleRow">
+            <summary>
+            <paramref name="DomainCommandCount"/> 是**该域当前注册的指令总数**，不是本模块经模块
+            路径注册的条数。二者对四个业务模块相等，对 HistoryAurora 却差得很远：Aurora 是应用，
+            它的 40 条 aurora.* 由应用进程自持并上报（来源 frontend:*），经模块路径注册的是 0 条
+            （DEC-007，ModuleInfo.MainClassType = null）。列里显示 0 会让人以为它坏了。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.ModulesView.ModuleRow.#ctor(System.String,System.String,System.Boolean,System.Int32,System.String,System.String)">
+            <summary>
+            <paramref name="DomainCommandCount"/> 是**该域当前注册的指令总数**，不是本模块经模块
+            路径注册的条数。二者对四个业务模块相等，对 HistoryAurora 却差得很远：Aurora 是应用，
+            它的 40 条 aurora.* 由应用进程自持并上报（来源 frontend:*），经模块路径注册的是 0 条
+            （DEC-007，ModuleInfo.MainClassType = null）。列里显示 0 会让人以为它坏了。
+            </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.ModulesView.DomainCommandCount(HistoryVulcan.Core.Commands.CommandRegistry,System.String)">
+            <summary>按域统计当前注册表里的指令条数；域名取自模块名（History 前缀剥离）。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.ModulesView.DomainOf(HistoryVulcan.Core.Commands.CommandDescriptor)">
+            <summary>描述符未声明域时按指令名首段兜底，与注册表的归一化口径一致。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Views.ModulesView.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Widgets.AuroraFlyout">
+             <summary>
+             弹出层（REQ-UI-012）：一个按钮，点开是一块浮起来的内容，点别处收回。
+            
+             为什么要有它：低频编辑器此前只能做成常驻面板，于是三五个输入框长期占着页面纵向空间，
+             而它一周也用不到一次（见 b-Office/history/前端组件缺失需求书 C3）。
+            
+             内容**仍然是面板那三种小组件**，不另立一套声明——弹出层改的是"什么时候占版面"，
+             不是"能放什么"。
+             </summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Widgets.AuroraGridPanel">
+             <summary>
+             响应式栅格（REQ-UI-015）：按可用宽度决定放几列，放不下就自动少一列。
+            
+             为什么要有它：此前只有 <c>stack</c>，列宽写死。窗口窄到 720px 以下时旧页面会收起
+             权重/点击/最近打开三列，而描述化之后这条做不到，只能横向溢出
+             （见 b-Office/history/前端组件缺失需求书 C5）。
+            
+             列数**不接受声明**，只接受"一列至少多宽"。声明列数的话，窄窗口下的溢出会原样回来，
+             而那正是这个组件要解决的问题。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Widgets.AuroraGridPanel.MinColumnWidth">
+            <summary>一列的下限宽度。可用宽度不够两列时就只排一列。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Widgets.AuroraGridPanel.Gap">
+            <summary>列与行之间的间距。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Widgets.AuroraGridPanel.Columns">
+            <summary>当前列数，供测试断言"窄了就收列"这条行为。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Widgets.AuroraSuggestBox">
+             <summary>
+             带候选的输入框（REQ-UI-013）。
+            
+             为什么要有它：加一条常驻指令时，指令全名只能手打，打错要等到执行时才知道
+             （见 b-Office/history/前端组件缺失需求书 C4）。候选来自与控制台补全**同一个**会话，
+             因此"控制台里补得出来、面板里补不出来"这种不一致不会发生。
+            
+             组件只管两件事：什么时候弹、弹出来长什么样。取候选的口径由调用方注入。
+             </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Widgets.AuroraSuggestBox.Text">
+            <summary>输入框里的文字。程序回写时不触发候选弹出——那会在填值的一瞬间挡住页面。</summary>
+        </member>
+        <member name="E:HistoryAurora.Shell.Widgets.AuroraSuggestBox.TextChanged">
+            <summary>文字变化（含候选被接受）。</summary>
+        </member>
+        <member name="E:HistoryAurora.Shell.Widgets.AuroraSuggestBox.Submitted">
+            <summary>候选未展开时按下回车。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Widgets.AuroraSuggestBox.CandidateTemplate">
+            <summary>候选行：左边是要插入的文本，右边是说明。说明用次级色，不与正文抢注意力。</summary>
+        </member>
+        <member name="T:XamlGeneratedNamespace.GeneratedInternalTypeHelper">
+            <summary>
+            GeneratedInternalTypeHelper
+            </summary>
+        </member>
+        <member name="M:XamlGeneratedNamespace.GeneratedInternalTypeHelper.CreateInstance(System.Type,System.Globalization.CultureInfo)">
+            <summary>
+            CreateInstance
+            </summary>
+        </member>
+        <member name="M:XamlGeneratedNamespace.GeneratedInternalTypeHelper.GetPropertyValue(System.Reflection.PropertyInfo,System.Object,System.Globalization.CultureInfo)">
+            <summary>
+            GetPropertyValue
+            </summary>
+        </member>
+        <member name="M:XamlGeneratedNamespace.GeneratedInternalTypeHelper.SetPropertyValue(System.Reflection.PropertyInfo,System.Object,System.Object,System.Globalization.CultureInfo)">
+            <summary>
+            SetPropertyValue
+            </summary>
+        </member>
+        <member name="M:XamlGeneratedNamespace.GeneratedInternalTypeHelper.CreateDelegate(System.Type,System.Object,System.String)">
+            <summary>
+            CreateDelegate
+            </summary>
+        </member>
+        <member name="M:XamlGeneratedNamespace.GeneratedInternalTypeHelper.AddEventHandler(System.Reflection.EventInfo,System.Object,System.Delegate)">
+            <summary>
+            AddEventHandler
+            </summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.PlaceholderPattern_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the PlaceholderPattern method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.PlaceholderPattern_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Utilities">
+            <summary>Helper methods used by generated <see cref="T:System.Text.RegularExpressions.Regex"/>-derived implementations.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout">
+            <summary>Default timeout value set in <see cref="T:System.AppContext"/>, or <see cref="F:System.Text.RegularExpressions.Regex.InfiniteMatchTimeout"/> if none was set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_hasTimeout">
+            <summary>Whether <see cref="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout"/> is non-infinite.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsWordChar(System.Char)">
+            <summary>Determines whether the character is part of the [\w] set.</summary>
+        </member>
+    </members>
+</doc>
