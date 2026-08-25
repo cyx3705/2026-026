@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -17,6 +17,7 @@ using HistoryAurora.Shell.Modules;
 using HistoryAurora.Shell.Console;
 using HistoryAurora.Shell.Themes;
 using AvalonDock.Controls;
+using AvalonDock.Themes;
 using AvalonDock.Layout;
 
 namespace HistoryAurora.Shell;
@@ -107,7 +108,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // AuroraTokens.xaml(浅色)，而 SwapTokens 是把令牌追加到 MergedDictionaries 末尾、
         // 且幂等不重排。先换令牌再赋值 Theme 的话，令牌停在索引 0、主题字典排到它后面，
         // WPF 后者胜出 —— 表现为「设置里是深色，启动却是浅色，手动再切一次才对」。
-        DockManager.Theme = new AuroraTheme();
+        // 按**实例**下发,不让 AvalonDock 按 URI 重新解析(REQ-UI-029)。
+        // 覆盖窗(拖动浮窗时那组蓝色方位指示)是独立 Window,它构造时会照着
+        // Theme.GetResourceUri() 再解析一遍字典;那条路在宿主里不成立,失败又不抛,
+        // 于是覆盖窗带着 0 份字典活下来、一个像素都不画。DictionaryTheme 直接传实例。
+        DockManager.Theme = new AuroraTheme(
+            (ResourceDictionary)Resources["AuroraDockTheme"]);
 
         // UI-08:上次选择的主题先于任何界面成型生效,避免启动瞬间闪一下浅色
         ApplyTheme(settings.Get(ThemeSettingsKey) ?? ThemeLight, persist: false);

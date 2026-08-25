@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -16,6 +16,7 @@ using HistoryAurora.Shell.Console;
 using HistoryAurora.Shell.Themes;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
+using AvalonDock.Themes;
 
 namespace HistoryAurora.Shell;
 
@@ -88,8 +89,23 @@ internal partial class ShellWindow
 
     // ---------------------------------------------------------------- 窗格样式
 
+    /// <summary>
+    /// 取主题字典供窗格样式查基底键用。
+    ///
+    /// 主题按**实例**下发（REQ-UI-029），这里直接拿那一份，不再按 URI 重新解析。
+    /// "按 URI 重解析"仓里原本有两处：AvalonDock 给覆盖窗的那处，和这里。前者让覆盖窗
+    /// 拿不到画刷、蓝色方位指示一个像素都不画；后者一旦失效，窗格样式整个退回
+    /// AvalonDock 默认外观——页头布局跟着变，连按钮位置都不一样了。改主题下发方式时
+    /// 只改了前一处，后一处当场挂掉 9 条窗格契约测试。**同一个毛病要一次找全。**
+    /// </summary>
     private void LoadThemeResources()
     {
+        if (DockManager.Theme is DictionaryTheme { ThemeResourceDictionary: { } dictionary })
+        {
+            _themeResources = dictionary;
+            return;
+        }
+
         try
         {
             _themeResources = new ResourceDictionary { Source = DockManager.Theme.GetResourceUri() };
