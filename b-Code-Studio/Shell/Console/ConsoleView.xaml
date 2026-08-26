@@ -44,10 +44,12 @@
                 <widgets:AuroraOptionBox x:Name="LevelFilter" Width="76"
                                          Style="{StaticResource Aurora.OptionBox.Flat}"
                                          SelectionChanged="OnLevelChanged" />
+                <Border Style="{StaticResource Aurora.Segment.Divider}" />
                 <TextBlock Text="域" Style="{StaticResource Aurora.Segment.Label}" />
                 <widgets:AuroraOptionBox x:Name="DomainFilter" Width="112"
                                          Style="{StaticResource Aurora.OptionBox.Flat}"
                                          SelectionChanged="OnSourceChanged" />
+                <Border Style="{StaticResource Aurora.Segment.Divider}" />
                 <TextBlock Text="类" Style="{StaticResource Aurora.Segment.Label}" />
                 <widgets:AuroraOptionBox x:Name="ClassFilter" Width="96"
                                          Style="{StaticResource Aurora.OptionBox.Flat}"

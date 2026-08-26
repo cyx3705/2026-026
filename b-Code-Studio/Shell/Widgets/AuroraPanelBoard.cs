@@ -33,6 +33,19 @@ internal sealed class AuroraPanelBoard : Panel
 
     private double _columnWidth;
 
+    /// <summary>排完版后的统一列宽。分隔线画在列与列之间的空档正中。</summary>
+    internal double ColumnWidth => _columnWidth;
+
+    /// <summary>排完版后的行数。</summary>
+    internal int RowCount => _rows.Count;
+
+    /// <summary>排完版后每一行的列数。</summary>
+    internal IReadOnlyList<int> RowColumnCounts => _rows.Select(row => row.Items.Count).ToList();
+
+    /// <summary>排完版后每一行的高度。</summary>
+    internal IReadOnlyList<double> RowHeights => _rows.Select(row => row.Height).ToList();
+
+
     protected override Size MeasureOverride(Size availableSize)
     {
         _rows.Clear();

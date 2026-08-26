@@ -106,6 +106,36 @@ public sealed class ComponentGalleryContractTests
         Assert.Contains("aurora.preview.echo", published);
     }
 
+    /// <summary>
+    /// 本机有、宿主没有的命令必须就地执行。
+    ///
+    /// 这是 1.8.9～1.8.12 连查四轮的那条实测故障：`aurora.preview.rows` / `.graph`
+    /// 在界面注册表里明明在，一执行却报 `✗ 未知指令`——因为界面总线默认把命令发给宿主，
+    /// 而它们没能进宿主注册表。为什么没进去是宿主那一侧的事；
+    /// **不管为什么，把一条本机能跑的命令发出去换回「不认识」都是错的。**
+    /// </summary>
+    [Fact]
+    public void CommandsTheHostDoesNotHaveStayLocal()
+    {
+        var local = new CommandRegistry();
+        ComponentGalleryCommands.Register(local);
+        var host = new CommandRegistry();
+
+        Assert.False(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
+            local, host, "aurora.preview.graph", "UI"));
+        Assert.False(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
+            local, host, "aurora.preview.rows", "UI"));
+
+        // 宿主也有的时候维持原状：仍旧发过去，由宿主作为唯一目录。
+        ComponentGalleryCommands.Register(host);
+        Assert.True(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
+            local, host, "aurora.preview.graph", "UI"));
+
+        // 本机压根没有的仍旧发给宿主，否则模块命令就没人接了。
+        Assert.True(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
+            local, host, "janus.branch.list", "UI"));
+    }
+
     /// <summary>登记两遍不得抛：页面每次打开都会调一次。</summary>
     [Fact]
     public void RegisteringTheGalleryCommandsTwiceIsANoOp()

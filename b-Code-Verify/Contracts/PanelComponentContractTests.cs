@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using HistoryAurora.Shell.Widgets;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Panels;
@@ -260,6 +261,101 @@ public sealed class PanelComponentContractTests
                 "控制台过滤器工具条没有用面板底板那份样式——同一种东西又变成了两套边距");
             Assert.Null(strayCopy);
         });
+    }
+
+    /// <summary>
+    /// 分隔线必须**真的画在屏幕上**。
+    ///
+    /// 判据是渲染出来的像素，不是"我设了 Style / 加了子元素"。
+    /// 本轮之前吃过两次亏：一次是画刷没解析到、元素在但一个像素不画；
+    /// 一次是分隔线高度被算成 0。两次在"结构"上都挑不出毛病。
+    /// </summary>
+    [Fact]
+    public void HorizontalPanelActuallyPaintsItsSeparators()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            var definition = Valid();
+            definition.Orientation = "horizontal";
+
+            var view = new PanelView(definition, bus, log, actions);
+            var host = new Window
+            {
+                Content = view,
+                Width = 620,
+                Height = 240,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Background = Brushes.White,
+            };
+            host.Show();
+            UiTestHost.Pump();
+
+            var surface = Assert.IsType<Border>(view.Content);
+            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
+
+            var before = string.Join("/", board.RowColumnCounts);
+            AssertSeparatorsPainted(board, "初次排版");
+
+            // 收窄后列数必须变，线也要跟着换位置重画。
+            // OnRender 只在**视觉**失效时跑，排版重算不会自动带上它——
+            // 不补一次重画，窗口一改宽度线就留在老位置上。
+            host.Width = 300;
+            UiTestHost.Pump();
+            board.UpdateLayout();
+            UiTestHost.Pump();
+
+            var after = string.Join("/", board.RowColumnCounts);
+            Assert.NotEqual(before, after);
+            AssertSeparatorsPainted(board, "收窄重排后");
+
+            host.Close();
+        });
+    }
+
+    /// <summary>数排版面空档里的像素：那里只可能是分隔线画出来的。</summary>
+    private static void AssertSeparatorsPainted(AuroraPanelBoard board, string stage)
+    {
+        board.UpdateLayout();
+
+        // RenderTargetBitmap.Render 会**保留被渲染元素相对父级的偏移**：排版面被底板的
+        // Padding 与自身 Margin 推开了几个像素，不把偏移算进去就会整体错位，
+        // 按理论坐标数像素全部落空——这里踩过一次，误判成"线没画"。
+        var offset = VisualTreeHelper.GetOffset(board);
+        var width = (int)Math.Ceiling(board.ActualWidth + offset.X);
+        var height = (int)Math.Ceiling(board.ActualHeight + offset.Y);
+        Assert.True(width > 0 && height > 0, $"{stage}：排版面没有尺寸 {width}x{height}");
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(board);
+
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        // 只看列与列之间的空档。控件都被安排在自己那一列里，画不到空档上，
+        // 所以空档里的不透明像素只可能是分隔线——"整块有像素"是不够的判据，
+        // 子控件的文字也会让它通过。
+        var gutter = (int)Math.Round(board.ColumnWidth + (board.ColumnGap / 2) + offset.X);
+        Assert.True(gutter < width, $"{stage}：空档位置落在画面之外 {gutter} >= {width}");
+
+        var painted = 0;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = Math.Max(0, gutter - 1); x <= Math.Min(width - 1, gutter + 1); x++)
+            {
+                if (pixels[(y * stride) + (x * 4) + 3] != 0)
+                    painted++;
+            }
+        }
+
+        Assert.True(
+            painted > 0,
+            $"{stage}：列与列之间一条分隔线都没画出来（列宽={board.ColumnWidth} "
+            + $"行列={string.Join("/", board.RowColumnCounts)} "
+            + $"行高={string.Join("/", board.RowHeights)} 画面={width}x{height} 空档x={gutter}）");
     }
 
     /// <summary>面板不得出现滚动条：它只是一块面板，内容多了往下长，不往里滚。</summary>

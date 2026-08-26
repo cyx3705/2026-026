@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 using HistoryAurora.Shell;
 using HistoryAurora.Shell.Docking;
@@ -252,26 +252,7 @@ internal static class AuroraShellHost
     {
         window.Commands.RemoteExecutor = context.Bus.ExecuteAsync;
         window.Commands.ShouldUseRemoteCommand = (text, source) =>
-        {
-            // 宿主中继回来的命令就地执行，否则会在两条总线之间来回弹。
-            if (source.Equals("Service:Relay", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            try
-            {
-                var parsed = CommandParser.Parse(text.Trim());
-
-                // 本机已登记且需要 UI 线程的命令留在界面侧：宿主那边没有窗口实例。
-                if (window.Commands.Registry.TryGet(parsed.Name, out var descriptor)
-                    && descriptor.RequiresUiThread)
-                    return false;
-            }
-            catch (CommandSyntaxException)
-            {
-            }
-
-            return true;
-        };
+            ShouldUseRemote(window.Commands.Registry, context.Bus.Registry, text, source);
 
         // 反向：宿主收到界面命令时打回来。进程内直接指向界面总线，不经网关。
         context.Bus.FrontendExecutor = (name, source, cancellation) =>
@@ -282,6 +263,53 @@ internal static class AuroraShellHost
         context.Bus.ConfirmationRouter = (_, prompt) => uiConfirm.Confirm(prompt);
 
         window.AttachHostBus(context.Bus);
+    }
+
+    /// <summary>
+    /// 这条命令该发给宿主，还是就地执行？
+    ///
+    /// 默认发给宿主：界面的命令在 Attach 时由 <see cref="PublishShellCommands"/> 抄进宿主
+    /// 注册表，宿主才是对外的单一目录。两个例外：
+    ///
+    /// <list type="number">
+    ///   <item>宿主中继回来的命令就地执行，否则会在两条总线之间来回弹。</item>
+    ///   <item><b>本机有、宿主没有的命令就地执行。</b>发过去只会换回一条「未知指令」——
+    ///         这是 1.8.9～1.8.12 连查四轮的那条实测故障：`aurora.preview.rows` /
+    ///         `.graph` 在界面注册表里明明在，一执行却报未知，因为它们没能进宿主注册表。
+    ///         为什么没进去是宿主那一侧的事；但**不管为什么，把一条本机能跑的命令
+    ///         发出去换回"不认识"都是错的**，所以判据改成看宿主到底有没有，
+    ///         而不是假定发布一定成功。</item>
+    /// </list>
+    ///
+    /// 需要 UI 线程的命令同样留在界面侧：宿主那边没有窗口实例。
+    /// </summary>
+    internal static bool ShouldUseRemote(
+        CommandRegistry local,
+        CommandRegistry host,
+        string text,
+        string source)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        ArgumentNullException.ThrowIfNull(host);
+
+        if (source.Equals("Service:Relay", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        try
+        {
+            var parsed = CommandParser.Parse(text.Trim());
+            if (!local.TryGet(parsed.Name, out var descriptor))
+                return true;
+
+            if (descriptor.RequiresUiThread)
+                return false;
+
+            return host.TryGet(parsed.Name, out _);
+        }
+        catch (CommandSyntaxException)
+        {
+            return true;
+        }
     }
 
     private static Task<CommandResult> DispatchFrontendCommand(
