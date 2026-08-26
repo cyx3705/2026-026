@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using HistoryAurora.Shell.Actions;
@@ -117,7 +117,9 @@ public sealed class PanelView : UserControl
             if (index == definition.Widgets.Count - 1)
                 continue;
 
-            var divider = new Border();
+            // 竖线要撑满这一行的高度。横向 StackPanel 里的子元素默认就是 Stretch，
+            // 但这里写死：分隔线的高度不该跟着某次改动里别人的对齐方式一起变。
+            var divider = new Border { VerticalAlignment = VerticalAlignment.Stretch };
             divider.SetResourceReference(StyleProperty, "Aurora.Panel.VerticalDivider");
             stack.Children.Add(divider);
         }

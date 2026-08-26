@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -140,31 +140,68 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private static bool IsRealPageTab(FrameworkElement element)
         => element is LayoutAnchorableTabItem or LayoutDocumentTabItem;
 
-    private static bool IsPaneHeaderSource(DependencyObject? source)
-        => FindAncestor<FrameworkElement>(source, element =>
-            Equals(element.Tag, "ShellPaneHeader") ||
-            Equals(element.Tag, "FocusedShellPaneHeader")) != null;
+    // ================================================================ 标题栏
+    //
+    // 以下三个判定**只在标题栏这一段可视树上生效**，向上走到标题栏容器为止。
+    // 页面内容里有什么控件，与这里无关，不得混进同一个谓词——
+    // 1.8.9 正是把两边合并成一条 `IsInteractive` 之后出的事：为了让页面里的
+    // AuroraOptionBox（继承 Selector）被认成可交互件，把判据从 ComboBox 放宽成
+    // Selector；而 AvalonDock 的窗格控件本身就是 TabControl，也就是 Selector，
+    // 于是标题栏上任何一点向上走都会撞见它，整条标题栏被判成「可交互」，
+    // 主窗口从此拖不动。边界必须在标题栏容器处断掉，而不是靠列举类型去躲。
 
-    private static bool IsInteractiveCommandControl(DependencyObject? source)
+    /// <summary>窗格模板里标题栏容器的两个标记(见 AuroraDocking.xaml)。</summary>
+    private static bool IsPaneHeaderTag(object? tag)
+        => Equals(tag, "ShellPaneHeader") || Equals(tag, "FocusedShellPaneHeader");
+
+    /// <summary>命中点落在标题栏容器内。落在页面内容里的一律不算。</summary>
+    private static bool IsPaneHeaderSource(DependencyObject? source)
+        => FindPaneHeader(source) != null;
+
+    private static FrameworkElement? FindPaneHeader(DependencyObject? source)
+        => FindAncestor<FrameworkElement>(source, element => IsPaneHeaderTag(element.Tag));
+
+    /// <summary>
+    /// 标题栏里那些「点击归控件自己」的东西：按钮、菜单、页签、输入框。
+    /// 命中其中之一就不该顺手把窗口拖走。
+    ///
+    /// 走到标题栏容器为止：越过它就是窗格本体，而窗格本体是 TabControl。
+    /// 没找到标题栏容器时按「不是标题栏」处理，交给 IsPaneHeaderSource 拦。
+    /// </summary>
+    private static bool IsInteractiveInPaneHeader(DependencyObject? source)
     {
         for (var current = source; current != null; current = GetParent(current))
         {
-            if (current is ButtonBase or MenuItem or TextBoxBase or Selector)
+            if (current is FrameworkElement element && IsPaneHeaderTag(element.Tag))
+                return false;
+
+            if (current is ButtonBase or MenuItem or TextBoxBase or ComboBox or
+                TabItem or LayoutAnchorableTabItem or LayoutDocumentTabItem)
+            {
                 return true;
+            }
         }
 
         return false;
     }
 
-    private static bool IsInteractive(DependencyObject? source)
+    // ================================================================ 页面内容
+    //
+    // 页面内容里的控件判定与标题栏完全分开。这里可以按需要列举页面用得上的
+    // 交互控件，加一种控件不会影响标题栏的拖动判定。
+
+    /// <summary>
+    /// 页面/页签上「点击归控件自己」的控件。
+    ///
+    /// 逐个列举而不是写 <c>Selector</c>：Selector 会把 TabControl、ListBox 一并框进来，
+    /// 而 AvalonDock 的窗格控件就是 TabControl，写宽一格就等于把整块页面判成可交互。
+    /// </summary>
+    private static bool IsInteractiveCommandControl(DependencyObject? source)
     {
         for (var current = source; current != null; current = GetParent(current))
         {
-            if (current is ButtonBase or MenuItem or TextBoxBase or Selector or TabItem or
-                LayoutAnchorableTabItem or LayoutDocumentTabItem)
-            {
+            if (current is ButtonBase or MenuItem or TextBoxBase or ComboBox or Widgets.AuroraOptionBox)
                 return true;
-            }
         }
 
         return false;

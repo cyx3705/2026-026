@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
@@ -16,7 +16,7 @@ internal sealed class ComponentGalleryView : UserControl
         ActionRegistry actions,
         AuroraCompletionProvider completions)
     {
-        var parsed = PageDescriptionReader.Read(ComponentGalleryDescription.Json, "HistoryPreview");
+        var parsed = PageDescriptionReader.Read(ComponentGalleryDescription.Json, ComponentGalleryCommands.Owner);
         if (!parsed.Ok)
             throw new InvalidOperationException("组件测试页描述无效: " + parsed.Error);
 
@@ -26,7 +26,7 @@ internal sealed class ComponentGalleryView : UserControl
             {
                 Bus = bus,
                 Log = log,
-                Owner = "HistoryPreview",
+                Owner = ComponentGalleryCommands.Owner,
                 Actions = actions,
                 Completions = completions,
             });
@@ -51,7 +51,7 @@ internal static class ComponentGalleryDescription
     public const string Json = """
         {
           "schemaVersion": 1,
-          "owner": "HistoryPreview",
+          "owner": "HistoryAurora",
           "pages": [
             {
               "id": "components",

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
@@ -198,6 +198,74 @@ public sealed class PanelComponentContractTests
                 Assert.NotNull(divider.OpacityMask);
             });
         });
+    }
+
+    /// <summary>
+    /// 页面描述里的 orientation 必须落到面板上。
+    ///
+    /// 1.8.9 的实测故障：<c>BuildPanel</c> 装 PanelDefinition 时漏抄了这一项。
+    /// 症状不是报错——面板照样画出来，只是横排变竖排，
+    /// 控件之间那条竖向渐隐分隔线一并消失，看上去像"分隔线没做"。
+    /// </summary>
+    [Fact]
+    public void PageLevelPanelKeepsTheDeclaredOrientationAndItsFadeSeparators()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+
+            var rendered = HistoryAurora.Shell.Pages.PageRenderer.Render(
+                PagePanel("horizontal"),
+                new HistoryAurora.Shell.Pages.PageRenderContext
+                {
+                    Bus = bus,
+                    Log = log,
+                    Owner = "HistoryDemo",
+                    Actions = actions,
+                });
+
+            var view = Assert.IsType<PanelView>(rendered.Root);
+            var surface = Assert.IsType<Border>(view.Content);
+            var scroll = Assert.IsType<ScrollViewer>(surface.Child);
+            var stack = Assert.IsType<StackPanel>(scroll.Content);
+
+            Assert.Equal(Orientation.Horizontal, stack.Orientation);
+            var dividers = stack.Children.OfType<Border>().ToList();
+            Assert.Equal(2, dividers.Count);
+            Assert.All(dividers, divider =>
+            {
+                Assert.Equal(1, divider.Width);
+                Assert.NotNull(divider.OpacityMask);
+                // 高度为 0 的线等于没有线，必须有兜底下限。
+                Assert.True(divider.MinHeight > 0, "竖向分隔线没有高度下限");
+            });
+        });
+    }
+
+    private static HistoryAurora.Shell.Pages.PageDescription PagePanel(string orientation)
+    {
+        var parsed = HistoryAurora.Shell.Pages.PageDescriptionReader.Read($$"""
+            {
+              "schemaVersion": 1,
+              "owner": "HistoryDemo",
+              "pages": [ {
+                "id": "demo", "title": "演示",
+                "content": {
+                  "type": "panel",
+                  "id": "demo-panel",
+                  "orientation": "{{orientation}}",
+                  "widgets": [
+                    { "kind": "text", "text": "一" },
+                    { "kind": "textbox", "id": "note", "label": "说明" },
+                    { "kind": "text", "text": "三" }
+                  ]
+                }
+              } ]
+            }
+            """, "HistoryDemo");
+        Assert.True(parsed.Ok, parsed.Error);
+        return parsed.Value!.Pages[0];
     }
 
     // ---------------------------------------------------------------- 装配

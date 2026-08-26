@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -325,6 +325,7 @@ public static class PageRenderer
         {
             Id = node.Id ?? "page-popup",
             Title = node.Text ?? "更多",
+            Orientation = node.Orientation ?? "vertical",
             Widgets = (node.Widgets ?? []).ToList(),
         };
 
@@ -356,6 +357,9 @@ public static class PageRenderer
         {
             Id = node.Id ?? "page-panel",
             Title = node.Text ?? "面板",
+            // 声明里的 orientation 必须传下去。漏传的症状不是报错而是"少了点东西"：
+            // 面板照样画出来，只是横排变竖排、控件之间那条渐隐分隔线一并消失。
+            Orientation = node.Orientation ?? "vertical",
             Widgets = (node.Widgets ?? []).ToList(),
         };
 

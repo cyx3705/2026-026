@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using HistoryAurora.Shell.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -36,11 +36,41 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
     private readonly Dictionary<string, ActionDeclaration> _actions =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Aurora 自己声明的动作。与模块拉来的那批分开存,原因有两条:
+    ///
+    /// 一是 <see cref="ReloadAsync"/> 每轮都 Clear 模块声明——本地声明跟着被清掉的话,
+    /// 任何一次模块重载都会让界面自带页面上的按钮集体变成「未声明的动作」。
+    /// 二是拉取协议按 <c>&lt;域&gt;.ui.actions</c> 反推 owner,而 Aurora 把自己排除在拉取之外
+    /// (见 <see cref="ModuleCommandProbe.SelfDomain"/>);界面自带的页面要声明动作,
+    /// 只能走这条明路,不能把自己伪装成一个模块域塞进拉取里。
+    /// </summary>
+    private readonly Dictionary<string, ActionDeclaration> _local =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly List<string> _broken = [];
 
     /// <summary>当前全部已声明动作，按 id 排序。</summary>
     public IReadOnlyList<ActionDeclaration> Actions
-        => _actions.Values.OrderBy(a => a.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        => _actions.Values
+            .Concat(_local.Values.Where(a => !_actions.ContainsKey(a.Id)))
+            .OrderBy(a => a.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// 登记一批由 Aurora 自己实现的动作(界面自带页面用)。幂等,重复调用按覆盖处理。
+    /// 模块声明优先:同 id 时以模块那份为准,本地这份只在模块没有声明时兜底。
+    /// </summary>
+    public void DeclareLocal(string owner, IEnumerable<ActionDeclaration> declarations)
+    {
+        ArgumentNullException.ThrowIfNull(declarations);
+
+        foreach (var action in declarations)
+        {
+            action.Owner = owner;
+            _local[action.Id] = action;
+        }
+    }
 
     /// <summary>
     /// 声明了、但其 <c>command</c> 在注册表里不存在的动作。
@@ -85,7 +115,7 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
     {
         if (string.IsNullOrWhiteSpace(id))
             return ActionBinding.Fail("按钮未声明 action");
-        if (!_actions.TryGetValue(id, out var action))
+        if (!_actions.TryGetValue(id, out var action) && !_local.TryGetValue(id, out action))
             return ActionBinding.Fail($"未声明的动作: {id}");
         return new ActionBinding(action, null);
     }

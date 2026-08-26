@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -104,9 +104,15 @@ internal partial class ShellWindow
         }
     }
 
-    /// <summary>Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。</summary>
+    /// <summary>
+    /// Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。
+    ///
+    /// 逐个列举取值控件,不写 <c>Selector</c>:Selector 连 TabControl 一起框进来,
+    /// 而焦点落在页签上是常态,那样 Esc 会在最该起作用的时候失效。
+    /// </summary>
     private static bool IsTextInputFocused()
-        => Keyboard.FocusedElement is TextBoxBase or Selector or PasswordBox;
+        => Keyboard.FocusedElement is TextBoxBase or ComboBox or PasswordBox
+            or Widgets.AuroraOptionBox;
 
     private static object? FindInDictionary(ResourceDictionary dict, object key)
     {

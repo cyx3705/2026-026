@@ -166,7 +166,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public void HandlePaneMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left ||
-            IsInteractive(e.OriginalSource as DependencyObject) ||
+            IsInteractiveInPaneHeader(e.OriginalSource as DependencyObject) ||
             sender is not FrameworkElement pane ||
             !IsPaneHeaderSource(e.OriginalSource as DependencyObject) ||
             !TryResolvePageId(pane, out var id))
@@ -195,7 +195,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public void HandleMainMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left ||
-            IsInteractive(e.OriginalSource as DependencyObject) ||
+            IsInteractiveInPaneHeader(e.OriginalSource as DependencyObject) ||
             sender is not FrameworkElement surface ||
             !IsPaneHeaderSource(e.OriginalSource as DependencyObject))
         {
