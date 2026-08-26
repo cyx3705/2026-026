@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
@@ -41,8 +41,10 @@ public sealed partial class PageComponentsContractTests
         // type:"table.rowactions" 一边判为已支持、一边渲染成缺件占位。
         Assert.Contains("table.rowactions", PageRenderer.SupportedCapabilities);
         Assert.Contains("menu", PageRenderer.SupportedCapabilities);
-        Assert.Contains("input.suggest", PageRenderer.SupportedCapabilities);
         Assert.DoesNotContain("table.rowactions", PageRenderer.SupportedComponents);
+
+        // input.suggest 随 input 节点一同退役：能力表里再留着，模块会以为还能申请。
+        Assert.DoesNotContain("input.suggest", PageRenderer.SupportedCapabilities);
     }
 
     [Fact]

@@ -33,6 +33,11 @@ public sealed class PageRenderContext
     /// 补全候选的来源（REQ-UI-013）。为 null 时声明了 <c>suggest</c> 的输入框
     /// 退回普通输入框并记一条 Warn——静默地少掉补全，正是"只有这一页不一样"的老形态。
     /// </summary>
+    /// <summary>
+    /// 补全会话。1.8.14 起页面这一层**没有节点消费它**——带补全的输入框随
+    /// <c>input</c> 节点一同退役（见 <see cref="PageRenderer.RetiredComponents"/>）。
+    /// 字段保留：控制面板日后要接补全时，取数口就在这里，调用方也已经在传了。
+    /// </summary>
     public AuroraCompletionProvider? Completions { get; init; }
 }
 
@@ -76,8 +81,26 @@ public static class PageRenderer
     public static readonly IReadOnlySet<string> SupportedComponents =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "stack", "text", "button", "table", "input", "select", "panel", "swimlane",
-            "grid", "popup",
+            "stack", "text", "table", "panel", "swimlane", "grid", "popup",
+        };
+
+    /// <summary>
+    /// 曾经是页面节点、现已退役的类型。
+    ///
+    /// 小型交互控件（按钮、输入框、下拉）**只能出现在控制面板里**：页面这一层只放
+    /// 容器、展示组件和复合组件。散落在页面各处的单个控件没有共同的排版依据，
+    /// 每加一个就要重新决定它跟谁对齐、跟谁分组。
+    ///
+    /// 退役与"缺件"是两回事，因此**不进** <see cref="RenderedPage.MissingComponents"/>：
+    /// 缺件会被 <c>ModulePageLoader</c> 自动记进组件申请台账，
+    /// 把退役类型也记进去等于让模块不断申请一个已经决定不给的东西。
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> RetiredComponents =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["button"] = "按钮",
+            ["input"] = "输入框",
+            ["select"] = "下拉框",
         };
 
     /// <summary>
@@ -92,7 +115,7 @@ public static class PageRenderer
     public static readonly IReadOnlySet<string> SupportedCapabilities =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "table.rowactions", "menu", "input.suggest",
+            "table.rowactions", "menu",
         };
 
     private static readonly JsonSerializerOptions RowOptions = new()
@@ -110,9 +133,6 @@ public static class PageRenderer
             ? Placeholder("content", state)
             : Build(page.Content, state);
 
-        // enabledWhen 依赖节点 id，必须等整棵树建完才能连线。
-        state.ApplyDeferredBindings();
-
         return new RenderedPage
         {
             Root = root,
@@ -121,20 +141,23 @@ public static class PageRenderer
     }
 
     private static FrameworkElement Build(PageNode node, RenderState state)
-        => (node.Type ?? "").ToLowerInvariant() switch
+    {
+        var type = (node.Type ?? "").ToLowerInvariant();
+        if (RetiredComponents.TryGetValue(type, out var label))
+            return Retired(type, label, state);
+
+        return type switch
         {
             "stack" => BuildStack(node, state),
             "text" => BuildText(node),
-            "button" => BuildButton(node, state),
             "table" => BuildTable(node, state),
-            "input" => BuildInput(node, state),
-            "select" => BuildSelect(node),
             "panel" => BuildPanel(node, state),
             "swimlane" => BuildSwimlane(node, state),
             "grid" => BuildGrid(node, state),
             "popup" => BuildPopup(node, state),
             _ => Placeholder(node.Type, state),
         };
+    }
 
     private static FrameworkElement BuildStack(PageNode node, RenderState state)
     {
@@ -175,38 +198,6 @@ public static class PageRenderer
             _ => "Aurora.Text.Body",
         });
         return text;
-    }
-
-    private static FrameworkElement BuildButton(PageNode node, RenderState state)
-    {
-        // 动作优先：绑动作 id 的按钮不会因为模块改指令名而失效（REQ-UI-009）。
-        if (node.Invoke?.Action is { Length: > 0 } actionId)
-        {
-            var binding = state.ResolveAction(actionId);
-            if (!binding.Ok)
-                return Unbound(binding.Error!, state);
-        }
-        else if (node.Invoke is { Command.Length: > 0 })
-        {
-            state.WarnRawCommand(node.Invoke.Command);
-        }
-
-        var button = new Button { Content = node.Text ?? "", HorizontalAlignment = HorizontalAlignment.Left };
-        button.SetResourceReference(FrameworkElement.StyleProperty, (node.Style ?? "").ToLowerInvariant() switch
-        {
-            "accent" => "Aurora.Button.Accent",
-            "ghost" => "Aurora.Button.Ghost",
-            "danger" => "Aurora.Button.Danger",
-            _ => "Aurora.Button.Base",
-        });
-
-        if (node.Invoke is { } invoke)
-            button.Click += (_, _) => state.Invoke(invoke);
-
-        if (node.EnabledWhen?.Selected is { Length: > 0 } requires)
-            state.RequireSelection(button, requires);
-
-        return button;
     }
 
     /// <summary>
@@ -276,23 +267,6 @@ public static class PageRenderer
         return stack;
     }
 
-    private static FrameworkElement BuildInput(PageNode node, RenderState state)
-    {
-        if (node.Suggest is { Length: > 0 } suggest)
-        {
-            if (state.Completions is { } completions)
-                return new AuroraSuggestBox(completions) { Text = node.Text ?? "" };
-
-            // 声明了补全却给不出候选：退回普通输入框可以用，但必须留痕，
-            // 否则"这台机器上补不出来"只会被当成手感问题。
-            state.WarnUnbound($"输入框声明了 suggest={suggest}，但当前没有补全会话，已退回普通输入框");
-        }
-
-        var box = new TextBox { Text = node.Text ?? "" };
-        box.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Segment.TextBox");
-        return box;
-    }
-
     /// <summary>响应式栅格：只声明"一列至少多宽"，列数由可用宽度算（REQ-UI-015）。</summary>
     private static FrameworkElement BuildGrid(PageNode node, RenderState state)
     {
@@ -337,14 +311,6 @@ public static class PageRenderer
             node.Text ?? "更多",
             new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions),
             string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static FrameworkElement BuildSelect(PageNode node)
-    {
-        var combo = new AuroraOptionBox();
-        foreach (var child in node.Children ?? [])
-            combo.Items.Add(child.Text ?? "");
-        return combo;
     }
 
     /// <summary>面板：直接复用控制面板那套组件与校验，不为页面另造一份。</summary>
@@ -395,6 +361,17 @@ public static class PageRenderer
         return Box("该组件待交付：" + name);
     }
 
+    /// <summary>
+    /// 退役类型的样子。与缺件区分开：这不是"还没做"，是"决定了不放在这一层"，
+    /// 因此不记进缺件表，也就不会变成一条组件申请。
+    /// </summary>
+    private static FrameworkElement Retired(string type, string label, RenderState state)
+    {
+        var reason = $"{label}（{type}）不再是页面节点：小型交互控件请放进控制面板（panel / popup）";
+        state.WarnUnbound(reason);
+        return Box(reason);
+    }
+
     /// <summary>动作没落点时的样子。与缺件区分开：组件是有的，缺的是声明。</summary>
     private static FrameworkElement Unbound(string reason, RenderState state)
     {
@@ -416,7 +393,6 @@ public static class PageRenderer
     private sealed class RenderState(PageRenderContext context)
     {
         private readonly Dictionary<string, AuroraTable> _nodes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly List<(Button Button, string NodeId)> _deferred = [];
         private readonly Dictionary<AuroraTable, Dictionary<string, PageRowAction>> _rowActions = [];
 
         public List<string> Missing { get; } = [];
@@ -427,7 +403,6 @@ public static class PageRenderer
 
         public ActionRegistry? Actions => context.Actions;
 
-        public AuroraCompletionProvider? Completions => context.Completions;
 
         public void RegisterNode(string id, AuroraTable table) => _nodes[id] = table;
 
@@ -488,8 +463,6 @@ public static class PageRenderer
             return row.TryGetValue(name, out var cell) ? cell : null;
         }
 
-        public void RequireSelection(Button button, string nodeId) => _deferred.Add((button, nodeId));
-
         public ActionBinding ResolveAction(string id)
             => context.Actions?.Resolve(id)
                ?? ActionBinding.Fail($"未声明的动作: {id}（动作声明台账不可用）");
@@ -507,26 +480,6 @@ public static class PageRenderer
                 "page",
                 context.Owner + ": 按钮直接绑定指令 " + command
                 + "，改名后会静默失效；建议改用模块声明的动作（<域>.ui.actions）");
-
-        public void ApplyDeferredBindings()
-        {
-            foreach (var (button, nodeId) in _deferred)
-            {
-                if (!_nodes.TryGetValue(nodeId, out var table))
-                {
-                    // 引用了不存在的节点：按"不静默"原则禁用并留日志，而不是当作永远可用。
-                    button.IsEnabled = false;
-                    context.Log.Log(
-                        ShellLogLevel.Warn,
-                        "page",
-                        context.Owner + ": enabledWhen 引用了不存在的节点 " + nodeId + "，按钮已禁用");
-                    continue;
-                }
-
-                button.IsEnabled = table.SelectedRow != null;
-                table.SelectionChanged += (_, _) => button.IsEnabled = table.SelectedRow != null;
-            }
-        }
 
         /// <summary>组件调用走指令总线：按钮点击变成一条命令，参数可从视图状态取值。</summary>
         public void Invoke(PageInvoke invoke)

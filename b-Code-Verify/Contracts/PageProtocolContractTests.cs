@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Text.Json;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
@@ -117,9 +117,8 @@ public sealed class PageProtocolContractTests
                   "type": "stack",
                   "children": [
                     { "type": "text", "text": "标题" },
-                    { "type": "button", "text": "执行" },
-                    { "type": "input", "text": "abc" },
-                    { "type": "select" }
+                    { "type": "table", "columns": [ { "key": "a", "title": "A" } ] },
+                    { "type": "grid", "children": [] }
                   ]
                 }
                 """);
@@ -128,9 +127,8 @@ public sealed class PageProtocolContractTests
 
             var stack = Assert.IsType<StackPanel>(rendered.Root);
             Assert.IsType<TextBlock>(stack.Children[0]);
-            Assert.IsType<Button>(stack.Children[1]);
-            Assert.IsType<TextBox>(stack.Children[2]);
-            Assert.IsType<AuroraOptionBox>(stack.Children[3]);
+            Assert.IsType<AuroraTable>(stack.Children[1]);
+            Assert.IsType<AuroraGridPanel>(stack.Children[2]);
             Assert.Empty(rendered.MissingComponents);
         });
     }
@@ -156,67 +154,33 @@ public sealed class PageProtocolContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-030：表格在 Render 阶段不取数，控件 Loaded 之后才走一次总线。
+    ///
+    /// 原用例还顺带验了「选中行喂给页面按钮的 invoke」。1.8.14 起 <c>button</c>
+    /// 不再是页面节点，那半段连同 <c>enabledWhen</c> 一起退役——
+    /// 行级操作改由表格自己的 <c>rowActions</c> 承担（见 RowActionContractTests）。
+    /// </summary>
     [Fact]
-    public void Render_ButtonInvokeReachesTheCommandBus()
+    public void Render_TableDefersItsDataUntilTheControlLoads()
     {
         UiTestHost.RunSta(() =>
         {
             var page = Page("""
                 {
-                  "type": "button",
-                  "text": "执行",
-                  "invoke": { "command": "test.echo", "args": { "name": { "value": "带 空格" } } }
+                  "type": "table",
+                  "id": "rows",
+                  "dataSource": { "command": "test.rows" },
+                  "columns": [ { "key": "name", "title": "名称" } ],
+                  "view": { "selection": "single" }
                 }
                 """);
 
             var context = Context(out var executed, out _);
             var rendered = PageRenderer.Render(page, context);
 
-            var button = Assert.IsType<Button>(rendered.Root);
-            button.RaiseEvent(new RoutedEventArgs(ButtonBase_Click));
-            UiTestHost.PumpUntil(() => executed.Count > 0);
-
-            // 参数带空格：必须经过 QuoteArg，否则会被解析成两个参数。
-            Assert.Equal("""test.echo name="带 空格" """.TrimEnd(), Assert.Single(executed));
-        });
-    }
-
-    [Fact]
-    public void Render_TableLoadsRowsThroughBusAndFeedsSelectionIntoInvoke()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var page = Page("""
-                {
-                  "type": "stack",
-                  "children": [
-                    {
-                      "type": "table",
-                      "id": "rows",
-                      "dataSource": { "command": "test.rows" },
-                      "columns": [ { "key": "name", "title": "名称" } ],
-                      "view": { "selection": "single" }
-                    },
-                    {
-                      "type": "button",
-                      "text": "复制",
-                      "enabledWhen": { "selected": "rows" },
-                      "invoke": {
-                        "command": "test.echo",
-                        "args": { "name": { "from": "rows.selected.name" } }
-                      }
-                    }
-                  ]
-                }
-                """);
-
-            var context = Context(out var executed, out _);
-            var rendered = PageRenderer.Render(page, context);
-
-            var stack = Assert.IsType<StackPanel>(rendered.Root);
             // REQ-UI-007：table 节点渲染成 AuroraTable，不再是页面自拼的 ListView。
-            var table = Assert.IsType<AuroraTable>(stack.Children[0]);
-            var button = Assert.IsType<Button>(stack.Children[1]);
+            var table = Assert.IsType<AuroraTable>(rendered.Root);
 
             // Render 只建组件，不在宿主建页路径上执行模块取数。
             Assert.Empty(executed);
@@ -226,48 +190,14 @@ public sealed class PageProtocolContractTests
 
             // 控件 Loaded 后才走总线，异步回填。
             Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 2), "表格未从总线取到行");
+            Assert.Single(executed);
 
-            // 没有选中行时按钮应禁用——enabledWhen 是视图行为，不产生命令。
-            Assert.False(button.IsEnabled);
-
+            // 选中行仍然可读：rowActions 的参数绑定要用它。
             table.SelectedIndex = 1;
-            UiTestHost.PumpUntil(() => button.IsEnabled);
-            Assert.True(button.IsEnabled);
-
-            executed.Clear();
-            button.RaiseEvent(new RoutedEventArgs(ButtonBase_Click));
-            UiTestHost.PumpUntil(() => executed.Count > 0);
-
-            // 选中行的单元格值被取出并作为参数送上总线。
-            Assert.Equal("test.echo name=beta", Assert.Single(executed));
+            UiTestHost.PumpUntil(() => table.SelectedRow != null);
+            Assert.Equal("beta", table.SelectedRow!["name"]);
         });
     }
-
-    [Fact]
-    public void Render_DanglingEnabledWhenDisablesButtonAndWarns()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var page = Page("""
-                {
-                  "type": "button",
-                  "text": "执行",
-                  "enabledWhen": { "selected": "nosuchnode" },
-                  "invoke": { "command": "test.echo" }
-                }
-                """);
-
-            var rendered = PageRenderer.Render(page, Context(out _, out var log));
-
-            // 引用不存在的节点时按钮禁用并留日志，而不是当作永远可用。
-            Assert.False(Assert.IsType<Button>(rendered.Root).IsEnabled);
-            Assert.Contains(log.Snapshot(), e =>
-                e.Level == ShellLogLevel.Warn && e.Message.Contains("nosuchnode"));
-        });
-    }
-
-    private static readonly RoutedEvent ButtonBase_Click =
-        System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
     private static PageDescription Page(string contentJson)
     {

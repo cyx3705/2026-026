@@ -145,7 +145,15 @@ registry.Register(new CommandDescriptor
 到末项后回到首项；左方向键反向切换，`Home` / `End` 跳到首项或末项。右键或 `Shift+F10` 打开全部候选，
 当前项带选中标记，点击候选后立即生效。空集合不响应，单项保持原值，候选刷新时优先保留当前值，否则选中首项。
 
-模块不需要直接构造该控件；只需继续使用以下描述合同：
+模块不需要直接构造该控件。**页面节点 `select` 已于 1.8.14 退役**，
+现在只经面板的 `mode: "select"` 使用：
+
+```json
+{ "kind": "textbox", "id": "channel", "label": "通道", "mode": "select",
+  "options": [ "stable", "beta" ] }
+```
+
+下面这份是退役前的页面写法，仅作对照，**不再受支持**：
 
 ```json
 {
@@ -287,14 +295,25 @@ registry.Register(new CommandDescriptor
 | `aurora.ui.reloadactions` | 重新拉取声明并按新声明重建面板 |
 | `aurora.ui.invoke action=<id> ...` | 按 id 执行一条动作（脚本与控制台入口） |
 
-页面描述里的按钮也支持 `action`：
+按钮绑动作，写在**面板**里（页面节点 `button` 已于 1.8.14 退役）：
 
 ```json
-{ "type": "button", "text": "发布", "invoke": { "action": "mymodule.publish" } }
+{ "kind": "button", "action": "mymodule.publish", "text": "发布" }
 ```
 
-仍写 `"command"` 的按钮不会被拦下，但渲染时会记一条 Warn——
-"哪些按钮还没换成动作"因此是可查的事实，而不是某次走查的印象。
+> **1.8.14 破坏性变更：`button` / `input` / `select` 不再是页面节点。**
+>
+> 小型交互控件只能出现在**控制面板**里（`panel` 与 `popup`）。页面这一层只放容器
+> （`stack` / `grid`）、展示组件（`text` / `table` / `swimlane`）和复合组件（`panel` / `popup`）。
+> 理由是排版：散落在页面各处的单个控件没有共同的对齐依据，每加一个都要重新决定
+> 它跟谁对齐、跟谁分组。
+>
+> 页面里再写这三种，会渲染成一块写着原因的牌子并记一条 Warn。
+> 它**不会**进组件申请台账——那是"还没做"的意思，而这是"决定了不放在这一层"。
+>
+> 随之退役的还有：页面按钮的 `invoke` / `enabledWhen`，以及 `input` 的 `suggest`。
+> 替代路径——行级操作用表格的 `rowActions`；其余按钮放进 `panel`，用 `kind: "button"`
+> 加动作 id 声明。
 
 ## 面板：三种小组件（1.6.0）
 
@@ -410,7 +429,10 @@ registry.Register(new CommandDescriptor
 里面放的**就是面板那三种小组件**，声明与校验完全一致。弹出层改的是"什么时候占版面"，
 不是"能放什么"。点别处即收起。
 
-## 带候选的输入框（1.7.0）
+## 带候选的输入框（1.7.0，页面节点已于 1.8.14 退役）
+
+> `input` 不再是页面节点，`suggest` 随之退役，`input.suggest` 也已从可申请能力表里移除。
+> 下面是退役前的写法，仅作对照。控制面板暂不提供补全；确有需要请提组件申请。
 
 ```json
 { "type": "input", "suggest": "commands" }
