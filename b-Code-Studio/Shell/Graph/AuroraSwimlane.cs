@@ -1,7 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using System.Windows.Shapes;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Themes;
@@ -137,7 +138,26 @@ public sealed class AuroraSwimlane : UserControl
 
         RenderGutter();
         RenderVisible();
+        ScrollToBranchHeads();
     }
+
+    /// <summary>
+    /// 新描述一律从**最右端**看起。
+    ///
+    /// 图是按时间从左往右长的，分支头（各泳道的最新节点）都在右边缘，
+    /// 而那正是每次打开都想先看的东西。停在左端等于每次都要先手动拖一段。
+    ///
+    /// 排到 Render 优先级：此刻 ScrollViewer 才按新的 Canvas 尺寸算出 ScrollableWidth，
+    /// 在 SetDescription 里直接滚会滚到上一份描述的范围上（多半是 0）。
+    /// </summary>
+    private void ScrollToBranchHeads()
+        => Dispatcher.BeginInvoke(
+            DispatcherPriority.Render,
+            new Action(() =>
+            {
+                _viewport.UpdateLayout();
+                _viewport.ScrollToHorizontalOffset(_viewport.ScrollableWidth);
+            }));
 
     /// <summary>显示一句话代替图：取数失败、尚未选择对象等。</summary>
     public void ShowMessage(string message)

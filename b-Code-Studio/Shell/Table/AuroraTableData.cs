@@ -1,4 +1,4 @@
-namespace HistoryAurora.Shell.Table;
+﻿namespace HistoryAurora.Shell.Table;
 
 /// <summary>
 /// 一列的声明。**这是宿主唯一能决定的表格外观**：标题、取值键与列宽。
@@ -8,8 +8,10 @@ namespace HistoryAurora.Shell.Table;
 /// <param name="Key">取值键，对应行字典里的键名。</param>
 /// <param name="Title">表头文字。</param>
 /// <param name="Width">
-/// 像素宽；<c>"*"</c> 表示占满剩余宽度（可多列共享）；<c>null</c> 表示按内容自适应。
-/// 解析不出数字时按自适应处理，不抛——一列宽度写错不该让整张表消失。
+/// **权重**，不是像素（REQ-UI-039，1.8.15 起）。表格永远铺满可用宽度，各列按权重分摊：
+/// <c>"150"</c> 与 <c>"70"</c> 的比例仍是 150:70，但两列一起随页面宽度缩放。
+/// <c>"*"</c> 相当于权重 200；<c>null</c> 相当于 120。
+/// 解析不出数字时按未声明处理，不抛——一列宽度写错不该让整张表消失。
 /// </param>
 public sealed record AuroraTableColumn(string Key, string Title, string? Width = null)
 {

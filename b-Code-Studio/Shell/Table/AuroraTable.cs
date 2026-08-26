@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -27,14 +27,27 @@ namespace HistoryAurora.Shell.Table;
 /// </summary>
 public sealed class AuroraTable : UserControl
 {
-    /// <summary>星号列的下限宽度：再窄也要看得见表头文字，否则列会缩成一条缝。</summary>
-    private const double MinStarWidth = 48;
+    /// <summary>
+    /// 列宽下限：再窄也要看得见表头文字。**这是软下限**——列多到连下限都排不下时
+    /// 按可用宽度均分，宁可挤也不长出横向滚动条（REQ-UI-039）。
+    /// </summary>
+    private const double MinColumnWidth = 48;
 
-    /// <summary>给纵向滚动条留出的余量，避免星号列把内容顶出可视区后又长出横向滚动条。</summary>
+    /// <summary>给纵向滚动条留出的余量：拿不到视口宽度时的退路。</summary>
     private const double ScrollAllowance = 20;
 
-    /// <summary>星号列复算的次数上限。两轮就够（声明值 → 实际值），第三轮兜底。</summary>
-    private const int MaxStarPasses = 3;
+    /// <summary><c>"*"</c> 列的权重。相当于声明了 200px 的列，只是不必写死数字。</summary>
+    private const double StarWeight = 200;
+
+    /// <summary>没声明宽度时的权重。</summary>
+    private const double AutoWeight = 120;
+
+    /// <summary>
+    /// 分摊的复算轮数上限。每轮只能读到**上一轮布局**的 ActualWidth，
+    /// 因此"设宽 → 量开销 → 再设宽"至少要两轮；列数多、行操作列也在时还要多一轮。
+    /// 用轮数兜底而不是"宽度不再变化"：后者会在某一轮刚好没变时提前停下。
+    /// </summary>
+    private const int MaxWidthPasses = 5;
 
     /// <summary>小于半像素的列宽变化只是布局取整，不能再触发一轮布局。</summary>
     private const double WidthEpsilon = 0.5;
@@ -45,14 +58,15 @@ public sealed class AuroraTable : UserControl
     private readonly ListView _list;
     private readonly GridView _view;
     private readonly TextBlock _empty;
-    private readonly List<GridViewColumn> _starColumns = [];
+    /// <summary>数据列与它们的权重，按声明顺序。行操作列不在其中。</summary>
+    private readonly List<(GridViewColumn Column, double Weight)> _weighted = [];
     private readonly List<AuroraRowAction> _rowActions = [];
 
     private AuroraTableData _data = AuroraTableData.Empty;
     private bool _headerStyleApplied;
-    private bool _starRecheckQueued;
-    private int _starPasses;
-    private double _starWidthCeiling = double.PositiveInfinity;
+    private bool _widthPassQueued;
+    private int _widthPasses;
+    private GridViewColumn? _actionColumn;
     private ScrollViewer? _scrollHost;
 
     /// <summary>右键按下时命中的那一行；空白处按下则为 null，菜单随之不弹。</summary>
@@ -97,7 +111,7 @@ public sealed class AuroraTable : UserControl
         Loaded += (_, _) =>
         {
             ApplyHeaderStyle();
-            RestartStarLayout();
+            RestartWidthLayout();
         };
     }
 
@@ -148,12 +162,12 @@ public sealed class AuroraTable : UserControl
     public void SetData(AuroraTableData? data)
     {
         _data = data ?? AuroraTableData.Empty;
-        RestartStarLayout();
+        RestartWidthLayout();
         RebuildColumns();
         _list.ItemsSource = BuildRows(_data);
         _empty.Visibility = _data.RowCount == 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplyHeaderStyle();
-        QueueStarWidthPass();
+        RestartWidthLayout();
     }
 
     /// <summary>只给行、列从数据推断。</summary>
@@ -174,15 +188,16 @@ public sealed class AuroraTable : UserControl
                 _rowActions.Add(action);
         }
 
-        RestartStarLayout();
+        RestartWidthLayout();
         _list.ContextMenu = _rowActions.Count == 0 ? null : BuildContextMenu();
         RebuildColumns();
-        QueueStarWidthPass();
+        RestartWidthLayout();
     }
 
     private void RebuildColumns()
     {
-        _starColumns.Clear();
+        _weighted.Clear();
+        _actionColumn = null;
         _view.Columns.Clear();
 
         foreach (var column in _data.Columns)
@@ -193,10 +208,10 @@ public sealed class AuroraTable : UserControl
                 CellTemplate = CellTemplate(column.Key),
             };
 
-            if (column.FixedWidth is { } px)
-                gridColumn.Width = px;
-            else if (column.IsStar)
-                _starColumns.Add(gridColumn);
+            // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
+            // 各列按权重分摊。写 150 / 70 的那张表，比例仍是 150:70，只是随宽度缩放。
+            var weight = column.FixedWidth ?? (column.IsStar ? StarWeight : AutoWeight);
+            _weighted.Add((gridColumn, weight));
 
             _view.Columns.Add(gridColumn);
         }
@@ -206,12 +221,14 @@ public sealed class AuroraTable : UserControl
             return;
 
         // 行操作列钉在最右：它不是数据，宽度也不该由宿主的列宽声明来定。
-        _view.Columns.Add(new GridViewColumn
+        // 它**不参与**按比例缩放——按钮排不下就点不着，缩放对它没有意义；分摊时先扣掉。
+        _actionColumn = new GridViewColumn
         {
             Header = "操作",
             Width = InlineWidth(inline),
             CellTemplate = RowActionTemplate(inline),
-        });
+        };
+        _view.Columns.Add(_actionColumn);
     }
 
     /// <summary>
@@ -404,6 +421,54 @@ public sealed class AuroraTable : UserControl
     }
 
     /// <summary>列表模板里的滚动视图；进入可视树后才有，取到后缓存。</summary>
+    /// <summary>
+    /// 表格框架比列宽之和多占的那几像素。
+    ///
+    /// 只看外层 ScrollViewer 是不够的：<c>GridView</c> 的表头行另有一个自己的滚动视图，
+    /// 多出来的像素恰恰在它那里——表头末尾有一个约 2px 的占位列，加上边框，
+    /// 各列加起来正好等于视口时表头仍会超出 6px 左右。
+    ///
+    /// 量的是「内容宽 － 列宽之和」而不是「内容宽 － 视口宽」：前者与我们设了多宽无关，
+    /// 因此每轮重量一次即可；后者随上一轮设的宽度变化，累加就会扣重。
+    /// </summary>
+    private double ChromeOverhead()
+    {
+        var columns = 0d;
+        foreach (var column in _view.Columns)
+        {
+            if (column.ActualWidth > 0)
+                columns += column.ActualWidth;
+            else if (!double.IsNaN(column.Width))
+                columns += column.Width;
+        }
+
+        if (columns <= 0)
+            return 0;
+
+        var extent = 0d;
+        foreach (var scroll in Descendants<ScrollViewer>(_list))
+        {
+            if (scroll.ViewportWidth > 0)
+                extent = Math.Max(extent, scroll.ExtentWidth);
+        }
+
+        return Math.Max(0, extent - columns);
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+                yield return match;
+            foreach (var nested in Descendants<T>(child))
+                yield return nested;
+        }
+    }
+
     private ScrollViewer? ScrollHost()
     {
         if (_scrollHost != null)
@@ -441,6 +506,28 @@ public sealed class AuroraTable : UserControl
         _headerStyleApplied = true;
     }
 
+    /// <summary>外部宽度变了才重来：内部调列宽也会传播 SizeChanged。</summary>
+    private void RestartWidthLayout()
+    {
+        _widthPasses = 0;
+        QueueWidthPass();
+    }
+
+    private void QueueWidthPass()
+    {
+        if (_weighted.Count == 0 || _widthPassQueued)
+            return;
+
+        _widthPassQueued = true;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Render,
+            new Action(() =>
+            {
+                _widthPassQueued = false;
+                ApplyColumnWidths();
+            }));
+    }
+
     private void OnListSizeChanged(object sender, SizeChangedEventArgs e)
     {
         // GridView 改列宽和滚动条显隐都会传播 SizeChanged。只有列表本身的宽度变了
@@ -448,98 +535,71 @@ public sealed class AuroraTable : UserControl
         if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < WidthEpsilon)
             return;
 
-        RestartStarLayout();
-    }
-
-    private void RestartStarLayout()
-    {
-        _starPasses = 0;
-        _starWidthCeiling = double.PositiveInfinity;
-        QueueStarWidthPass();
-    }
-
-    private void QueueStarWidthPass()
-    {
-        if (_starColumns.Count == 0 || _starRecheckQueued)
-            return;
-
-        _starRecheckQueued = true;
-        Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.Render,
-            new Action(() =>
-            {
-                _starRecheckQueued = false;
-                ApplyStarWidths();
-            }));
+        RestartWidthLayout();
     }
 
     /// <summary>
-    /// 星号列按剩余宽度均分。<c>GridView</c> 没有星号列的概念，只能自己算：
-    /// 可用宽度减去定宽与自适应列的实际宽度，余下的平分给星号列。
+    /// 列宽分摊：可用宽度按权重切给各数据列，切完正好铺满。
+    ///
+    /// 三条硬约束（REQ-UI-039）：
+    /// <list type="number">
+    ///   <item><b>不留右侧空扩展区。</b>最后一列取「可用宽度减去前面各列」的余数，
+    ///         而不是自己那份权重——按比例算完再相加，取整误差会在右边剩下一条缝。</item>
+    ///   <item><b>不长横向滚动条。</b>列表已禁用横向滚动；宽度不够时下限自动放低，
+    ///         宁可挤也不溢出。</item>
+    ///   <item>行操作列不参与缩放，先扣掉。</item>
+    /// </list>
     /// </summary>
-    private void ApplyStarWidths()
+    private void ApplyColumnWidths()
     {
-        if (_starColumns.Count == 0 || _list.ActualWidth <= 0)
+        if (_weighted.Count == 0 || _list.ActualWidth <= 0)
             return;
 
-        var taken = 0d;
-        foreach (var column in _view.Columns)
-        {
-            if (_starColumns.Contains(column))
-                continue;
-            // 自适应列的 Width 是 NaN，直接相加会把总宽污染成 NaN，星号列随之算不出来。
-            if (column.ActualWidth > 0)
-                taken += column.ActualWidth;
-            else if (!double.IsNaN(column.Width))
-                taken += column.Width;
-        }
-
-        // 可用宽度以**滚动视口**为准，拿不到时才退回"表宽减去滚动条余量"。
-        // 视口宽度是权威值：它已经扣掉了纵向滚动条，也扣掉了列表自己的边框与内距，
-        // 而那几像素正是 1.7.0 那条横向滚动条的来源。
+        // 可用宽度以**滚动视口**为准：它已经扣掉纵向滚动条、列表边框与内距。
         var scroll = ScrollHost();
         var available = scroll is { ViewportWidth: > 0 }
             ? scroll.ViewportWidth
             : _list.ActualWidth - ScrollAllowance;
 
-        // 表头最小宽度、分隔条命中区、行操作按钮的外边距都可能贡献几像素。
-        // 一旦真实布局发现溢出，本周期只收紧上限、不在下一帧重新放大：否则
-        // 滚动条消失后视口变宽，星号列又会回弹，右侧便会在两种宽度间无限闪动。
-        var overflow = scroll is { ViewportWidth: > 0 }
-            ? Math.Max(0, scroll.ExtentWidth - scroll.ViewportWidth)
-            : 0;
+        if (_actionColumn is { } actions)
+            available -= actions.ActualWidth > 0 ? actions.ActualWidth : actions.Width;
 
-        var nominalShare = Math.Max(MinStarWidth, (available - taken) / _starColumns.Count);
-        if (overflow > WidthEpsilon)
+        // 表头最小宽度、分隔条命中区、单元格内距都可能各贡献一两像素，
+        // 这些**算不出来、只量得到**：布局跑完后按实测溢出收紧，直到不再溢出。
+        // 只收紧不放大，因此不会在两种宽度之间来回跳。
+        // 表格自身的框架开销：表头末尾那个约 2px 的占位列、边框、单元格内距。
+        // 这些**算不出来、只量得到**，但它与列宽无关，因此每轮重新量、不累加——
+        // 累加会把同一份开销扣两次（量到的是上一轮布局，慢一拍），右边就空出一条缝。
+        available -= ChromeOverhead();
+
+        // ActualWidth 要等一次布局才有值，所以第一轮量不到开销，必须再跑一轮。
+        if (_widthPasses < MaxWidthPasses)
         {
-            var corrected = Math.Max(MinStarWidth, nominalShare - overflow / _starColumns.Count);
-            _starWidthCeiling = Math.Min(_starWidthCeiling, corrected);
+            _widthPasses++;
+            QueueWidthPass();
         }
-
-        var share = Math.Min(nominalShare, _starWidthCeiling);
-        var changed = false;
-
-        foreach (var column in _starColumns)
-        {
-            if (double.IsNaN(column.Width) || Math.Abs(column.Width - share) >= WidthEpsilon)
-            {
-                column.Width = share;
-                changed = true;
-            }
-        }
-
-        // 定宽列的**实际**宽度要等一次布局才知道：列宽声明小于表头文字所需时，
-        // GridView 会把那一列撑开。几列各多出两三像素，加起来就够让表格长出一条
-        // 横向滚动条（1.7.0 真机上命令集那张表就是这么来的）。
-        // 所以要在布局跑完之后按实际宽度再算一遍。
-        //
-        // 收敛用**次数**兜底而不是"宽度不再变化"：后者会在"这一轮刚好没变、
-        // 而同一轮布局又把定宽列撑开了"时提前停下，正是本缺陷的成因。
-        if (_starPasses >= MaxStarPasses)
+        if (available <= 0)
             return;
 
-        _starPasses++;
-        if (changed || _starPasses == 1)
-            QueueStarWidthPass();
+        // 下限是软的：列多到连下限都排不下时按均分让位，不能因为守住下限而溢出。
+        var floor = Math.Min(MinColumnWidth, available / _weighted.Count);
+        var total = _weighted.Sum(entry => entry.Weight);
+        if (total <= 0)
+            return;
+
+        var used = 0d;
+        for (var index = 0; index < _weighted.Count; index++)
+        {
+            var (column, weight) = _weighted[index];
+            var width = index == _weighted.Count - 1
+                ? available - used
+                : Math.Max(floor, Math.Round(available * weight / total));
+
+            width = Math.Max(floor, width);
+            used += width;
+
+            if (double.IsNaN(column.Width) || Math.Abs(column.Width - width) >= WidthEpsilon)
+                column.Width = width;
+        }
     }
 }
