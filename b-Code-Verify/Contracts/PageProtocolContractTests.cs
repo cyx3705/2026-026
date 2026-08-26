@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Text.Json;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Table;
@@ -216,7 +217,13 @@ public sealed class PageProtocolContractTests
             var table = Assert.IsType<AuroraTable>(stack.Children[0]);
             var button = Assert.IsType<Button>(stack.Children[1]);
 
-            // 取数走总线，异步回填。
+            // Render 只建组件，不在宿主建页路径上执行模块取数。
+            Assert.Empty(executed);
+            Assert.Equal(0, table.RowCount);
+
+            table.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+
+            // 控件 Loaded 后才走总线，异步回填。
             Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 2), "表格未从总线取到行");
 
             // 没有选中行时按钮应禁用——enabledWhen 是视图行为，不产生命令。
@@ -301,7 +308,7 @@ public sealed class PageProtocolContractTests
             Readonly = true,
             AllowUnspecifiedParameters = true,
             Handler = CommandDescriptor.Sync(_ =>
-                CommandResult.Ok("""[{"name":"alpha"},{"name":"beta"}]""")),
+                CommandResult.Ok("暂无数据", JsonDocument.Parse("""[{"name":"alpha"},{"name":"beta"}]""").RootElement.Clone())),
         });
 
         var bus = new CommandBus(registry, memory);
