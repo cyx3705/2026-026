@@ -39,6 +39,12 @@ internal sealed class ShellCommandServices
     /// <summary>动作声明台账;null 时 aurora.ui.actions 指令组不注册。</summary>
     public ActionRegistry? Actions { get; init; }
 
+    /// <summary>选择通道台账;null 时 aurora.ui.channels 不注册。</summary>
+    public Selection.SelectionChannels? Channels { get; init; }
+
+    /// <summary>取数刷新台账;null 时 aurora.ui.refreshdata 不注册。</summary>
+    public Pages.PageDataRefresher? DataRefresher { get; init; }
+
     /// <summary>页面注册协议的拉取器;null 时 aurora.ui.reloadpages 等指令组不注册。</summary>
     public ModulePageLoader? PageLoader { get; init; }
 
@@ -71,6 +77,10 @@ internal static partial class BuiltinCommands
             RegisterPanel(r, s, s.Panels);
         if (s.Actions != null)
             RegisterActions(r, s, s.Actions);
+        if (s.Channels != null)
+            RegisterChannels(r, s.Channels);
+        if (s.DataRefresher != null)
+            RegisterDataRefresh(r, s.DataRefresher);
         if (s.PageLoader != null && s.ComponentRequests != null)
             RegisterPages(r, s.PageLoader, s.ComponentRequests);
     }

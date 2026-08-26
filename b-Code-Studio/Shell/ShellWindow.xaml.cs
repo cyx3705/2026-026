@@ -42,6 +42,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly LocalCommandCatalogSession _catalog;
     private readonly ConsoleView _console;
     private readonly Actions.ActionRegistry _actions;
+    private readonly Selection.SelectionChannels _channels;
+    private readonly Pages.PageDataRefresher _dataRefresher;
 
     private readonly Panels.PanelManager _panels;
 
@@ -179,13 +181,22 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 首次拉取不在这里做——那时模块还没装载,问谁都是空。见 DiscoverModuleSurfacesAsync。
         _actions = new Actions.ActionRegistry(_bus, log);
 
+        // 选择通道台账与动作台账同期存在：表格往通道发布、面板按通道启停，
+        // 两侧都在建页时接线，晚一步就只能等下一轮重载才接得上。
+        _channels = new Selection.SelectionChannels();
+
+        // 取数刷新台账在这里就要建好：它在构造时订阅通道变化，
+        // 晚于第一次建页创建的话，那一批表格就永远不跟选中走。
+        _dataRefresher = new Pages.PageDataRefresher(_channels);
+
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
         _panels = new Panels.PanelManager(
             HistoryVulcan.Services.AppPaths.GetPanelsDir(dataDirectory),
             config.Panels,
             _bus,
             log,
-            _actions);
+            _actions,
+            _channels);
         _panels.RegisterWindows(config.ToolWindows);
 
         _docking = new DockingHost(DockManager, config.ToolWindows, layoutStore, log, settings);
@@ -248,7 +259,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
         _componentRequests = new Pages.ComponentRequestStore(settings, log);
         _pageLoader = new Pages.ModulePageLoader(
-            _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync);
+            _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync,
+            _channels, _dataRefresher);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
@@ -262,6 +274,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             DataDirectory = dataDirectory,
             Panels = _panels,
             Actions = _actions,
+            Channels = _channels,
+            DataRefresher = _dataRefresher,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
         });

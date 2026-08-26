@@ -34,7 +34,9 @@ internal partial class ShellWindow
                     _bus,
                     _log,
                     _actions,
-                    _catalog.CompleteAsync),
+                    _catalog.CompleteAsync,
+                    _channels,
+                    _dataRefresher),
             },
             "HistoryAurora");
         _docking.Show(StandardWindowIds.Components);

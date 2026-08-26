@@ -109,6 +109,21 @@ internal static class ComponentGalleryCommands
         },
         new ActionDeclaration
         {
+            Id = "preview.rename",
+            Title = "跟随选中",
+            Command = "aurora.preview.echo",
+            // {selection.<通道>.<列>} 取的是**表格当前选中行**，{picked} 取的是面板输入框。
+            // 两者故意分开：改名这类动作要同时知道「改谁」和「改成什么」，
+            // 而输入框里的值一旦被人改过，就不再等于选中行。
+            Args = new Dictionary<string, string>
+            {
+                ["from"] = "{selection.aurora.preview.item.name}",
+                ["to"] = "{picked}",
+            },
+            Summary = "把选中行的名字改成输入框里的值（演示，不真的改）",
+        },
+        new ActionDeclaration
+        {
             Id = "preview.row",
             Title = "查看行",
             Command = "aurora.preview.echo",

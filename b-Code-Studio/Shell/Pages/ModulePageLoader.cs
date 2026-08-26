@@ -30,7 +30,9 @@ internal sealed class ModulePageLoader(
     IShellLog log,
     ComponentRequestStore? requests = null,
     HistoryAurora.Shell.Actions.ActionRegistry? actions = null,
-    HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null)
+    HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null,
+    HistoryAurora.Shell.Selection.SelectionChannels? channels = null,
+    PageDataRefresher? refresher = null)
 {
     private const string Source = "page";
 
@@ -131,9 +133,16 @@ internal sealed class ModulePageLoader(
             registered += count;
         }
 
+        // 通道断链只能在**整轮建页之后**判：面板所在的页可能先于表格所在的页渲染，
+        // 建时判会把正常情况报成断链。这也是它不做成渲染期占位的原因。
+        var dangling = channels?.Dangling ?? [];
+        foreach (var reason in dangling)
+            log.Log(ShellLogLevel.Warn, Source, "选择通道断链: " + reason);
+
         log.Log(ShellLogLevel.Info, Source,
             $"页面拉取完成: 问了 {owners.Count} 个模块，建了 {registered} 页"
-            + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 个" : ""));
+            + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 个" : "")
+            + (dangling.Count > 0 ? $"，{dangling.Count} 条通道断链" : ""));
 
         return new PageLoadReport(owners.Count, registered, skipped, Missing);
     }
@@ -217,6 +226,8 @@ internal sealed class ModulePageLoader(
                     Owner = owner,
                     Actions = actions,
                     Completions = completions,
+                    Channels = channels,
+                    Refresher = refresher,
                 });
         }
         catch (Exception ex)
@@ -260,6 +271,12 @@ internal sealed class ModulePageLoader(
     {
         if (!_owners.Remove(owner))
             return;
+
+        // 页面撤了，它声明的通道跟着撤。留着的话就是一条永远不会再有人发布的幽灵通道，
+        // 而跟着它的按钮会一直灰着——那正是宿主侧 web.frontendcatalog 的老毛病。
+        channels?.DropOwner(owner);
+        refresher?.DropOwner(owner);
+
         try
         {
             docking.UnregisterOwner(owner);

@@ -228,6 +228,8 @@ aurora.ui.dialog kind=content title=预览 body="摘要" content="<大段正文>
 > 宽窗口下会跟着变宽。想让某列相对更宽，把它的数字调大即可——**数字之间的比例才有意义，
 > 绝对值不再有**。
 
+表格还可以加一个 `channel`，把选中行发布出去给控制面板用——见下文「选择通道」。
+
 `columns` 整个省掉也行：列按各行键的首次出现顺序推断，标题即键名。
 **行数与列数永远由数据决定**，不用也不能另外传计数。
 
@@ -238,6 +240,13 @@ aurora.ui.dialog kind=content title=预览 body="摘要" content="<大段正文>
 ```
 
 某行缺的键自动补空串，不会让那一格变成一条看不见的绑定错误。
+
+> **1.8.16：表格在 `stack` 里会拿到剩余高度。**
+>
+> 此前 `stack` 是 `StackPanel`，它在排列方向上以无穷尺寸量子元素——放进去的表格
+> 会把每一行都画出来，表现为**撑满整页且滚不动**（Janus 项目总览页实测）。
+> 现在 `stack` 是按行分档的 Grid：`table` 与 `swimlane`（以及内含它们的容器）拿剩余尺寸，
+> 其余按内容尺寸。你不需要声明任何东西，也没有可声明的东西。
 
 1.8.6 起表格外围不再绘制背景、描边、圆角或裁剪，表格直接平铺在页面内容中；表头、行分隔线、
 悬停态、选中态和空态仍由 `AuroraTable` 统一提供。表格可以与控制面板作为响应式栅格的同级项，
@@ -303,6 +312,8 @@ registry.Register(new CommandDescriptor
 | `aurora.ui.actions` | 列出全部已声明动作，以及断链 |
 | `aurora.ui.reloadactions` | 重新拉取声明并按新声明重建面板 |
 | `aurora.ui.invoke action=<id> ...` | 按 id 执行一条动作（脚本与控制台入口） |
+| `aurora.ui.channels` | 列出选择通道、当前选中行与断链引用 |
+| `aurora.ui.refreshdata [page=] [node=]` | 重新拉取页面数据 |
 
 按钮绑动作，写在**面板**里（页面节点 `button` 已于 1.8.14 退役）：
 
@@ -323,6 +334,139 @@ registry.Register(new CommandDescriptor
 > 随之退役的还有：页面按钮的 `invoke` / `enabledWhen`，以及 `input` 的 `suggest`。
 > 替代路径——行级操作用表格的 `rowActions`；其余按钮放进 `panel`，用 `kind: "button"`
 > 加动作 id 声明。
+>
+> **「表格选中行 → 按钮变可用」这条链路在 1.8.16 回来了**，见下文「选择通道」一节。
+> 它比原来的 `enabledWhen` 多一件事：能跨页面。
+
+## 选择通道：表格与面板的接线（1.8.16）
+
+**「在表格里选中一行，另一个面板上的按钮才可用、输入框自动填上」——这一节讲怎么写。**
+
+页面是一页一页渲染的，所以页内的节点 id 出不了这一页。通道名是**界面级**的，
+因此表和面板可以在两个不同的页上。Janus 就是这么用的：项目表在中央的「项目总览」页，
+操作面板在左侧的「项目操作」页。
+
+三步，缺一不可：
+
+```json
+// 1) 表格声明：把选中行发到这个通道上。通道名建议以自己的域起头。
+{
+  "type": "table",
+  "id": "projects",
+  "channel": "janus.project",
+  "columns": [ { "key": "name", "title": "项目", "width": "*" } ],
+  "dataSource": { "command": "janus.ui.data", "args": { "view": "projects" } }
+}
+```
+
+```json
+// 2) 面板取值：输入框跟随通道的某一列；按钮按有无选中启停。
+{
+  "kind": "textbox", "id": "project-name", "label": "项目名",
+  "follows": "janus.project.name"
+},
+{
+  "kind": "button", "action": "janus.project.rename", "text": "改名", "inline": true,
+  "enabledWhen": { "selected": "janus.project" }
+}
+```
+
+```csharp
+// 3) 动作声明：{selection.<通道>.<列>} 取选中行，不带前缀的取面板控件。
+new { id = "janus.project.rename", title = "改名", command = "janus.proj.rename",
+      args = new { name = "{selection.janus.project.name}", @new = "{project-name}" } }
+```
+
+**为什么第 3 步要分两种占位符。** 改名要同时知道「改谁」和「改成什么」。
+`follows` 的输入框一开始等于选中行，但人把它改了之后就不再相等——
+如果两边都从输入框取，改名就只能改成它自己。所以：
+选中行走 `{selection.*}`，输入框走 `{控件id}`。
+
+| 写法 | 放在哪 | 作用 |
+|---|---|---|
+| `"channel": "<名字>"` | 表格节点 | 把当前选中行发布到通道 |
+| `"follows": "<通道>.<列>"` | 面板 `textbox` | 选中行一变就改写本框内容 |
+| `"enabledWhen": { "selected": "<通道>" }` | 面板 `button` | 没选中时按钮禁用，悬停说明原因 |
+| `{selection.<通道>.<列>}` | 动作 `args` | 取选中行的某一列 |
+
+几条要知道的：
+
+- **通道名按最后一个点分成「通道 + 列」。** 通道名自己带点是常态（`janus.project`），
+  列名不含点，所以最后一个点是确定的分界。
+- **同名通道只认第一个声明的表。** 第二张表会被拒绝并记一条 Warn——
+  否则「按钮跟着哪张表走」就取决于建页顺序，而那个顺序不受任何东西保证。
+- **`follows` 的框会被覆盖。** 它的定位是「显示当前选中的那一个，顺便可以改成别的」。
+  要一个不被覆盖的自由输入框（比如提交描述），就别写 `follows`。
+- **引用了没人声明的通道 = 按钮永远灰着**，界面上与「还没选中」一模一样。
+  这条会进断链账：`aurora.ui.channels` 列出全部通道、当前有无选中、谁在引用，
+  以及引用了但没人声明的那些。页面拉取完成时也会记一条 Warn。
+
+## 取数可以重来（1.8.16）
+
+表格与泳道图的数据不再只在建页时取一次。两条路：
+
+**跟着选中走。** 取数参数里写通道引用，选中一变就自动重取：
+
+```json
+{
+  "type": "table",
+  "id": "history-rows",
+  "dataSource": {
+    "command": "janus.ui.data",
+    "args": { "view": "history", "name": "{selection.janus.project.name}" }
+  }
+}
+```
+
+取不到值（还没选中）时**不发指令**，表格显示「请先选中一行」。
+不这样做的话，没选中就去问「这个项目的历史」，拿回来的要么是错误要么是别人的历史。
+
+**显式刷新。** 数据在界面之外被改了、界面这边收不到信号时用它：
+
+```bash
+aurora.ui.refreshdata page=rules      # 只刷这一页
+aurora.ui.refreshdata node=rule-list  # 只刷这一个节点
+aurora.ui.refreshdata                 # 全部
+```
+
+按钮绑它就是一个真的「刷新」按钮：
+
+```json
+{ "kind": "button", "action": "mymodule.rules.refresh", "text": "刷新" }
+```
+```csharp
+new { id = "mymodule.rules.refresh", title = "刷新",
+      command = "aurora.ui.refreshdata", args = new { page = "rules" } }
+```
+
+**刷新是有代价的，所以它按页、按节点分派，不是一把全刷。** 别的页上可能有一张
+要扫 45 个仓库的表。同理，会跑 Git 的取数请一律用通道引用限定到单个项目——
+「打开一个页签」不该触发全库扫描。
+
+## 面板的一行：左标签 / 中控件 / 右按钮（1.8.16）
+
+按钮默认自己占一行。写 `"inline": true` 让它跟**前一个控件**同行：
+
+```json
+"widgets": [
+  { "kind": "textbox", "id": "project-name", "label": "项目名", "follows": "janus.project.name" },
+  { "kind": "button", "action": "janus.project.rename", "text": "改名", "inline": true },
+
+  { "kind": "textbox", "id": "new-project", "label": "新项目名" },
+  { "kind": "button", "action": "janus.project.create", "text": "新建", "inline": true },
+
+  { "kind": "textbox", "id": "commit-message", "label": "提交描述" },
+  { "kind": "button", "action": "janus.project.commit", "text": "提交当前项目", "inline": true },
+  { "kind": "button", "action": "janus.project.push", "text": "推送当前项目", "inline": true }
+]
+```
+
+三行，每行「左标签 / 中控件 / 右按钮」；第三行右侧并排两个按钮。
+连续的 `inline` 按钮都归到同一行的右侧。
+
+`inline` 缺省是 `false`（注意与表格 `rowActions` 的 `inline` 相反）——
+默认改成 true 会让每一份既有面板的版面当场变样，而它们并没有要求过这件事。
+`inline` 只属于按钮，且它前面必须有控件，否则整份面板作废。
 
 ## 面板：三种小组件（1.6.0）
 
@@ -347,8 +491,8 @@ registry.Register(new CommandDescriptor
 | kind | 说明 |
 |---|---|
 | `text` | 一段说明文字，不参与取值 |
-| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在 `options` 里选） |
-| `button` | 绑 `action`（动作 id）。**写指令名会校验失败** |
+| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在 `options` 里选）；可加 `follows` |
+| `button` | 绑 `action`（动作 id）。**写指令名会校验失败**；可加 `enabledWhen` / `inline` |
 
 **破坏性变更（V1 → V2）**：`controls` 改名为 `widgets`；
 `combo` / `check` / `slider` / `file` / `dir` / `number` / `label` **全部删除**，
@@ -500,7 +644,8 @@ registry.Register(new CommandDescriptor
 登记两处，缺件台账才会自动出账：
 
 - 新的**节点类型** → `PageRenderer.SupportedComponents`；
-- 挂在已有节点上的**能力**（如 `table.rowactions`、`input.suggest`）→ `SupportedCapabilities`。
+- 挂在已有节点上的**能力**（如 `table.rowactions`、`table.channel`、`panel.follows`、
+  `panel.enabledwhen`、`panel.inline`、`table.datasource.selection`）→ `SupportedCapabilities`。
   两份分开是有原因的：把能力名混进组件清单，会让 `type: "table.rowactions"`
   一边被判为"已支持"、一边渲染成缺件占位。
 - 再在本文加一节用法。

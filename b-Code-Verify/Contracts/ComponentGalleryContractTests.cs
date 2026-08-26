@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using System.Windows;
 using HistoryAurora.Shell.Actions;
+using HistoryAurora.Shell.Selection;
 using HistoryAurora.Shell.Logging;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Views;
@@ -64,7 +65,10 @@ public sealed class ComponentGalleryContractTests
             ComponentGalleryCommands.Register(registry);
             actions.DeclareLocal(ComponentGalleryCommands.Owner, ComponentGalleryCommands.Actions);
 
-            var view = new ComponentGalleryView(bus, log, actions, null!);
+            // 通道台账必须真的传进去：漏传的症状不是崩，而是「表格声明的 channel 已忽略」
+            // 一条 Warn，随后跟随框与按钮启停全部不生效——正好是这条用例要挡的形态。
+            var channels = new SelectionChannels();
+            var view = new ComponentGalleryView(bus, log, actions, null!, channels);
             var host = new Window { Width = 900, Height = 700, ShowActivated = false, Content = view };
             host.Show();
 

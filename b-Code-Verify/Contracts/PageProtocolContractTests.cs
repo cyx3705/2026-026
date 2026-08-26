@@ -125,10 +125,17 @@ public sealed class PageProtocolContractTests
 
             var rendered = PageRenderer.Render(page, Context(out _, out _));
 
-            var stack = Assert.IsType<StackPanel>(rendered.Root);
+            // stack 是 Grid 不是 StackPanel：StackPanel 在排列方向上给子元素无穷尺寸，
+            // 而表格靠"被限住高度"才滚得起来（REQ-UI-042）。
+            var stack = Assert.IsType<Grid>(rendered.Root);
             Assert.IsType<TextBlock>(stack.Children[0]);
             Assert.IsType<AuroraTable>(stack.Children[1]);
             Assert.IsType<AuroraGridPanel>(stack.Children[2]);
+
+            // 只有表格那一行是星号：文字与空栅格按内容高度，不跟着抢剩余空间。
+            Assert.Equal(GridUnitType.Auto, stack.RowDefinitions[0].Height.GridUnitType);
+            Assert.Equal(GridUnitType.Star, stack.RowDefinitions[1].Height.GridUnitType);
+            Assert.Equal(GridUnitType.Auto, stack.RowDefinitions[2].Height.GridUnitType);
             Assert.Empty(rendered.MissingComponents);
         });
     }

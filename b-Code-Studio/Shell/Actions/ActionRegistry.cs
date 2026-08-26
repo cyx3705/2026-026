@@ -155,7 +155,8 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
         if (unknown.Count == 0)
             return text;
 
-        error = $"动作 {action.Id} 引用了不存在的控件 {{{string.Join("}, {", unknown.Distinct())}}}";
+        error = $"动作 {action.Id} 的占位符取不到值: {{{string.Join("}, {", unknown.Distinct())}}}"
+                + "（控件 id 写错，或 selection.<通道>.<列> 当前没有选中行）";
         return null;
     }
 
@@ -207,6 +208,20 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
         log.Log(ShellLogLevel.Warn, Source, $"跳过模块 {domain} 的动作声明: {reason}");
     }
 
-    [GeneratedRegex(@"\{(\w+)\}")]
+    /// <summary>
+    /// 占位符名接受除大括号与空白之外的任意字符。
+    ///
+    /// **原先写的是 <c>\w+</c>，那是一处静默失效**：控件 id 里带连字符是常态
+    /// （<c>project-name</c> / <c>commit-message</c> / <c>page-option</c>），
+    /// 而 <c>\w</c> 不含连字符——于是正则根本不匹配，占位符既没被替换、也没进
+    /// <c>unknown</c> 表，<c>{project-name}</c> 就这样原样上了总线，
+    /// 变成一条参数明显错误却「执行成功」的指令。这正是本方法开头那段注释要防的事，
+    /// 只是当时防住了「取不到值」，没防住「压根没认出这是个占位符」。
+    ///
+    /// 放宽后点也进来了：<c>{selection.janus.project.name}</c> 是通道取值
+    /// （见 <see cref="HistoryAurora.Shell.Selection.SelectionChannels"/>），
+    /// 不带 <c>selection.</c> 前缀的仍然是面板控件 id。
+    /// </summary>
+    [GeneratedRegex(@"\{([^{}\s]+)\}")]
     private static partial Regex PlaceholderPattern();
 }

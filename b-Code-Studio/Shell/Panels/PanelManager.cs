@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Selection;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 
@@ -31,6 +32,7 @@ internal sealed class PanelManager
     private readonly CommandBus _bus;
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
+    private readonly SelectionChannels? _channels;
     private readonly Dictionary<string, PanelView> _views = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PanelDefinition> _definitions = new();
 
@@ -41,6 +43,7 @@ internal sealed class PanelManager
         _bus = null!;
         _log = null!;
         _actions = null!;
+        _channels = null;
     }
 
     public PanelManager(
@@ -48,12 +51,14 @@ internal sealed class PanelManager
         IEnumerable<PanelDefinition>? configured,
         CommandBus bus,
         IShellLog log,
-        ActionRegistry actions)
+        ActionRegistry actions,
+        SelectionChannels? channels = null)
     {
         _panelsDir = panelsDir;
         _bus = bus;
         _log = log;
         _actions = actions;
+        _channels = channels;
         Directory.CreateDirectory(panelsDir);
 
         if (configured != null)
@@ -159,7 +164,7 @@ internal sealed class PanelManager
     {
         if (!_views.TryGetValue(def.Id, out var view))
         {
-            view = new PanelView(def, _bus, _log, _actions);
+            view = new PanelView(def, _bus, _log, _actions, _channels);
             _views[def.Id] = view;
         }
 

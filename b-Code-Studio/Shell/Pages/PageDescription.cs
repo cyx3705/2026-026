@@ -97,6 +97,15 @@ public sealed class PageNode
     /// </summary>
     public string? Suggest { get; init; }
 
+    /// <summary>
+    /// table 专用：把当前选中行发布到这个**选择通道**（REQ-UI-041）。
+    ///
+    /// 通道名是界面级的，因此别的页面上的控制面板也能按它取值——
+    /// 「选中一行 → 另一页的按钮变可用」只能这样表达，页内节点 id 出不了这一页。
+    /// 建议以自己的域起头（<c>janus.project</c>）；同名通道只认第一个声明方。
+    /// </summary>
+    public string? Channel { get; init; }
+
     /// <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
     public double? Min { get; init; }
 

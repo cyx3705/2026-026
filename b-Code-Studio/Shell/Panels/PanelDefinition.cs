@@ -1,3 +1,5 @@
+using HistoryAurora.Shell.Selection;
+
 namespace HistoryAurora.Shell.Panels;
 
 /// <summary>
@@ -79,9 +81,33 @@ public sealed class PanelWidget
     public bool Required { get; set; }
 
     /// <summary>
+    /// textbox 专用：跟随某个选择通道的某一列，写法 <c>&lt;通道&gt;.&lt;列&gt;</c>
+    /// （REQ-UI-041，见 <see cref="HistoryAurora.Shell.Selection.SelectionChannels"/>）。
+    ///
+    /// 选中行一变就整体改写本框的内容——它的定位是「显示当前选中的那一个，顺便可以改成别的」，
+    /// 不是「记住用户上次输入」。要一个不被覆盖的自由输入框，就别写这一项。
+    /// </summary>
+    public string? Follows { get; set; }
+
+    /// <summary>
     /// button 专用：动作 id。**这里不接受指令名**——写指令名正是 V1 会静默失效的原因。
     /// </summary>
     public string? Action { get; set; }
+
+    /// <summary>
+    /// button 专用：启用条件。目前只有 <c>{ "selected": "&lt;通道&gt;" }</c>——
+    /// 该通道有选中行时按钮才可用（REQ-UI-041）。
+    /// </summary>
+    public PanelEnabledWhen? EnabledWhen { get; set; }
+
+    /// <summary>
+    /// button 专用：与**前一个控件同行**，而不是自己独占一行（REQ-UI-043）。
+    /// 一行因此是「左标签 / 中控件 / 右按钮」三段。多个连续的同行按钮并排放在右侧。
+    ///
+    /// 缺省 false，与表格 <c>rowActions</c> 的 <c>inline</c> 相反。理由是已有面板：
+    /// 默认改成 true 会让每一份既有声明的版面当场变样，而它们并没有要求过这件事。
+    /// </summary>
+    public bool Inline { get; set; }
 
     /// <summary>解析后的种类；无法识别时为 null。</summary>
     public PanelWidgetKind? ResolvedKind => (Kind ?? "").ToLowerInvariant() switch
@@ -97,6 +123,17 @@ public sealed class PanelWidget
         => string.Equals(Mode, "select", StringComparison.OrdinalIgnoreCase)
             ? PanelTextBoxMode.Select
             : PanelTextBoxMode.Input;
+}
+
+/// <summary>
+/// 按钮的启用条件（REQ-UI-041）。页面按钮的 <c>enabledWhen</c> 在 1.8.14 随 <c>button</c>
+/// 节点一同退役，「选中一行 → 按钮变可用」这条链路因此断了一版；它在面板这一层回来，
+/// 落点从**页内节点 id** 换成**界面级通道**，于是顺带能跨页。
+/// </summary>
+public sealed class PanelEnabledWhen
+{
+    /// <summary>该选择通道必须有选中行。</summary>
+    public string? Selected { get; set; }
 }
 
 /// <summary>面板声明的校验结果。</summary>
@@ -123,6 +160,7 @@ public static class PanelDefinitionValidator
             return PanelDefinitionParse.Fail($"面板 {definition.Id} 缺少标题");
 
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenAnyWidget = false;
         foreach (var widget in definition.Widgets)
         {
             if (widget.ResolvedKind is not { } kind)
@@ -140,18 +178,50 @@ public static class PanelDefinitionValidator
                         && (widget.Options == null || widget.Options.Count == 0))
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的选择框 {widget.Id} 未提供 options");
+                    // follows 写错的症状是「框里永远空着」，与「还没选中」长得一样，
+                    // 因此形状必须在收下声明时就判死，不留到运行期。
+                    if (widget.Follows is { Length: > 0 } follows
+                        && !SelectionChannels.TrySplitBinding(follows, out _, out _))
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的文本框 {widget.Id} 的 follows 必须写成 <通道>.<列>: {follows}");
+                    if (widget.EnabledWhen != null)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的文本框 {widget.Id} 不支持 enabledWhen；它只属于按钮");
+                    if (widget.Inline)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的文本框 {widget.Id} 不支持 inline；它只属于按钮");
                     break;
 
                 case PanelWidgetKind.Button:
                     if (string.IsNullOrWhiteSpace(widget.Action))
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的按钮未声明 action；按钮不接受指令名，只能绑模块声明的动作");
+                    if (widget.Follows != null)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的按钮 {widget.Action} 不支持 follows；它只属于文本框");
+                    if (widget.EnabledWhen is { } gate
+                        && string.IsNullOrWhiteSpace(gate.Selected))
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的按钮 {widget.Action} 的 enabledWhen 只支持 selected=<通道>");
+                    // 同行按钮要有个"同行"可跟。放在第一位的话它跟谁一行是没有答案的，
+                    // 而症状会是"按钮自己占了一行"——与没写 inline 完全一样，查不出来。
+                    if (widget.Inline && !seenAnyWidget)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的按钮 {widget.Action} 声明了 inline，但它前面没有控件");
                     break;
 
                 case PanelWidgetKind.Text:
                 default:
+                    if (widget.Follows != null || widget.EnabledWhen != null)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的说明文字不参与取值，不支持 follows / enabledWhen");
+                    if (widget.Inline)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的说明文字不支持 inline；它只属于按钮");
                     break;
             }
+
+            seenAnyWidget = true;
         }
 
         return new PanelDefinitionParse(definition, null);

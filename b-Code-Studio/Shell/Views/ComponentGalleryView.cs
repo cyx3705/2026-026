@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
+using HistoryAurora.Shell.Selection;
 using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -14,7 +15,9 @@ internal sealed class ComponentGalleryView : UserControl
         CommandBus bus,
         IShellLog log,
         ActionRegistry actions,
-        AuroraCompletionProvider completions)
+        AuroraCompletionProvider completions,
+        SelectionChannels? channels = null,
+        PageDataRefresher? refresher = null)
     {
         var parsed = PageDescriptionReader.Read(ComponentGalleryDescription.Json, ComponentGalleryCommands.Owner);
         if (!parsed.Ok)
@@ -29,6 +32,8 @@ internal sealed class ComponentGalleryView : UserControl
                 Owner = ComponentGalleryCommands.Owner,
                 Actions = actions,
                 Completions = completions,
+                Channels = channels,
+                Refresher = refresher,
             });
 
         if (rendered.MissingComponents.Count > 0)
@@ -72,6 +77,7 @@ internal static class ComponentGalleryDescription
                       {
                         "type": "table",
                         "id": "demo-table",
+                        "channel": "aurora.preview.item",
                         "dataSource": { "command": "aurora.preview.rows" },
                         "columns": [
                           { "key": "name", "title": "名称", "width": "150" },
@@ -91,6 +97,8 @@ internal static class ComponentGalleryDescription
                          "orientation": "horizontal",
                          "widgets": [
                            { "kind": "text", "text": "面板内控件同级排列，由渐隐线分割。" },
+                           { "kind": "textbox", "id": "picked", "label": "选中项", "follows": "aurora.preview.item.name" },
+                           { "kind": "button", "action": "preview.rename", "text": "跟随选中", "enabledWhen": { "selected": "aurora.preview.item" } },
                            { "kind": "textbox", "id": "note", "label": "说明", "value": "组件演示", "required": true },
                            { "kind": "textbox", "id": "option", "label": "选项", "mode": "select", "options": [ "浅色", "深色", "跟随系统" ], "value": "浅色" },
                            { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
