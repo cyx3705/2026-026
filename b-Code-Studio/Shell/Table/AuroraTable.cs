@@ -36,6 +36,9 @@ public sealed class AuroraTable : UserControl
     /// <summary>星号列复算的次数上限。两轮就够（声明值 → 实际值），第三轮兜底。</summary>
     private const int MaxStarPasses = 3;
 
+    /// <summary>小于半像素的列宽变化只是布局取整，不能再触发一轮布局。</summary>
+    private const double WidthEpsilon = 0.5;
+
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
@@ -49,6 +52,7 @@ public sealed class AuroraTable : UserControl
     private bool _headerStyleApplied;
     private bool _starRecheckQueued;
     private int _starPasses;
+    private double _starWidthCeiling = double.PositiveInfinity;
     private ScrollViewer? _scrollHost;
 
     /// <summary>右键按下时命中的那一行；空白处按下则为 null，菜单随之不弹。</summary>
@@ -71,11 +75,7 @@ public sealed class AuroraTable : UserControl
         _list.SetResourceReference(StyleProperty, "Aurora.Table.ListView");
         _list.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "Aurora.Table.Row");
         _list.SelectionChanged += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
-        _list.SizeChanged += (_, _) =>
-        {
-            _starPasses = 0;
-            ApplyStarWidths();
-        };
+        _list.SizeChanged += OnListSizeChanged;
         _list.PreviewMouseRightButtonDown += OnRowRightButtonDown;
         _list.ContextMenuOpening += OnRowContextMenuOpening;
 
@@ -94,7 +94,11 @@ public sealed class AuroraTable : UserControl
         // GridView 是 DependencyObject 而非 FrameworkElement，拿不到 SetResourceReference；
         // 表头样式只能在进入可视树后按键查一次。它本身内部全用 DynamicResource 取色，
         // 因此查一次就够，主题切换仍然跟随。
-        Loaded += (_, _) => ApplyHeaderStyle();
+        Loaded += (_, _) =>
+        {
+            ApplyHeaderStyle();
+            RestartStarLayout();
+        };
     }
 
     /// <summary>当前选中行；无选中时为 null。列里没有的键不会出现在这里。</summary>
@@ -144,12 +148,12 @@ public sealed class AuroraTable : UserControl
     public void SetData(AuroraTableData? data)
     {
         _data = data ?? AuroraTableData.Empty;
-        _starPasses = 0;
+        RestartStarLayout();
         RebuildColumns();
         _list.ItemsSource = BuildRows(_data);
         _empty.Visibility = _data.RowCount == 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplyHeaderStyle();
-        ApplyStarWidths();
+        QueueStarWidthPass();
     }
 
     /// <summary>只给行、列从数据推断。</summary>
@@ -170,10 +174,10 @@ public sealed class AuroraTable : UserControl
                 _rowActions.Add(action);
         }
 
-        _starPasses = 0;
+        RestartStarLayout();
         _list.ContextMenu = _rowActions.Count == 0 ? null : BuildContextMenu();
         RebuildColumns();
-        ApplyStarWidths();
+        QueueStarWidthPass();
     }
 
     private void RebuildColumns()
@@ -437,6 +441,38 @@ public sealed class AuroraTable : UserControl
         _headerStyleApplied = true;
     }
 
+    private void OnListSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。只有列表本身的宽度变了
+        // 才是新的一次外部布局；否则重置收敛状态会让右侧列在两种宽度间来回跳。
+        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < WidthEpsilon)
+            return;
+
+        RestartStarLayout();
+    }
+
+    private void RestartStarLayout()
+    {
+        _starPasses = 0;
+        _starWidthCeiling = double.PositiveInfinity;
+        QueueStarWidthPass();
+    }
+
+    private void QueueStarWidthPass()
+    {
+        if (_starColumns.Count == 0 || _starRecheckQueued)
+            return;
+
+        _starRecheckQueued = true;
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Render,
+            new Action(() =>
+            {
+                _starRecheckQueued = false;
+                ApplyStarWidths();
+            }));
+    }
+
     /// <summary>
     /// 星号列按剩余宽度均分。<c>GridView</c> 没有星号列的概念，只能自己算：
     /// 可用宽度减去定宽与自适应列的实际宽度，余下的平分给星号列。
@@ -466,18 +502,31 @@ public sealed class AuroraTable : UserControl
             ? scroll.ViewportWidth
             : _list.ActualWidth - ScrollAllowance;
 
-        // 上一轮排完之后仍然溢出多少，直接减掉。不去追问是谁多占的——
-        // 表头最小宽度、分隔条命中区、行操作按钮的外边距都可能贡献几像素，
-        // 逐个建模只会漏掉下一个。反馈一次就够，且下一轮会验证它。
+        // 表头最小宽度、分隔条命中区、行操作按钮的外边距都可能贡献几像素。
+        // 一旦真实布局发现溢出，本周期只收紧上限、不在下一帧重新放大：否则
+        // 滚动条消失后视口变宽，星号列又会回弹，右侧便会在两种宽度间无限闪动。
         var overflow = scroll is { ViewportWidth: > 0 }
             ? Math.Max(0, scroll.ExtentWidth - scroll.ViewportWidth)
             : 0;
 
-        var remaining = available - taken - overflow;
-        var share = Math.Max(MinStarWidth, remaining / _starColumns.Count);
+        var nominalShare = Math.Max(MinStarWidth, (available - taken) / _starColumns.Count);
+        if (overflow > WidthEpsilon)
+        {
+            var corrected = Math.Max(MinStarWidth, nominalShare - overflow / _starColumns.Count);
+            _starWidthCeiling = Math.Min(_starWidthCeiling, corrected);
+        }
+
+        var share = Math.Min(nominalShare, _starWidthCeiling);
+        var changed = false;
 
         foreach (var column in _starColumns)
-            column.Width = share;
+        {
+            if (double.IsNaN(column.Width) || Math.Abs(column.Width - share) >= WidthEpsilon)
+            {
+                column.Width = share;
+                changed = true;
+            }
+        }
 
         // 定宽列的**实际**宽度要等一次布局才知道：列宽声明小于表头文字所需时，
         // GridView 会把那一列撑开。几列各多出两三像素，加起来就够让表格长出一条
@@ -486,17 +535,11 @@ public sealed class AuroraTable : UserControl
         //
         // 收敛用**次数**兜底而不是"宽度不再变化"：后者会在"这一轮刚好没变、
         // 而同一轮布局又把定宽列撑开了"时提前停下，正是本缺陷的成因。
-        if (_starPasses >= MaxStarPasses || _starRecheckQueued)
+        if (_starPasses >= MaxStarPasses)
             return;
 
-        _starRecheckQueued = true;
-        Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.Loaded,
-            new Action(() =>
-            {
-                _starRecheckQueued = false;
-                _starPasses++;
-                ApplyStarWidths();
-            }));
+        _starPasses++;
+        if (changed || _starPasses == 1)
+            QueueStarWidthPass();
     }
 }

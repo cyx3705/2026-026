@@ -74,6 +74,54 @@ public sealed class TableWidthContractTests
     }
 
     [Fact]
+    public void StarColumnsRemainStableWhenTheTableIsResizedWideAndNarrow()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var table = new AuroraTable();
+            var host = new Window
+            {
+                Content = table,
+                Width = 640,
+                Height = 320,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.ToolWindow,
+            };
+
+            try
+            {
+                host.Show();
+                table.SetData(AuroraTableData.FromItems(
+                    Enumerable.Range(0, 80).Select(index => (Name: "module." + index, Text: new string('宽', 80))),
+                    ("名称", "230", row => row.Name),
+                    ("类别", "76", _ => "模块"),
+                    ("状态", "48", _ => "已加载"),
+                    ("说明", AuroraTableColumn.Star, row => row.Text)));
+
+                foreach (var width in new[] { 1240d, 680d, 1440d, 760d })
+                {
+                    host.Width = width;
+                    for (var pass = 0; pass < 6; pass++)
+                    {
+                        host.UpdateLayout();
+                        UiTestHost.Pump();
+                    }
+
+                    Assert.All(
+                        Descendants<ScrollViewer>(table),
+                        scroll => Assert.True(
+                            scroll.ExtentWidth <= scroll.ViewportWidth + 1,
+                            $"宽度 {width} 时内容宽 {scroll.ExtentWidth} 超出可视区 {scroll.ViewportWidth}"));
+                }
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void TrimmedCellsAreDetectedSoTheirToolTipCanBeTurnedOn()
     {
         UiTestHost.RunSta(() =>

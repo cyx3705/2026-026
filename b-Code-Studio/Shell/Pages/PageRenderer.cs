@@ -697,7 +697,13 @@ public static class PageRenderer
                 return null;
             }
 
-            return result.Data as string ?? result.Message;
+            if (!CommandResultData.TryGetJsonText(result.Data, result.Message, out var payload))
+            {
+                context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": 取数结果没有合法 JSON 载荷: " + text);
+                return null;
+            }
+
+            return payload;
         }
 
         private static List<Dictionary<string, string>>? ParseRows(string? payload)

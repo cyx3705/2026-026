@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Text.Json;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Table;
@@ -307,7 +308,7 @@ public sealed class PageProtocolContractTests
             Readonly = true,
             AllowUnspecifiedParameters = true,
             Handler = CommandDescriptor.Sync(_ =>
-                CommandResult.Ok("""[{"name":"alpha"},{"name":"beta"}]""")),
+                CommandResult.Ok("暂无数据", JsonDocument.Parse("""[{"name":"alpha"},{"name":"beta"}]""").RootElement.Clone())),
         });
 
         var bus = new CommandBus(registry, memory);
