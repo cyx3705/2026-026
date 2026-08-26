@@ -21,7 +21,10 @@ public sealed class PanelDefinition
 
     public double Ratio { get; set; } = 0.22;
 
-    /// <summary>面板内的小组件，按声明顺序自上而下排列。</summary>
+    /// <summary>小组件布局方向：vertical（默认）或 horizontal。</summary>
+    public string Orientation { get; set; } = "vertical";
+
+    /// <summary>面板内的小组件，按声明顺序排列。</summary>
     public List<PanelWidget> Widgets { get; set; } = new();
 }
 

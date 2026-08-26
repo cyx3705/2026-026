@@ -196,7 +196,8 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         if (e.ChangedButton != MouseButton.Left ||
             IsInteractive(e.OriginalSource as DependencyObject) ||
-            sender is not FrameworkElement surface)
+            sender is not FrameworkElement surface ||
+            !IsPaneHeaderSource(e.OriginalSource as DependencyObject))
         {
             return;
         }

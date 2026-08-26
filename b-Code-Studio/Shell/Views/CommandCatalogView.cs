@@ -29,8 +29,8 @@ internal sealed partial class CommandCatalogView : UserControl
 
     private readonly AuroraTable _table = new() { EmptyText = "没有匹配的指令" };
     private readonly AuroraSuggestBox _search;
-    private readonly ComboBox _domains = new();
-    private readonly ComboBox _classes = new();
+    private readonly AuroraOptionBox _domains = new();
+    private readonly AuroraOptionBox _classes = new();
     private readonly TextBlock _status = new();
 
     private bool _suppressFilterEvents;
@@ -57,8 +57,8 @@ internal sealed partial class CommandCatalogView : UserControl
         };
         _search.TextChanged += (_, _) => ApplyQuery();
 
-        _domains.SetResourceReference(StyleProperty, "Aurora.Segment.ComboBox");
-        _classes.SetResourceReference(StyleProperty, "Aurora.Segment.ComboBox");
+        _domains.SetResourceReference(StyleProperty, "Aurora.OptionBox");
+        _classes.SetResourceReference(StyleProperty, "Aurora.OptionBox");
         _domains.MinWidth = 110;
         _classes.MinWidth = 110;
         _domains.SelectionChanged += OnDomainChanged;

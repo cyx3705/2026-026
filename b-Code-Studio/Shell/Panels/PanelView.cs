@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Themes;
+using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 
@@ -50,24 +51,78 @@ public sealed class PanelView : UserControl
         _getters.Clear();
         _setters.Clear();
 
-        var grid = new Grid { Margin = new Thickness(10) };
+        var horizontal = string.Equals(definition.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
+        FrameworkElement content = horizontal
+            ? BuildHorizontal(definition)
+            : BuildVertical(definition);
+
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = horizontal
+                ? ScrollBarVisibility.Auto
+                : ScrollBarVisibility.Disabled,
+            Content = content,
+        };
+
+        var surface = new Border { Child = scroll };
+        surface.SetResourceReference(StyleProperty, "Aurora.Panel.Surface");
+        Content = surface;
+    }
+
+    private Grid BuildVertical(PanelDefinition definition)
+    {
+        var grid = new Grid { Margin = new Thickness(8) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 56 });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var row = 0;
-        foreach (var widget in definition.Widgets)
+        for (var index = 0; index < definition.Widgets.Count; index++)
         {
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Build(grid, row, widget);
+            Build(grid, row, definition.Widgets[index]);
             row++;
+
+            if (index >= definition.Widgets.Count - 1)
+                continue;
+
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var divider = new Border();
+            divider.SetResourceReference(StyleProperty, "Aurora.Panel.Divider");
+            Grid.SetRow(divider, row++);
+            Grid.SetColumnSpan(divider, 2);
+            grid.Children.Add(divider);
         }
 
-        Content = new ScrollViewer
+        return grid;
+    }
+
+    private StackPanel BuildHorizontal(PanelDefinition definition)
+    {
+        var stack = new StackPanel
         {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = grid,
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(8),
         };
+
+        for (var index = 0; index < definition.Widgets.Count; index++)
+        {
+            var item = new Grid { MinWidth = 72, VerticalAlignment = VerticalAlignment.Center };
+            item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            item.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Build(item, 0, definition.Widgets[index]);
+            stack.Children.Add(item);
+
+            if (index == definition.Widgets.Count - 1)
+                continue;
+
+            var divider = new Border();
+            divider.SetResourceReference(StyleProperty, "Aurora.Panel.VerticalDivider");
+            stack.Children.Add(divider);
+        }
+
+        return stack;
     }
 
     /// <summary>aurora.ui.panelset 落点：程序向面板控件回写值。</summary>
@@ -117,7 +172,8 @@ public sealed class PanelView : UserControl
         if (widget.ResolvedMode == PanelTextBoxMode.Select)
         {
             var options = widget.Options ?? [];
-            var combo = new ComboBox { ItemsSource = options };
+            var combo = new AuroraOptionBox { ItemsSource = options };
+            combo.SetResourceReference(StyleProperty, "Aurora.Panel.OptionBox");
             combo.SelectedItem = widget.Value != null && options.Contains(widget.Value)
                 ? widget.Value
                 : options.FirstOrDefault();
@@ -132,6 +188,7 @@ public sealed class PanelView : UserControl
             Text = widget.Value ?? "",
             VerticalContentAlignment = VerticalAlignment.Center,
         };
+        box.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
         _getters[id] = () => box.Text;
         _setters[id] = value => box.Text = value;
         return box;
@@ -159,7 +216,7 @@ public sealed class PanelView : UserControl
         };
         button.SetResourceReference(
             StyleProperty,
-            action.Danger ? "Aurora.Button.Danger" : "Aurora.Button.Base");
+            action.Danger ? "Aurora.Button.Danger" : "Aurora.Button.Ghost");
         button.Click += (_, _) => Fire(widget.Action!);
         return button;
     }

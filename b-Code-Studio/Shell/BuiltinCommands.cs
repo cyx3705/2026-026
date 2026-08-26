@@ -59,6 +59,7 @@ internal static partial class BuiltinCommands
         RegisterWin(r, s);
         RegisterLayout(r, s);
         RegisterDialog(r, s);
+        RegisterComponentGallery(r);
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
         if (s.Actions != null)

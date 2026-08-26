@@ -17,6 +17,7 @@ using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell;
 using HistoryAurora.Shell.Console;
+using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using Xunit;
@@ -926,9 +927,9 @@ public sealed class ShellChromeContractTests
         RunShell(window =>
         {
             var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
-            Assert.Equal(Visibility.Visible, Assert.IsType<ComboBox>(console.FindName("LevelFilter")).Visibility);
-            Assert.Equal(Visibility.Visible, Assert.IsType<ComboBox>(console.FindName("DomainFilter")).Visibility);
-            var classFilter = Assert.IsType<ComboBox>(console.FindName("ClassFilter"));
+            Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("LevelFilter")).Visibility);
+            Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("DomainFilter")).Visibility);
+            var classFilter = Assert.IsType<AuroraOptionBox>(console.FindName("ClassFilter"));
             Assert.Equal(Visibility.Visible, classFilter.Visibility);
             Assert.False(classFilter.IsEnabled);
             Assert.Equal(Visibility.Collapsed, Assert.IsType<TextBox>(console.FindName("KeywordFilter")).Visibility);

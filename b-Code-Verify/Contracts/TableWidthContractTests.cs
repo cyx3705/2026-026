@@ -74,6 +74,31 @@ public sealed class TableWidthContractTests
     }
 
     [Fact]
+    public void TableSurfaceIsFlatAndUnframed()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var table = new AuroraTable();
+            var host = new Window { Content = table, Width = 640, Height = 240, ShowInTaskbar = false };
+            try
+            {
+                host.Show();
+                table.SetData(AuroraTableData.FromRows([new Dictionary<string, string> { ["name"] = "alpha" }]));
+                host.UpdateLayout();
+
+                var surface = Descendants<Border>(table).First();
+                Assert.Equal(new Thickness(0), surface.BorderThickness);
+                Assert.Equal(new CornerRadius(0), surface.CornerRadius);
+                Assert.Equal(Brushes.Transparent, surface.Background);
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void StarColumnsRemainStableWhenTheTableIsResizedWideAndNarrow()
     {
         UiTestHost.RunSta(() =>

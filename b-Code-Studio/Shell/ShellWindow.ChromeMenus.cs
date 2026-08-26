@@ -106,7 +106,7 @@ internal partial class ShellWindow
 
     /// <summary>Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。</summary>
     private static bool IsTextInputFocused()
-        => Keyboard.FocusedElement is TextBoxBase or ComboBox or PasswordBox;
+        => Keyboard.FocusedElement is TextBoxBase or Selector or PasswordBox;
 
     private static object? FindInDictionary(ResourceDictionary dict, object key)
     {

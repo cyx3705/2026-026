@@ -152,6 +152,54 @@ public sealed class PanelComponentContractTests
         });
     }
 
+    [Fact]
+    public void PanelUsesOneSurfaceAndASeparatorBetweenEachWidget()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            var view = new PanelView(Valid(), bus, log, actions);
+
+            var surface = Assert.IsType<System.Windows.Controls.Border>(view.Content);
+            var scroll = Assert.IsType<System.Windows.Controls.ScrollViewer>(surface.Child);
+            var grid = Assert.IsType<System.Windows.Controls.Grid>(scroll.Content);
+
+            Assert.Equal(3, grid.Children.OfType<System.Windows.Controls.Border>().Count());
+            Assert.All(
+                grid.Children.OfType<System.Windows.Controls.Border>(),
+                divider =>
+                {
+                    Assert.Equal(1, divider.Height);
+                    Assert.NotNull(divider.OpacityMask);
+                });
+        });
+    }
+
+    [Fact]
+    public void HorizontalPanelUsesVerticalFadeSeparatorsBetweenSiblingWidgets()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            var definition = Valid();
+            definition.Orientation = "horizontal";
+
+            var view = new PanelView(definition, bus, log, actions);
+            var surface = Assert.IsType<Border>(view.Content);
+            var scroll = Assert.IsType<ScrollViewer>(surface.Child);
+            var stack = Assert.IsType<StackPanel>(scroll.Content);
+
+            Assert.Equal(definition.Widgets.Count - 1, stack.Children.OfType<Border>().Count());
+            Assert.All(stack.Children.OfType<Border>(), divider =>
+            {
+                Assert.Equal(1, divider.Width);
+                Assert.NotNull(divider.OpacityMask);
+            });
+        });
+    }
+
     // ---------------------------------------------------------------- 装配
 
     private static PanelDefinition Valid() => Parse("""
@@ -219,7 +267,8 @@ public sealed class PanelComponentContractTests
     /// <summary>取面板栅格里的直接子元素（标签 + 控件）。</summary>
     private static List<FrameworkElement> Widgets(PanelView view)
     {
-        var scroll = Assert.IsType<ScrollViewer>(view.Content);
+        var surface = Assert.IsType<Border>(view.Content);
+        var scroll = Assert.IsType<ScrollViewer>(surface.Child);
         var grid = Assert.IsType<Grid>(scroll.Content);
         return grid.Children.OfType<FrameworkElement>().ToList();
     }

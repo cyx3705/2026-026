@@ -340,8 +340,7 @@ public static class PageRenderer
 
     private static FrameworkElement BuildSelect(PageNode node)
     {
-        var combo = new ComboBox();
-        combo.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Segment.ComboBox");
+        var combo = new AuroraOptionBox();
         foreach (var child in node.Children ?? [])
             combo.Items.Add(child.Text ?? "");
         return combo;

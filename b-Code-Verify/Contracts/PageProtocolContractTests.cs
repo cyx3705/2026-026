@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -129,7 +130,7 @@ public sealed class PageProtocolContractTests
             Assert.IsType<TextBlock>(stack.Children[0]);
             Assert.IsType<Button>(stack.Children[1]);
             Assert.IsType<TextBox>(stack.Children[2]);
-            Assert.IsType<ComboBox>(stack.Children[3]);
+            Assert.IsType<AuroraOptionBox>(stack.Children[3]);
             Assert.Empty(rendered.MissingComponents);
         });
     }

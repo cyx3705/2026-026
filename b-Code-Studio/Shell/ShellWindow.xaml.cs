@@ -422,6 +422,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             // 动作声明先于页面:页面按钮与泳道的点击都要按 id 解析动作,
             // 顺序反了会在冷启动那一轮把每个按钮都判成「未声明」。
             await _actions.ReloadAsync().ConfigureAwait(true);
+            RegisterComponentGallery();
             _panels.RebuildAll();
             await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)

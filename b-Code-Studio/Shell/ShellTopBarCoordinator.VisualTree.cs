@@ -149,7 +149,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         for (var current = source; current != null; current = GetParent(current))
         {
-            if (current is ButtonBase or MenuItem or TextBoxBase or ComboBox)
+            if (current is ButtonBase or MenuItem or TextBoxBase or Selector)
                 return true;
         }
 
@@ -160,7 +160,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         for (var current = source; current != null; current = GetParent(current))
         {
-            if (current is ButtonBase or MenuItem or TextBoxBase or ComboBox or TabItem or
+            if (current is ButtonBase or MenuItem or TextBoxBase or Selector or TabItem or
                 LayoutAnchorableTabItem or LayoutDocumentTabItem)
             {
                 return true;
@@ -215,4 +215,3 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         internal static extern bool ReleaseCapture();
     }
 }
-
