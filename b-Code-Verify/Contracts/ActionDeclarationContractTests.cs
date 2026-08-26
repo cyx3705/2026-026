@@ -1,4 +1,4 @@
-using HistoryAurora.Shell.Actions;
+﻿using HistoryAurora.Shell.Actions;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -170,6 +170,42 @@ public sealed class ActionDeclarationContractTests
 
         Assert.Equal("", error);
         Assert.Equal("demo.branch.rename to=\"ai/新 分支\"", text);
+    }
+
+    /// <summary>
+    /// 控件 id 带连字符时占位符照样要被认出来。
+    ///
+    /// 原先的正则是 <c>\w+</c>，而 <c>\w</c> 不含连字符——<c>{project-name}</c>
+    /// 于是根本不被视为占位符：既不替换，也不算「引用了不存在的控件」，
+    /// 就这样原样上了总线，成为一条参数明显错误却「执行成功」的指令。
+    /// 带连字符的控件 id 是常态（commit-message / page-option），因此这条必须钉住。
+    /// </summary>
+    [Fact]
+    public void BuildCommandText_AcceptsHyphenatedAndDottedPlaceholderNames()
+    {
+        var action = new ActionDeclaration
+        {
+            Id = "demo.rename",
+            Command = "demo.proj.rename",
+            Args = new Dictionary<string, string>
+            {
+                ["name"] = "{selection.demo.project.name}",
+                ["new"] = "{project-name}",
+            },
+        };
+
+        var text = ActionRegistry.BuildCommandText(
+            action,
+            control => control switch
+            {
+                "selection.demo.project.name" => "旧名字",
+                "project-name" => "新名字",
+                _ => null,
+            },
+            out var error);
+
+        Assert.Equal("", error);
+        Assert.Equal("demo.proj.rename name=旧名字 new=新名字", text);
     }
 
     [Fact]

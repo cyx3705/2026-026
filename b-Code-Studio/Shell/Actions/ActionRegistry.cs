@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using HistoryAurora.Shell.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -36,11 +36,41 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
     private readonly Dictionary<string, ActionDeclaration> _actions =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Aurora 自己声明的动作。与模块拉来的那批分开存,原因有两条:
+    ///
+    /// 一是 <see cref="ReloadAsync"/> 每轮都 Clear 模块声明——本地声明跟着被清掉的话,
+    /// 任何一次模块重载都会让界面自带页面上的按钮集体变成「未声明的动作」。
+    /// 二是拉取协议按 <c>&lt;域&gt;.ui.actions</c> 反推 owner,而 Aurora 把自己排除在拉取之外
+    /// (见 <see cref="ModuleCommandProbe.SelfDomain"/>);界面自带的页面要声明动作,
+    /// 只能走这条明路,不能把自己伪装成一个模块域塞进拉取里。
+    /// </summary>
+    private readonly Dictionary<string, ActionDeclaration> _local =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly List<string> _broken = [];
 
     /// <summary>当前全部已声明动作，按 id 排序。</summary>
     public IReadOnlyList<ActionDeclaration> Actions
-        => _actions.Values.OrderBy(a => a.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        => _actions.Values
+            .Concat(_local.Values.Where(a => !_actions.ContainsKey(a.Id)))
+            .OrderBy(a => a.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// 登记一批由 Aurora 自己实现的动作(界面自带页面用)。幂等,重复调用按覆盖处理。
+    /// 模块声明优先:同 id 时以模块那份为准,本地这份只在模块没有声明时兜底。
+    /// </summary>
+    public void DeclareLocal(string owner, IEnumerable<ActionDeclaration> declarations)
+    {
+        ArgumentNullException.ThrowIfNull(declarations);
+
+        foreach (var action in declarations)
+        {
+            action.Owner = owner;
+            _local[action.Id] = action;
+        }
+    }
 
     /// <summary>
     /// 声明了、但其 <c>command</c> 在注册表里不存在的动作。
@@ -85,7 +115,7 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
     {
         if (string.IsNullOrWhiteSpace(id))
             return ActionBinding.Fail("按钮未声明 action");
-        if (!_actions.TryGetValue(id, out var action))
+        if (!_actions.TryGetValue(id, out var action) && !_local.TryGetValue(id, out action))
             return ActionBinding.Fail($"未声明的动作: {id}");
         return new ActionBinding(action, null);
     }
@@ -125,7 +155,8 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
         if (unknown.Count == 0)
             return text;
 
-        error = $"动作 {action.Id} 引用了不存在的控件 {{{string.Join("}, {", unknown.Distinct())}}}";
+        error = $"动作 {action.Id} 的占位符取不到值: {{{string.Join("}, {", unknown.Distinct())}}}"
+                + "（控件 id 写错，或 selection.<通道>.<列> 当前没有选中行）";
         return null;
     }
 
@@ -177,6 +208,20 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
         log.Log(ShellLogLevel.Warn, Source, $"跳过模块 {domain} 的动作声明: {reason}");
     }
 
-    [GeneratedRegex(@"\{(\w+)\}")]
+    /// <summary>
+    /// 占位符名接受除大括号与空白之外的任意字符。
+    ///
+    /// **原先写的是 <c>\w+</c>，那是一处静默失效**：控件 id 里带连字符是常态
+    /// （<c>project-name</c> / <c>commit-message</c> / <c>page-option</c>），
+    /// 而 <c>\w</c> 不含连字符——于是正则根本不匹配，占位符既没被替换、也没进
+    /// <c>unknown</c> 表，<c>{project-name}</c> 就这样原样上了总线，
+    /// 变成一条参数明显错误却「执行成功」的指令。这正是本方法开头那段注释要防的事，
+    /// 只是当时防住了「取不到值」，没防住「压根没认出这是个占位符」。
+    ///
+    /// 放宽后点也进来了：<c>{selection.janus.project.name}</c> 是通道取值
+    /// （见 <see cref="HistoryAurora.Shell.Selection.SelectionChannels"/>），
+    /// 不带 <c>selection.</c> 前缀的仍然是面板控件 id。
+    /// </summary>
+    [GeneratedRegex(@"\{([^{}\s]+)\}")]
     private static partial Regex PlaceholderPattern();
 }
