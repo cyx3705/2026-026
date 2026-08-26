@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryAurora",
-  "version": "1.8.13",
+  "version": "1.8.14",
   "description": "前端界面：窗口、布局、控制台与主题",
   "artifact": "HistoryAurora.dll",
   "docs": "HistoryAurora.xml",

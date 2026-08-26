@@ -1,4 +1,4 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.CommandSurface;
 using HistoryAurora.Shell.Pages;
@@ -12,43 +12,36 @@ namespace HistoryAurora.Verify;
 /// <summary>补全输入框与响应式栅格在页面协议里的落点，外加本文件族共用的装配。</summary>
 public sealed partial class PageComponentsContractTests
 {
-    [Fact]
-    public void Input_FallsBackToAPlainBoxWhenThereIsNoCompletionSession()
+    /// <summary>
+    /// 退役的三种节点必须被拒绝，而且**不能记成缺件**。
+    ///
+    /// 缺件会被 ModulePageLoader 自动记进组件申请台账（「用出来的申请更可信」），
+    /// 退役类型走那条路等于让模块不断申请一个已经决定不给的东西。
+    /// </summary>
+    [Theory]
+    [InlineData("button")]
+    [InlineData("input")]
+    [InlineData("select")]
+    public void RetiredNodeTypes_AreRejectedWithoutBecomingAComponentRequest(string type)
     {
         UiTestHost.RunSta(() =>
         {
             var (bus, log, actions) = Host();
 
             var rendered = PageRenderer.Render(
-                Page("""{ "type": "input", "suggest": "commands" }"""),
+                Page($$"""{ "type": "{{type}}", "text": "x" }"""),
                 new PageRenderContext { Bus = bus, Log = log, Owner = "HistoryDemo", Actions = actions });
 
-            Assert.IsType<TextBox>(rendered.Root);
-            // 静默地少掉补全只会被当成手感问题，必须留痕。
+            Assert.Empty(rendered.MissingComponents);
+            Assert.DoesNotContain(type, PageRenderer.SupportedComponents);
+            Assert.Contains(type, (System.Collections.Generic.IDictionary<string, string>)PageRenderer.RetiredComponents);
+
+            // 拒绝要看得见：界面上是一块写着原因的牌子，日志里也有一条。
+            var box = Assert.IsType<Border>(rendered.Root);
+            var caption = Assert.IsType<TextBlock>(box.Child);
+            Assert.Contains("控制面板", caption.Text, StringComparison.Ordinal);
             Assert.Contains(log.Snapshot(), entry =>
-                entry.Level == ShellLogLevel.Warn && entry.Message.Contains("suggest"));
-        });
-    }
-
-    [Fact]
-    public void Input_UsesTheSuggestBoxWhenASessionIsAvailable()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var (bus, log, actions) = Host();
-
-            var rendered = PageRenderer.Render(
-                Page("""{ "type": "input", "suggest": "commands" }"""),
-                new PageRenderContext
-                {
-                    Bus = bus,
-                    Log = log,
-                    Owner = "HistoryDemo",
-                    Actions = actions,
-                    Completions = (_, _, _) => Task.FromResult(ConsoleCompletionResult.Empty),
-                });
-
-            Assert.IsType<AuroraSuggestBox>(rendered.Root);
+                entry.Level >= ShellLogLevel.Warn && entry.Message.Contains("控制面板", StringComparison.Ordinal));
         });
     }
 
