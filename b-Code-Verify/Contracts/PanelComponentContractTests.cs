@@ -213,6 +213,55 @@ public sealed class PanelComponentContractTests
         });
     }
 
+    /// <summary>
+    /// 面板底板与控制台过滤器工具条**必须是同一份样式**。
+    ///
+    /// 控制台原先自带一份 `Aurora.Segment.Bar`：同一种东西两套边距，改了一处另一处不动，
+    /// 实测表现为面板那份 Padding 4 + 内容 Margin 8 撑出一圈明显比控制台粗的边。
+    /// 判据取「同一个 Style 实例」而不是「数值相等」——数值相等挡不住有人再复制一份。
+    /// </summary>
+    [Fact]
+    public void PanelSurfaceAndConsoleToolbarShareOneStyle()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+
+            var panel = new PanelView(Valid(), bus, log, actions);
+            var surface = Assert.IsType<Border>(panel.Content);
+
+            // 两边各自的资源域里都要解析到同一个键。
+            // 判「同一个 Style 实例」是不行的：两处各自合并了一份字典，
+            // 那样测的是 WPF 的字典缓存，不是这次的改动。
+            Assert.Same(panel.TryFindResource("Aurora.Panel.Surface"), surface.Style);
+
+            var console = new HistoryAurora.Shell.Console.ConsoleView(
+                new HistoryAurora.Shell.Logging.MemoryShellLog(),
+                bus,
+                new CommandHistory(System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    $"HistoryAurora-panelstyle-{Guid.NewGuid():N}.txt")),
+                new HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession());
+            var host = new Window { Content = console, Width = 760, Height = 420, ShowInTaskbar = false };
+            host.Show();
+            UiTestHost.Pump();
+
+            var shared = console.TryFindResource("Aurora.Panel.Surface");
+            var toolbar = FindDescendants<Border>(console)
+                .FirstOrDefault(border => border.Style != null && ReferenceEquals(border.Style, shared));
+
+            // 控制台原先自带的那份必须已经不存在，否则它迟早又长回去。
+            var strayCopy = console.TryFindResource("Aurora.Segment.Bar");
+            host.Close();
+
+            Assert.True(
+                toolbar != null,
+                "控制台过滤器工具条没有用面板底板那份样式——同一种东西又变成了两套边距");
+            Assert.Null(strayCopy);
+        });
+    }
+
     /// <summary>面板不得出现滚动条：它只是一块面板，内容多了往下长，不往里滚。</summary>
     [Fact]
     public void PanelNeverPutsItsContentInAScrollViewer()

@@ -1,4 +1,4 @@
-<UserControl x:Class="HistoryAurora.Shell.Console.ConsoleView"
+﻿<UserControl x:Class="HistoryAurora.Shell.Console.ConsoleView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:HistoryAurora.Shell.Console"
@@ -37,7 +37,8 @@
             内部用发丝线切成 筛选 / 关键字 / 开关 / 动作 四段,
             段内控件不再各带边框 —— 顶部只剩一个形状。
         -->
-        <Border DockPanel.Dock="Top" Style="{StaticResource Aurora.Segment.Bar}">
+        <!-- 底板与控制面板同一份样式（Aurora.Panel.Surface），控制台不再自带一套边距。 -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource Aurora.Panel.Surface}">
             <WrapPanel Orientation="Horizontal">
                 <TextBlock Text="级别" Style="{StaticResource Aurora.Segment.Label}" />
                 <widgets:AuroraOptionBox x:Name="LevelFilter" Width="76"

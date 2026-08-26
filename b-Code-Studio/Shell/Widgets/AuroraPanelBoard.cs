@@ -18,16 +18,16 @@ namespace HistoryAurora.Shell.Widgets;
 internal sealed class AuroraPanelBoard : Panel
 {
     /// <summary>列宽下限。太窄的列会把标签和输入框挤成两截。</summary>
-    public double MinItemWidth { get; set; } = 132;
+    public double MinItemWidth { get; set; } = 112;
 
     /// <summary>列宽上限。单个控件霸占整行会让面板看上去像个表单。</summary>
     public double MaxItemWidth { get; set; } = 260;
 
     /// <summary>同一行里相邻控件的间距，分隔线画在正中。</summary>
-    public double ColumnGap { get; set; } = 16;
+    public double ColumnGap { get; set; } = 12;
 
     /// <summary>行距，同上。</summary>
-    public double RowGap { get; set; } = 12;
+    public double RowGap { get; set; } = 8;
 
     private readonly List<Row> _rows = [];
 
@@ -114,7 +114,7 @@ internal sealed class AuroraPanelBoard : Panel
 
         foreach (var row in _rows)
         {
-            var inset = Math.Min(6, row.Height / 4);
+            var inset = Math.Min(7, row.Height / 4);
             var lineHeight = Math.Max(0, row.Height - (inset * 2));
             for (var index = 0; index < row.Items.Count - 1; index++)
             {

@@ -720,13 +720,6 @@
         段内控件一律去掉自己的边框和底色 —— 顶部因此只剩一个形状,
         而不是十几个各带边框的小控件。
     -->
-    <Style x:Key="Aurora.Segment.Bar" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
-        <Setter Property="Padding" Value="2" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-    </Style>
-
     <Style x:Key="Aurora.Segment.Divider" TargetType="Border">
         <Setter Property="Width" Value="1" />
         <Setter Property="Margin" Value="6,7" />
@@ -1377,12 +1370,21 @@
 
     <!-- ================================================================ 提示 -->
 
+    <!--
+        面板底板。**全仓只有这一份**：控制台顶部的过滤器工具条原先自带一份
+        `Aurora.Segment.Bar`，两处各写一遍的结果是同一种东西有两套边距，
+        改了一处另一处不动。现在控制台直接用这一份。
+
+        Padding 取 2 而不是 4：底板只负责圈出形状，留白归控件自己
+        （标签 Margin、输入框 Padding 都已带够）。底板再垫一圈，
+        看上去就是"边框过大"。
+    -->
     <Style x:Key="Aurora.Panel.Surface" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
-        <Setter Property="Padding" Value="4" />
+        <Setter Property="Padding" Value="2" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 

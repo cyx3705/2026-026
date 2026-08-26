@@ -39,6 +39,12 @@ public sealed class PanelView : UserControl
         Rebuild(definition);
     }
 
+    /// <summary>
+    /// 内容相对底板的内缩。与控制台过滤器工具条对齐：底板 Padding 2 + 这里 6，
+    /// 首个控件的左边距因此落在 8px，和工具条里标签的 8px 左边距同一条线上。
+    /// </summary>
+    private static readonly Thickness PanelInset = new(6, 4, 6, 4);
+
     public string PanelId => _definition.Id;
 
     /// <summary>可反向驱动的控件 id 清单（aurora.ui.panelset 报错提示用）。</summary>
@@ -66,7 +72,7 @@ public sealed class PanelView : UserControl
     /// <summary>竖排：一列，标签在左、控件在右，行与行之间一条渐隐横线。</summary>
     private Grid BuildColumn(PanelDefinition definition)
     {
-        var grid = new Grid { Margin = new Thickness(8) };
+        var grid = new Grid { Margin = PanelInset };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 56 });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -97,7 +103,7 @@ public sealed class PanelView : UserControl
     /// </summary>
     private AuroraPanelBoard BuildBoard(PanelDefinition definition)
     {
-        var board = new AuroraPanelBoard { Margin = new Thickness(8) };
+        var board = new AuroraPanelBoard { Margin = PanelInset };
 
         foreach (var widget in definition.Widgets)
         {
