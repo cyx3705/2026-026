@@ -87,6 +87,7 @@ internal static class StandardWindowIds
     public const string Mcp = "mcp";
     public const string CommandDetail = "commanddetail";
     public const string Modules = "modules";
+    public const string Components = "components";
 }
 
 internal sealed class ShellCommandEventArgs : EventArgs
