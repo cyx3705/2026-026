@@ -1,4 +1,4 @@
-using HistoryAurora.Shell.Actions;
+﻿using HistoryAurora.Shell.Actions;
 using HistoryVulcan.Core.Commands;
 
 namespace HistoryAurora.Shell.Views;
@@ -52,7 +52,12 @@ internal static class ComponentGalleryCommands
                   { "name": "alpha", "kind": "模块", "state": "已加载", "subject": "短文本" },
                   { "name": "beta", "kind": "模块", "state": "有修改", "subject": "这是一段足够长的最近提交说明，用来观察表格的星号列、截断提示和窗口缩放行为。" },
                   { "name": "gamma", "kind": "工具", "state": "未知", "subject": "自适应列与固定列同时存在" },
-                  { "name": "delta", "kind": "服务", "state": "已加载", "subject": "第四条演示数据" }
+                  { "name": "delta", "kind": "服务", "state": "已加载", "subject": "第四条演示数据" },
+                  { "name": "epsilon", "kind": "模块", "state": "已卸载", "subject": "卸载后仍留在清单里，用来看状态列的第三种取值" },
+                  { "name": "zeta", "kind": "工具", "state": "有修改", "subject": "带空格 和 标点，，的文本" },
+                  { "name": "eta", "kind": "服务", "state": "已加载", "subject": "行数够多才看得出排序与筛选是否生效" },
+                  { "name": "theta", "kind": "模块", "state": "未知", "subject": "" },
+                  { "name": "iota", "kind": "工具", "state": "已加载", "subject": "最后一行" }
                 ]
                 """)),
         });
@@ -68,19 +73,22 @@ internal static class ComponentGalleryCommands
             Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("""
                 {
                   "schemaVersion": 1,
-                  "title": "组件测试图谱 · 3 条泳道 · 6 个节点",
+                  "title": "组件测试图谱 · 3 条泳道 · 9 个节点",
                   "lanes": [
-                    { "id": "main", "title": "主线", "tip": "m3", "open": true },
-                    { "id": "feature", "title": "演示分支", "tip": "f2", "open": true },
-                    { "id": "archive", "title": "归档", "tip": "a1", "open": false }
+                    { "id": "main", "title": "主线", "tip": "m4", "open": true },
+                    { "id": "feature", "title": "演示分支", "tip": "f3", "open": true },
+                    { "id": "archive", "title": "归档", "tip": "a2", "open": false }
                   ],
                   "nodes": [
                     { "id": "m1", "title": "m1", "subtitle": "初始节点", "parents": [] },
                     { "id": "f1", "title": "f1", "subtitle": "分支节点", "parents": [ "m1" ], "lane": "feature" },
-                    { "id": "f2", "title": "f2", "subtitle": "当前分支", "parents": [ "f1" ], "lane": "feature", "tone": "accent" },
                     { "id": "a1", "title": "a1", "subtitle": "归档节点", "parents": [ "m1" ], "lane": "archive" },
+                    { "id": "f2", "title": "f2", "subtitle": "分支第二步", "parents": [ "f1" ], "lane": "feature" },
                     { "id": "m2", "title": "m2", "subtitle": "合并节点", "parents": [ "m1", "f2" ] },
-                    { "id": "m3", "title": "m3", "subtitle": "当前主线", "parents": [ "m2", "a1" ], "tone": "accent" }
+                    { "id": "a2", "title": "a2", "subtitle": "归档第二步", "parents": [ "a1" ], "lane": "archive" },
+                    { "id": "f3", "title": "f3", "subtitle": "当前分支", "parents": [ "f2" ], "lane": "feature", "tone": "accent" },
+                    { "id": "m3", "title": "m3", "subtitle": "主线推进", "parents": [ "m2", "a2" ] },
+                    { "id": "m4", "title": "m4", "subtitle": "当前主线", "parents": [ "m3", "f3" ], "tone": "accent" }
                   ],
                   "selectAction": "preview.node"
                 }

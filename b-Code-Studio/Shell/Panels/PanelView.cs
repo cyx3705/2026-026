@@ -53,24 +53,18 @@ public sealed class PanelView : UserControl
 
         var horizontal = string.Equals(definition.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
         FrameworkElement content = horizontal
-            ? BuildHorizontal(definition)
-            : BuildVertical(definition);
+            ? BuildBoard(definition)
+            : BuildColumn(definition);
 
-        var scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = horizontal
-                ? ScrollBarVisibility.Auto
-                : ScrollBarVisibility.Disabled,
-            Content = content,
-        };
-
-        var surface = new Border { Child = scroll };
+        // 没有 ScrollViewer。面板就是一块面板：内容多了往下长，不往里滚。
+        // 横排靠换行消化宽度，竖排本来就只长高度，两个方向都不需要滚动条。
+        var surface = new Border { Child = content };
         surface.SetResourceReference(StyleProperty, "Aurora.Panel.Surface");
         Content = surface;
     }
 
-    private Grid BuildVertical(PanelDefinition definition)
+    /// <summary>竖排：一列，标签在左、控件在右，行与行之间一条渐隐横线。</summary>
+    private Grid BuildColumn(PanelDefinition definition)
     {
         var grid = new Grid { Margin = new Thickness(8) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 56 });
@@ -97,34 +91,25 @@ public sealed class PanelView : UserControl
         return grid;
     }
 
-    private StackPanel BuildHorizontal(PanelDefinition definition)
+    /// <summary>
+    /// 横排：控件铺开，一行放不下就换行，因此是多行多列而不是单排。
+    /// 分隔线由 <see cref="AuroraPanelBoard"/> 按最终行列画出来，这里不放分隔件。
+    /// </summary>
+    private AuroraPanelBoard BuildBoard(PanelDefinition definition)
     {
-        var stack = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(8),
-        };
+        var board = new AuroraPanelBoard { Margin = new Thickness(8) };
 
-        for (var index = 0; index < definition.Widgets.Count; index++)
+        foreach (var widget in definition.Widgets)
         {
-            var item = new Grid { MinWidth = 72, VerticalAlignment = VerticalAlignment.Center };
+            var item = new Grid { VerticalAlignment = VerticalAlignment.Center };
             item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             item.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Build(item, 0, definition.Widgets[index]);
-            stack.Children.Add(item);
-
-            if (index == definition.Widgets.Count - 1)
-                continue;
-
-            // 竖线要撑满这一行的高度。横向 StackPanel 里的子元素默认就是 Stretch，
-            // 但这里写死：分隔线的高度不该跟着某次改动里别人的对齐方式一起变。
-            var divider = new Border { VerticalAlignment = VerticalAlignment.Stretch };
-            divider.SetResourceReference(StyleProperty, "Aurora.Panel.VerticalDivider");
-            stack.Children.Add(divider);
+            Build(item, 0, widget);
+            board.Children.Add(item);
         }
 
-        return stack;
+        return board;
     }
 
     /// <summary>aurora.ui.panelset 落点：程序向面板控件回写值。</summary>
@@ -163,7 +148,14 @@ public sealed class PanelView : UserControl
 
     private static FrameworkElement BuildText(PanelWidget widget)
     {
-        var text = new TextBlock { Text = widget.Text ?? "", Margin = new Thickness(0, 4, 0, 4) };
+        // 换行而不是撑宽：面板按统一列宽排版，一段长文字不该把自己那一列顶出去
+        // 压到相邻控件上（横排时表现为文字盖过分隔线）。
+        var text = new TextBlock
+        {
+            Text = widget.Text ?? "",
+            Margin = new Thickness(0, 4, 0, 4),
+            TextWrapping = TextWrapping.Wrap,
+        };
         text.SetResourceReference(StyleProperty, "Aurora.Panel.Text");
         return text;
     }

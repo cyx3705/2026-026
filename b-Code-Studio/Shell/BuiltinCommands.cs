@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -59,6 +59,14 @@ internal static partial class BuiltinCommands
         RegisterWin(r, s);
         RegisterLayout(r, s);
         RegisterDialog(r, s);
+        // 组件测试页的取数指令必须在这里就登记好。
+        //
+        // 界面总线默认把命令**发给宿主**（AuroraShellHost.WireBuses：只有本机已登记
+        // 且 RequiresUiThread 的才留在界面侧），而宿主注册表里只有 Attach 那一刻
+        // PublishShellCommands 抄过去的那一批。晚于 Attach 登记的界面命令，
+        // 在宿主那边永远不存在——症状就是一条 `✗ 未知指令: aurora.preview.rows`。
+        // 1.8.10 把这批指令挪到"页面打开前登记"，正是踩了这条不变量。
+        Views.ComponentGalleryCommands.Register(r);
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
         if (s.Actions != null)

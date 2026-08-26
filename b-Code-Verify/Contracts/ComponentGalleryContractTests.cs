@@ -83,6 +83,29 @@ public sealed class ComponentGalleryContractTests
         });
     }
 
+    /// <summary>
+    /// 取数指令必须出现在 <b>Attach 那一刻</b>的前端指令快照里。
+    ///
+    /// 这是 1.8.10 实测踩到的不变量：界面总线默认把命令发给宿主
+    /// （<c>AuroraShellHost.WireBuses</c> 只把本机已登记且 <c>RequiresUiThread</c> 的留在界面侧），
+    /// 而宿主注册表只收 <c>PublishShellCommands</c> 在 Attach 时抄过去的那一批。
+    /// 1.8.10 把这批指令挪到「页面打开前登记」，于是它们永远进不了宿主注册表——
+    /// 症状是 `✗ 未知指令: aurora.preview.rows`，而进程内的用例全绿。
+    ///
+    /// 因此判据不能是「注册表里有」，必须是「**框架快照里有**」。
+    /// </summary>
+    [Fact]
+    public void DataCommandsAreInTheSnapshotThatGetsPublishedToTheHost()
+    {
+        var published = HistoryAurora.Shell.FrontendCommandCatalog.FrameworkSourceDescriptors
+            .Select(descriptor => descriptor.Name)
+            .ToList();
+
+        Assert.Contains("aurora.preview.rows", published);
+        Assert.Contains("aurora.preview.graph", published);
+        Assert.Contains("aurora.preview.echo", published);
+    }
+
     /// <summary>登记两遍不得抛：页面每次打开都会调一次。</summary>
     [Fact]
     public void RegisteringTheGalleryCommandsTwiceIsANoOp()

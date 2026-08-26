@@ -2,6 +2,8 @@
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using HistoryAurora.Shell.Widgets;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Panels;
 using HistoryVulcan.Core.Commands;
@@ -162,8 +164,7 @@ public sealed class PanelComponentContractTests
             var view = new PanelView(Valid(), bus, log, actions);
 
             var surface = Assert.IsType<System.Windows.Controls.Border>(view.Content);
-            var scroll = Assert.IsType<System.Windows.Controls.ScrollViewer>(surface.Child);
-            var grid = Assert.IsType<System.Windows.Controls.Grid>(scroll.Content);
+            var grid = Assert.IsType<System.Windows.Controls.Grid>(surface.Child);
 
             Assert.Equal(3, grid.Children.OfType<System.Windows.Controls.Border>().Count());
             Assert.All(
@@ -176,8 +177,12 @@ public sealed class PanelComponentContractTests
         });
     }
 
+    /// <summary>
+    /// 横排面板是**多行多列**：一行放不下就换行。分隔线由排版面按最终行列画出来，
+    /// 不作为子元素混在控件里——那样换行处会冒出一条贴着行首的竖线。
+    /// </summary>
     [Fact]
-    public void HorizontalPanelUsesVerticalFadeSeparatorsBetweenSiblingWidgets()
+    public void HorizontalPanelWrapsIntoRowsAndColumns()
     {
         UiTestHost.RunSta(() =>
         {
@@ -188,16 +193,74 @@ public sealed class PanelComponentContractTests
 
             var view = new PanelView(definition, bus, log, actions);
             var surface = Assert.IsType<Border>(view.Content);
-            var scroll = Assert.IsType<ScrollViewer>(surface.Child);
-            var stack = Assert.IsType<StackPanel>(scroll.Content);
+            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
 
-            Assert.Equal(definition.Widgets.Count - 1, stack.Children.OfType<Border>().Count());
-            Assert.All(stack.Children.OfType<Border>(), divider =>
-            {
-                Assert.Equal(1, divider.Width);
-                Assert.NotNull(divider.OpacityMask);
-            });
+            // 每个小组件一个排版单元，分隔线不占子元素。
+            Assert.Equal(definition.Widgets.Count, board.Children.Count);
+
+            // 窄到只放得下一列时必须换行，而不是横向溢出。
+            board.Measure(new Size(board.MinItemWidth + 16, double.PositiveInfinity));
+            Assert.True(
+                board.DesiredSize.Width <= board.MinItemWidth + 16,
+                $"面板在窄宽度下溢出了: {board.DesiredSize.Width}");
+
+            // 宽到一行放得下时，高度必须比换行时矮——即真的排成了多列。
+            var narrowHeight = board.DesiredSize.Height;
+            board.Measure(new Size((board.MaxItemWidth + 16) * definition.Widgets.Count, double.PositiveInfinity));
+            Assert.True(
+                board.DesiredSize.Height < narrowHeight,
+                "放宽可用宽度后没有排成多列");
         });
+    }
+
+    /// <summary>面板不得出现滚动条：它只是一块面板，内容多了往下长，不往里滚。</summary>
+    [Fact]
+    public void PanelNeverPutsItsContentInAScrollViewer()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+
+            foreach (var orientation in new[] { "vertical", "horizontal" })
+            {
+                var definition = Valid();
+                definition.Orientation = orientation;
+                var view = new PanelView(definition, bus, log, actions);
+
+                Assert.Empty(FindDescendants<ScrollViewer>(view));
+            }
+        });
+    }
+
+    private static List<T> FindDescendants<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var found = new List<T>();
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+                found.Add(match);
+            found.AddRange(FindDescendants<T>(child));
+        }
+
+        if (root is ContentControl { Content: DependencyObject content })
+        {
+            if (content is T direct)
+                found.Add(direct);
+            found.AddRange(FindDescendants<T>(content));
+        }
+
+        if (root is Border { Child: DependencyObject boxed })
+        {
+            if (boxed is T direct)
+                found.Add(direct);
+            found.AddRange(FindDescendants<T>(boxed));
+        }
+
+        return found;
     }
 
     /// <summary>
@@ -227,19 +290,8 @@ public sealed class PanelComponentContractTests
 
             var view = Assert.IsType<PanelView>(rendered.Root);
             var surface = Assert.IsType<Border>(view.Content);
-            var scroll = Assert.IsType<ScrollViewer>(surface.Child);
-            var stack = Assert.IsType<StackPanel>(scroll.Content);
-
-            Assert.Equal(Orientation.Horizontal, stack.Orientation);
-            var dividers = stack.Children.OfType<Border>().ToList();
-            Assert.Equal(2, dividers.Count);
-            Assert.All(dividers, divider =>
-            {
-                Assert.Equal(1, divider.Width);
-                Assert.NotNull(divider.OpacityMask);
-                // 高度为 0 的线等于没有线，必须有兜底下限。
-                Assert.True(divider.MinHeight > 0, "竖向分隔线没有高度下限");
-            });
+            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
+            Assert.Equal(3, board.Children.Count);
         });
     }
 
@@ -336,8 +388,7 @@ public sealed class PanelComponentContractTests
     private static List<FrameworkElement> Widgets(PanelView view)
     {
         var surface = Assert.IsType<Border>(view.Content);
-        var scroll = Assert.IsType<ScrollViewer>(surface.Child);
-        var grid = Assert.IsType<Grid>(scroll.Content);
+        var grid = Assert.IsType<Grid>(surface.Child);
         return grid.Children.OfType<FrameworkElement>().ToList();
     }
 
