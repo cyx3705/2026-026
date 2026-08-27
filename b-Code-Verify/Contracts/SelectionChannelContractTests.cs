@@ -30,6 +30,30 @@ namespace HistoryAurora.Verify;
 public sealed class SelectionChannelContractTests
 {
     /// <summary>
+    /// 同一行再发一次不能再通知。选项框发布之后可能被跟随回写，
+    /// switch 与取数都挂在 Changed 上——值没变还通知，就是自激回路。
+    /// </summary>
+    [Fact]
+    public void PublishingTheSameRowAgainDoesNotRaiseChanged()
+    {
+        var channels = new SelectionChannels();
+        Assert.True(channels.TryDeclare("demo", "HistoryDemo", "origin", out _));
+        var fires = 0;
+        channels.Changed += (_, _) => fires++;
+
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["name"] = "alpha" };
+        channels.Publish("demo", row);
+        channels.Publish("demo", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["name"] = "alpha" });
+        Assert.Equal(1, fires);
+
+        channels.Publish("demo", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["name"] = "beta" });
+        Assert.Equal(2, fires);
+        channels.Publish("demo", null);
+        Assert.Equal(3, fires);
+        channels.Publish("demo", null);
+        Assert.Equal(3, fires);
+    }
+    /// <summary>
     /// 跨页面接线：A 页的表格发布选中行，B 页的面板跟着变。
     ///
     /// 判据必须是**两次独立渲染**。同一次渲染里的节点表本来就通着，

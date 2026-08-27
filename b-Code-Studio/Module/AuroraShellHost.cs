@@ -351,7 +351,10 @@ internal static class AuroraShellHost
             new Action(() =>
             {
                 ShowMainWindow();
-                _ = window.DiscoverModuleSurfacesAsync();
+                // 不在这里立刻 Discover：宿主此刻往往还在逐条登记命令，
+                // 每条都会 Changed，立刻拉会与那一轮风暴叠在一起。
+                // ScheduleDiscover 等注册表安静 150ms 再拉一轮。
+                window.ScheduleDiscover();
             }));
     }
 

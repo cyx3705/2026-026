@@ -81,6 +81,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
     // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
     private readonly DispatcherTimer _chromeUpkeep;
+    private readonly DispatcherTimer _discoverDebounce;
+    private readonly CoalescingAsyncWork _discover = new();
     private bool _reservePending;
     private bool _closing;
     private bool _allowClose;
@@ -232,6 +234,21 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             ApplyThemeToFloatingWindows();
         };
         Loaded += (_, _) => _chromeUpkeep.Start();
+
+        // 注册表每登记一条命令就 Changed 一次。立刻 BeginInvoke 发现的话，
+        // 默认 Normal 优先级会排在窗口 Show（ApplicationIdle）前面，
+        // 冷启动几十轮发现跑完之前窗口根本出不来。收成一次安静期后再拉。
+        _discoverDebounce = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(150),
+        };
+        _discoverDebounce.Tick += (_, _) =>
+        {
+            _discoverDebounce.Stop();
+            if (_closing)
+                return;
+            _ = DiscoverModuleSurfacesAsync();
+        };
         _shellUi = new Modules.ShellUiRegistrar(_docking, Dispatcher, log);
         _docking.WindowsChanged += (_, _) => Dispatcher.BeginInvoke(() =>
         {
@@ -414,7 +431,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         _annotationClaimer = new Modules.UiAnnotationClaimer(hostBus, _docking, _log);
         _hostRegistryChanged = () =>
         {
-            Dispatcher.BeginInvoke(() => _ = DiscoverModuleSurfacesAsync());
+            if (Dispatcher.CheckAccess())
+                ScheduleDiscover();
+            else
+                Dispatcher.BeginInvoke(ScheduleDiscover);
         };
         hostBus.Registry.Changed += _hostRegistryChanged;
     }
@@ -428,8 +448,23 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         _annotationClaimer = null;
     }
 
+    /// <summary>
+    /// 把界面发现推迟到注册表安静下来。必须走 Background：默认 Normal
+    /// 会插在窗口 Show 前面，发现风暴结束之前主窗口一直不出现。
+    /// </summary>
+    internal void ScheduleDiscover()
+    {
+        if (_closing)
+            return;
+        _discoverDebounce.Stop();
+        _discoverDebounce.Start();
+    }
+
     /// <summary>拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。</summary>
-    internal async Task DiscoverModuleSurfacesAsync()
+    internal Task DiscoverModuleSurfacesAsync()
+        => _discover.RunAsync(DiscoverModuleSurfacesCoreAsync);
+
+    private async Task DiscoverModuleSurfacesCoreAsync()
     {
         try
         {
@@ -654,6 +689,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
         _closing = true;
         _chromeUpkeep.Stop();
+        _discoverDebounce.Stop();
         SaveWindowBounds();
         _docking.SaveCurrentLayout();
 

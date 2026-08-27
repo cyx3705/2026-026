@@ -96,12 +96,62 @@ public sealed class SelectionChannels
         if (string.IsNullOrWhiteSpace(channel))
             return;
 
+        if (SameRow(Current(channel), row))
+            return;
+
         if (row == null)
             _rows.Remove(channel);
         else
             _rows[channel] = row;
 
         Changed?.Invoke(this, new SelectionChannelChangedEventArgs(channel, row));
+    }
+
+    /// <summary>
+    /// 值没变就不要再通知。面板选项框既发布又可能被跟随回写，
+    /// switch 容器、取数刷新都挂在 <see cref="Changed"/> 上——
+    /// 同样的一行再发一次，会变成「发布 → 回写 → 再发布」的自激回路。
+    /// </summary>
+    private static bool SameRow(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left == null || right == null)
+            return false;
+        if (left.Count != right.Count)
+            return false;
+
+        foreach (var pair in left)
+        {
+            if (!TryGetValue(right, pair.Key, out var value)
+                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetValue(
+        IReadOnlyDictionary<string, string> row,
+        string key,
+        out string? value)
+    {
+        if (row.TryGetValue(key, out value))
+            return true;
+
+        foreach (var pair in row)
+        {
+            if (pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = pair.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
     }
 
     /// <summary>登记引用方用到了哪几个通道。按引用方**整体替换**，重建面板即自动清旧。</summary>

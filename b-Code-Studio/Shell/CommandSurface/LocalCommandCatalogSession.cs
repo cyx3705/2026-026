@@ -46,6 +46,7 @@ internal sealed partial class LocalCommandCatalogSession : ICommandCatalogSessio
     private string? _selected;
     private string _consoleQuery = "";
     private bool _disposed;
+    private readonly CoalescingAsyncWork<bool> _refresh = new();
 
     public LocalCommandCatalogSession(CommandBus bus, IShellLog log)
     {

@@ -16,10 +16,7 @@ internal partial class ShellWindow
 
         if (_docking.ListWindows().Any(window =>
                 window.Id.Equals(StandardWindowIds.Components, StringComparison.OrdinalIgnoreCase)))
-        {
-            _docking.Show(StandardWindowIds.Components);
             return;
-        }
 
         _docking.RegisterWindow(
             new ToolWindowDescriptor
