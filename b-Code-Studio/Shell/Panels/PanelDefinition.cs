@@ -90,6 +90,20 @@ public sealed class PanelWidget
     public string? Follows { get; set; }
 
     /// <summary>
+    /// textbox 专用：把本控件的当前值发布到这个**选择通道**，列名固定为 <c>value</c>
+    /// （REQ-UI-045）。页面节点因此能按 <c>{selection.&lt;通道&gt;.value}</c> 引用它——
+    /// 取数可以跟着它重取，<c>switch</c> 容器可以跟着它换一批组件。
+    ///
+    /// 与表格的 <c>channel</c> 是同一个台账、同一套规则：同名通道只认第一个声明方，
+    /// 页面撤了通道跟着撤。方向相反而已——表格发布的是「选中了哪一行」，
+    /// 这里发布的是「这个框现在是什么值」。
+    ///
+    /// **列名不接受声明**。允许自定义的话，引用侧的 <c>{selection.x.y}</c> 写错一个字
+    /// 就是永远取不到值，而症状与「还没选中」完全一样。固定成 <c>value</c>，写法只有一种。
+    /// </summary>
+    public string? Channel { get; set; }
+
+    /// <summary>
     /// button 专用：动作 id。**这里不接受指令名**——写指令名正是 V1 会静默失效的原因。
     /// </summary>
     public string? Action { get; set; }
@@ -184,6 +198,12 @@ public static class PanelDefinitionValidator
                         && !SelectionChannels.TrySplitBinding(follows, out _, out _))
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的文本框 {widget.Id} 的 follows 必须写成 <通道>.<列>: {follows}");
+                    // 通道名带点是常态（janus.section），因此只判空白与空格：
+                    // 带空格的通道名在动作占位符 {selection.…} 里根本拆不出来。
+                    if (widget.Channel is { } channel
+                        && (string.IsNullOrWhiteSpace(channel) || channel.Contains(' ')))
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的文本框 {widget.Id} 的 channel 不能为空或含空格: {channel}");
                     if (widget.EnabledWhen != null)
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的文本框 {widget.Id} 不支持 enabledWhen；它只属于按钮");
@@ -199,6 +219,9 @@ public static class PanelDefinitionValidator
                     if (widget.Follows != null)
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的按钮 {widget.Action} 不支持 follows；它只属于文本框");
+                    if (widget.Channel != null)
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的按钮 {widget.Action} 不支持 channel；它只属于文本框");
                     if (widget.EnabledWhen is { } gate
                         && string.IsNullOrWhiteSpace(gate.Selected))
                         return PanelDefinitionParse.Fail(
@@ -212,9 +235,9 @@ public static class PanelDefinitionValidator
 
                 case PanelWidgetKind.Text:
                 default:
-                    if (widget.Follows != null || widget.EnabledWhen != null)
+                    if (widget.Follows != null || widget.EnabledWhen != null || widget.Channel != null)
                         return PanelDefinitionParse.Fail(
-                            $"面板 {definition.Id} 的说明文字不参与取值，不支持 follows / enabledWhen");
+                            $"面板 {definition.Id} 的说明文字不参与取值，不支持 follows / enabledWhen / channel");
                     if (widget.Inline)
                         return PanelDefinitionParse.Fail(
                             $"面板 {definition.Id} 的说明文字不支持 inline；它只属于按钮");

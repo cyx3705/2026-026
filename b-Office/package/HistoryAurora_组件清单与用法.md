@@ -153,6 +153,14 @@ registry.Register(new CommandDescriptor
   "options": [ "stable", "beta" ] }
 ```
 
+**1.8.17 起它还能当页面切换器用**：加一个 `channel`，它就把当前值发上选择通道，
+页面里的 `switch` 容器跟着换掉下面那一批组件。见下文「一页里换一批组件」。
+
+```json
+{ "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
+  "channel": "janus.section", "options": [ "Git 文件规则", "分支历史", "GitHub" ] }
+```
+
 下面这份是退役前的页面写法，仅作对照，**不再受支持**：
 
 ```json
@@ -324,7 +332,7 @@ registry.Register(new CommandDescriptor
 > **1.8.14 破坏性变更：`button` / `input` / `select` 不再是页面节点。**
 >
 > 小型交互控件只能出现在**控制面板**里（`panel` 与 `popup`）。页面这一层只放容器
-> （`stack` / `grid`）、展示组件（`text` / `table` / `swimlane`）和复合组件（`panel` / `popup`）。
+> （`stack` / `grid` / `switch`）、展示组件（`text` / `table` / `swimlane`）和复合组件（`panel` / `popup`）。
 > 理由是排版：散落在页面各处的单个控件没有共同的对齐依据，每加一个都要重新决定
 > 它跟谁对齐、跟谁分组。
 >
@@ -443,6 +451,62 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 要扫 45 个仓库的表。同理，会跑 Git 的取数请一律用通道引用限定到单个项目——
 「打开一个页签」不该触发全库扫描。
 
+## 一页里换一批组件（1.8.17）
+
+**「三个页签收进一页」这一节讲怎么写。** 分成两半：面板里的轮换选项框把当前值发上通道，
+页面里的 `switch` 容器按它决定显示哪一支。
+
+```json
+{
+  "type": "stack",
+  "gap": "normal",
+  "children": [
+    {
+      "type": "panel",
+      "id": "janus-projops",
+      "text": "项目操作",
+      "widgets": [
+        { "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
+          "channel": "janus.section",
+          "options": [ "Git 文件规则", "分支历史", "GitHub" ] }
+      ]
+    },
+    {
+      "type": "switch",
+      "id": "sections",
+      "source": "{selection.janus.section.value}",
+      "children": [
+        { "type": "table", "case": "Git 文件规则", "columns": [ … ] },
+        { "type": "table", "case": "分支历史",     "columns": [ … ] },
+        { "type": "table", "case": "GitHub",       "columns": [ … ] }
+      ]
+    }
+  ]
+}
+```
+
+- 发布方的列名**固定是 `value`**，不接受声明。允许自定义的话，引用侧写错一个字
+  就是永远取不到值，而症状与「还没选中」完全一样。
+- `case` 大小写不敏感。没有任何一支匹配（含通道还没有值）时显示**第一支**。
+- 通道抢注规则与表格一致：同名通道只认第一个声明方，抢注失败的控件此后不再发布。
+
+**它换的是组件，不是页面。** 三支各自还是普通的 `stack` / `table` / `panel`，
+只是同一时刻只有一支挂在树上。收成三个页签是停靠层的事（三页同写 `side: "bottom"`），
+收成一个控件是这一节的事。
+
+三件你不必自己操心、但值得知道的事：
+
+- **没被切到过的分支不取数。** 分支在渲染时就建好了（缺件与断链因此照常出账），
+  但只有被切到时才挂上可视树。写成显隐切换的话三支的取数会在开页那一刻一起打出去——
+  Janus 的规则落地状态那一支每次跑两条 `git ls-files`，没人看的两支不该付这个钱。
+- **切走再切回来是同一个控件实例，也不重取。** 表格的滚动位置、筛选词和选中行
+  都还在，那些正是人切走之前留下的上下文。
+- **分支里的表格照样拿得到高度。** 容器的尺寸档位跟着里面走，不必额外声明。
+
+`source` 写坏、一个分支都没有、`case` 重复、第二支起漏写 `case`——四种都会当场说出来
+（前两种渲染成写明原因的牌子，后两种记 Warn）。它们**不算缺件**，不会进组件申请台账：
+组件是有的，缺的是声明。
+
 ## 面板的一行：左标签 / 中控件 / 右按钮（1.8.16）
 
 按钮默认自己占一行。写 `"inline": true` 让它跟**前一个控件**同行：
@@ -491,7 +555,7 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 | kind | 说明 |
 |---|---|
 | `text` | 一段说明文字，不参与取值 |
-| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在 `options` 里选）；可加 `follows` |
+| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在 `options` 里选）；可加 `follows`（跟着通道取值）与 `channel`（把自己的值发上通道，1.8.17） |
 | `button` | 绑 `action`（动作 id）。**写指令名会校验失败**；可加 `enabledWhen` / `inline` |
 
 **破坏性变更（V1 → V2）**：`controls` 改名为 `widgets`；

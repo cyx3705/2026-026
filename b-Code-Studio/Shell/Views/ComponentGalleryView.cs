@@ -104,8 +104,44 @@ internal static class ComponentGalleryDescription
                            { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
                            { "kind": "button", "action": "preview.apply", "text": "强调按钮" },
                            { "kind": "button", "action": "preview.apply", "text": "危险按钮" },
-                           { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select", "options": [ "第一项", "第二项", "第三项" ] }
+                           { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select", "channel": "aurora.preview.section", "options": [ "第一项", "第二项", "第三项" ] }
                          ]
+                      }
+                    ]
+                  },
+                  { "type": "text", "style": "secondary", "text": "「页面选项」发布到通道，下面这块跟着换一批组件" },
+                  {
+                    "type": "switch",
+                    "id": "demo-switch",
+                    "source": "{selection.aurora.preview.section.value}",
+                    "children": [
+                      {
+                        "type": "stack",
+                        "case": "第一项",
+                        "gap": "tight",
+                        "children": [
+                          { "type": "text", "style": "caption", "text": "第一支：只有一段文字。" }
+                        ]
+                      },
+                      {
+                        "type": "table",
+                        "case": "第二项",
+                        "dataSource": { "command": "aurora.preview.rows" },
+                        "columns": [
+                          { "key": "name", "title": "名称", "width": "150" },
+                          { "key": "subject", "title": "最近提交", "width": "*" }
+                        ]
+                      },
+                      {
+                        "type": "panel",
+                        "case": "第三项",
+                        "id": "demo-switch-panel",
+                        "text": "第三支",
+                        "orientation": "horizontal",
+                        "widgets": [
+                          { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
+                          { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
+                        ]
                       }
                     ]
                   },

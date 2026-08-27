@@ -96,7 +96,7 @@ public static partial class PageRenderer
     public static readonly IReadOnlySet<string> SupportedComponents =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "stack", "text", "table", "panel", "swimlane", "grid", "popup",
+            "stack", "text", "table", "panel", "swimlane", "grid", "popup", "switch",
         };
 
     /// <summary>
@@ -139,6 +139,8 @@ public static partial class PageRenderer
             "panel.inline",
             // REQ-UI-044：取数参数可引用选中行，通道一变自动重取；也可被显式刷新。
             "table.datasource.selection", "swimlane.datasource.selection",
+            // REQ-UI-045：控制面板的文本框/轮换选项框把当前值发布到选择通道。
+            "panel.channel",
         };
 
     private static readonly JsonSerializerOptions RowOptions = new()
@@ -184,7 +186,9 @@ public static partial class PageRenderer
             return true;
 
         // 容器跟着里面走：栅格里放了表格，那一格照样得拿到高度。
-        return type is "stack" or "grid" && (node.Children ?? []).Any(IsGreedy);
+        // switch 同理，而且**必须**算上：它的分支里放着表格，少算的话
+        // 切过去看到的是一张只有表头、按内容高度缩成一条的表。
+        return type is "stack" or "grid" or "switch" && (node.Children ?? []).Any(IsGreedy);
     }
 
     private static FrameworkElement Build(PageNode node, RenderState state)
@@ -205,6 +209,7 @@ public static partial class PageRenderer
             "swimlane" => BuildSwimlane(node, state),
             "grid" => BuildGrid(node, state),
             "popup" => BuildPopup(node, state),
+            "switch" => BuildSwitch(node, state),
             _ => Placeholder(node.Type, state),
         };
     }
@@ -340,6 +345,110 @@ public static partial class PageRenderer
         return stack;
     }
 
+    /// <summary>
+    /// 切换容器（REQ-UI-046）：同一块版面上按一个通道值轮换显示其中一支。
+    ///
+    /// **它换的是组件，不是页面。** 三块内容各自还是普通的 stack / table / panel，
+    /// 只是同一时刻只有一支挂在树上。这样才谈得上"三个页签收进一页"——
+    /// 收成三个页签是停靠层的事，收成一个控件是这里的事。
+    ///
+    /// 三条实现上的硬要求：
+    /// <list type="bullet">
+    ///   <item><b>全部分支在渲染时就建出来</b>。缺件、断链和通道声明都记在
+    ///         <see cref="RenderState"/> 上，而它在 <see cref="Render"/> 返回时就被快照走了；
+    ///         懒建的分支会让"这一支里有个缺件"永远不出账——正是本协议要消灭的静默；</item>
+    ///   <item><b>不显示的分支不挂在树上</b>，而不是 <c>Collapsed</c>。折叠元素照样收 Loaded，
+    ///         于是三支的取数会在开页那一刻一起打出去；Janus 的落地状态那一支每次跑两条
+    ///         <c>git ls-files</c>，没人看的两支不该付这个钱；</item>
+    ///   <item><b>切走再切回来用的是同一个控件实例</b>。重建的话，表格的滚动位置、
+    ///         筛选词和选中行会在每次切换时消失，而那些正是人切走之前留下的上下文。</item>
+    /// </list>
+    /// </summary>
+    private static FrameworkElement BuildSwitch(PageNode node, RenderState state)
+    {
+        var children = node.Children ?? [];
+        if (children.Count == 0)
+            return Unbound("切换容器没有任何分支：switch 至少要声明一个 children", state);
+
+        var reference = Unwrap(node.Source);
+        if (!SelectionChannels.TrySplitReference(reference, out var channel, out var column))
+            return Unbound(
+                "切换容器的 source 必须写成 {selection.<通道>.<列>}: "
+                + (node.Source ?? "(未声明)"),
+                state);
+
+        // 重复的 case 只有第一支会被选中，另一支从此永远不显示——
+        // 而"某一支怎么点都出不来"是查不出来的，必须在建页时说出来。
+        foreach (var duplicate in children
+                     .Select(child => child.Case)
+                     .Where(name => name is { Length: > 0 })
+                     .GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Count() > 1))
+            state.WarnUnbound($"切换容器的分支 case 重复: {duplicate.Key}，只有第一支会被显示");
+
+        for (var index = 1; index < children.Count; index++)
+            if (string.IsNullOrWhiteSpace(children[index].Case))
+                state.WarnUnbound($"切换容器的第 {index + 1} 支没有 case，它永远不会被选中");
+
+        var host = new Grid();
+        var branches = children.Select(child => Build(child, state)).ToList();
+        var shown = -1;
+
+        void Apply()
+        {
+            var index = Match(children, state.Channels?.Value(channel, column));
+            if (index == shown)
+                return;
+
+            // 先摘再挂：WPF 的元素只能有一个父。摘下来的那支仍被 branches 持有，
+            // 因此它里面的数据、滚动位置和选中行都还在。
+            host.Children.Clear();
+            host.Children.Add(branches[index]);
+            shown = index;
+        }
+
+        Apply();
+
+        // 订阅不解除，与 PanelView 同一处理：页面撤销由 ModulePageLoader 走 owner 维度，
+        // 控件这一级没有"页没了"的可靠信号——Unloaded 在切页签、浮出、自动隐藏时都会来。
+        if (state.Channels is { } channels)
+            channels.Changed += (_, e) =>
+            {
+                if (string.Equals(e.Channel, channel, StringComparison.OrdinalIgnoreCase))
+                    Apply();
+            };
+
+        // 发布方可能排在本节点之后建（面板写在 switch 下面），那样初值早于订阅发出。
+        // Loaded 时再对一次表，Apply 本身按当前支早退，重复调用不产生额外代价。
+        host.Loaded += (_, _) => Apply();
+        return host;
+    }
+
+    /// <summary>哪一支匹配当前值；没有任何一支匹配（含通道还没有值）时用第一支。</summary>
+    private static int Match(IReadOnlyList<PageNode> children, string? value)
+    {
+        if (value is not { Length: > 0 })
+            return 0;
+
+        for (var index = 0; index < children.Count; index++)
+            if (string.Equals(children[index].Case, value, StringComparison.OrdinalIgnoreCase))
+                return index;
+
+        return 0;
+    }
+
+    /// <summary>
+    /// 去掉 <c>source</c> 外面那对花括号。取数参数里的通道引用是嵌在字符串里的，
+    /// 因而带括号；这里整个字段就是一条引用，两种写法都收下，省得人按写法猜。
+    /// </summary>
+    private static string? Unwrap(string? reference)
+    {
+        var text = reference?.Trim();
+        return text is { Length: > 1 } && text[0] == '{' && text[^1] == '}'
+            ? text[1..^1].Trim()
+            : text;
+    }
+
     /// <summary>响应式栅格：只声明"一列至少多宽"，列数由可用宽度算（REQ-UI-015）。</summary>
     private static FrameworkElement BuildGrid(PageNode node, RenderState state)
     {
@@ -382,7 +491,7 @@ public static partial class PageRenderer
 
         return new AuroraFlyout(
             node.Text ?? "更多",
-            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels),
+            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner),
             string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -406,7 +515,7 @@ public static partial class PageRenderer
         if (!parsed.Ok)
             return Unbound(parsed.Error!, state);
 
-        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels);
+        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner);
     }
 
     /// <summary>泳道图：描述由取数命令给，布局与绘制归组件（REQ-UI-010）。</summary>
@@ -477,6 +586,9 @@ public static partial class PageRenderer
         public ActionRegistry? Actions => context.Actions;
 
         public SelectionChannels? Channels => context.Channels;
+
+        /// <summary>提供方模块名。面板声明的通道按它登记，页面撤销时随 owner 一并撤掉。</summary>
+        public string Owner => context.Owner;
 
 
         public void RegisterNode(string id, AuroraTable table) => _nodes[id] = table;

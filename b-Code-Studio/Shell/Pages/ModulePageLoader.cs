@@ -1,7 +1,10 @@
+using System.Windows;
+using System.Windows.Controls;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryAurora.Shell.Modules;
+
 
 namespace HistoryAurora.Shell.Pages;
 
@@ -244,6 +247,8 @@ internal sealed class ModulePageLoader(
             requests?.Record(component, owner, owner + "/" + page.Id, null);
         }
 
+        var content = Inset(rendered.Root);
+
         try
         {
             docking.RegisterWindow(new ToolWindowDescriptor
@@ -255,7 +260,7 @@ internal sealed class ModulePageLoader(
                 DefaultTabTarget = page.Placement.TabTarget,
                 DefaultVisible = page.Placement.Visible,
                 IsSingleton = page.Placement.Singleton,
-                ContentFactory = () => rendered.Root,
+                ContentFactory = () => content,
             }, owner);
         }
         catch (Exception ex)
@@ -266,6 +271,33 @@ internal sealed class ModulePageLoader(
 
         return true;
     }
+
+    /// <summary>
+    /// 页面内容相对窗格的内边距（REQ-UI-047）。
+    ///
+    /// **这一层归 Aurora，不归模块。** 界面自持的 XAML 页按风格规范 §7 自己写
+    /// <c>Margin="{DynamicResource Aurora.Space.Pad}"</c>，组件测试页也在
+    /// <c>ComponentGalleryView</c> 里写了一句 12；而描述协议这一路没有任何字段能表达它，
+    /// 于是模块页的第一个控件一直是贴着窗格边框画的——同一个界面里两种页看得出差别，
+    /// 而模块作者没有任何办法把它补上。
+    ///
+    /// 补在这里而不是 <see cref="PageRenderer.Render"/>：渲染器交出的是**组件树**，
+    /// 内边距是它与停靠窗格之间的关系，不属于任何一个组件。放进渲染器还会让
+    /// 嵌套渲染（组件测试页、单元测试）各自多套一层。
+    /// </summary>
+    private static FrameworkElement Inset(FrameworkElement content)
+        => new Border { Child = content, Padding = new Thickness(PagePad) };
+
+    /// <summary>
+    /// <c>Aurora.Space.Pad</c> 的值。
+    ///
+    /// **不走 DynamicResource**，与 <see cref="PageRenderer"/> 里的间距同一条理由：
+    /// 间距令牌在浅色与深色里取值相同（都是 12），不随主题变化；而要让
+    /// <c>SetResourceReference</c> 在这一层解析得到，就得把主题字典并进这个 Border——
+    /// 那会把整棵模块页钉在被并进来的那一套配色上，主题一切换它不跟。
+    /// 一个不随主题变的数字，不值得用一条会破坏主题跟随的机制去取。
+    /// </summary>
+    private const double PagePad = 12;
 
     private void Drop(string owner)
     {

@@ -209,6 +209,43 @@ public sealed class ModulePageLoaderContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-047：模块页与界面自持页拿到同一条内边距。
+    ///
+    /// **这条守的是一处肉眼可见、模块无法自救的差异**：界面自己的 XAML 页按风格规范
+    /// 写了 <c>Aurora.Space.Pad</c>，组件测试页也在宿主侧写了一句 12；而描述协议这一路
+    /// 交出来的组件树被直接挂进窗格，第一个控件因此贴着边框画。描述里没有任何字段
+    /// 能表达内边距，模块作者看得见它却改不动——所以补在这一层，并在这里钉死。
+    ///
+    /// 另一半判据是 <b>ContentFactory 多次调用返回同一个元素</b>：每次现包一层的话，
+    /// 第二次调用会把内容从上一个 Border 上摘下来，而 WPF 里「元素只能有一个父」的
+    /// 代价是上一处当场变成空白。
+    /// </summary>
+    [Fact]
+    public void Reload_GivesModulePagesTheSameInsetAsShellPages()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandRegistry();
+            Describe(registry, "demo", [], OnePage("HistoryDemo", "alpha"));
+
+            var (loader, docking, _) = Loader(registry);
+            loader.ReloadAsync().GetAwaiter().GetResult();
+
+            var factory = Assert.Single(docking.Registered).Descriptor.ContentFactory;
+            Assert.NotNull(factory);
+
+            var border = Assert.IsType<System.Windows.Controls.Border>(factory!());
+            Assert.IsType<System.Windows.Controls.TextBlock>(border.Child);
+
+            // Aurora.Space.Pad 的值。间距令牌浅色与深色相同，因此写成数字而不是资源引用——
+            // 详见 ModulePageLoader.PagePad 上的说明。
+            Assert.Equal(new System.Windows.Thickness(12), border.Padding);
+
+            Assert.Same(border, factory!());
+        });
+    }
+
     private static string OnePage(string owner, string id) => $$"""
         {
           "schemaVersion": 1,

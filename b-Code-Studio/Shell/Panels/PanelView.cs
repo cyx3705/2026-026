@@ -34,19 +34,33 @@ public sealed class PanelView : UserControl
     /// <summary>按选择通道启停的按钮。<c>ReadyTip</c> 是可用时的原提示，禁用时被原因顶掉。</summary>
     private readonly List<(string Channel, Button Button, string Reason, object? ReadyTip)> _gates = [];
 
+    /// <summary>把自己的值发布到选择通道的文本框：通道名 → 控件 id（REQ-UI-045）。</summary>
+    private readonly List<(string Channel, string ControlId)> _publishers = [];
+
+    private readonly string _owner;
+
     private PanelDefinition _definition;
+
+    /// <summary>
+    /// 界面自持面板的 owner。通道台账按 owner 撤销（<see cref="SelectionChannels.DropOwner"/>），
+    /// 而模块页面重载只撤模块自己那个 owner——用界面名登记，用户面板声明的通道
+    /// 因此不会被某个模块的重载连带撤掉。
+    /// </summary>
+    public const string ShellOwner = "HistoryAurora";
 
     public PanelView(
         PanelDefinition definition,
         CommandBus bus,
         IShellLog log,
         ActionRegistry actions,
-        SelectionChannels? channels = null)
+        SelectionChannels? channels = null,
+        string? owner = null)
     {
         _bus = bus;
         _log = log;
         _actions = actions;
         _channels = channels;
+        _owner = string.IsNullOrWhiteSpace(owner) ? ShellOwner : owner;
         _definition = definition;
         // 底色由窗格卡片提供，面板自身不再画一块白（UI 风格规范 §1）。
         Background = Brushes.Transparent;
@@ -79,6 +93,7 @@ public sealed class PanelView : UserControl
         _setters.Clear();
         _followers.Clear();
         _gates.Clear();
+        _publishers.Clear();
 
         var horizontal = string.Equals(definition.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
         FrameworkElement content = horizontal
@@ -92,13 +107,57 @@ public sealed class PanelView : UserControl
         Content = surface;
 
         // 引用按面板整体登记，重建即替换；断链账因此不会随重建越积越多。
+        // 发布方不算引用：它是通道的源头，把自己记成引用会让台账里出现一条自引用的断链。
         _channels?.Reference(
             "面板 " + definition.Id,
             _followers.Select(f => f.Channel).Concat(_gates.Select(g => g.Channel)));
 
+        DeclarePublishers();
+
         // 先按当前通道状态对齐一次：面板可能是在选中之后才建出来的
         // （窗口懒实例化、模块热重载），只等下一次 Changed 会让它停在一个空壳状态。
         SyncFromChannels(null);
+    }
+
+    /// <summary>
+    /// 登记发布方并立刻把初值发上通道（REQ-UI-045）。
+    ///
+    /// **必须在建完全部控件之后做**：登记要读 <see cref="_getters"/>，而 getter 是建控件时才填上的。
+    /// 也**必须发一次初值**——引用方（<c>switch</c> 容器、跟着通道取数的表格）
+    /// 只在通道有值时才知道该显示哪一支；不发初值的话，页面一打开就停在"还没选"的空壳态，
+    /// 而用户明明看见选项框里写着一个值。
+    /// </summary>
+    private void DeclarePublishers()
+    {
+        if (_channels is not { } channels)
+            return;
+
+        // 声明失败的那一条要从名单里去掉：留着的话它会继续往一个别人拥有的通道上发值，
+        // 表现是"另一个面板的选项框莫名其妙自己变了"。
+        for (var index = _publishers.Count - 1; index >= 0; index--)
+        {
+            var (channel, controlId) = _publishers[index];
+            var origin = $"面板 {_definition.Id}#{controlId}";
+            if (channels.TryDeclare(channel, _owner, origin, out var error))
+                continue;
+
+            _log.Error("panel", "面板 " + _definition.Id + ": " + error);
+            _publishers.RemoveAt(index);
+        }
+
+        foreach (var (channel, controlId) in _publishers)
+            PublishValue(channel, controlId);
+    }
+
+    /// <summary>把某个控件的当前值发上它声明的通道，列名固定 <c>value</c>。</summary>
+    private void PublishValue(string channel, string controlId)
+    {
+        if (_channels == null || !_getters.TryGetValue(controlId, out var getter))
+            return;
+
+        _channels.Publish(
+            channel,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["value"] = getter() });
     }
 
     /// <summary>
@@ -276,6 +335,10 @@ public sealed class PanelView : UserControl
             && SelectionChannels.TrySplitBinding(follows, out var channel, out var column))
             _followers.Add((channel, column, id));
 
+        var publish = widget.Channel is { Length: > 0 } declared ? declared : null;
+        if (publish != null)
+            _publishers.Add((publish, id));
+
         if (widget.ResolvedMode == PanelTextBoxMode.Select)
         {
             var options = widget.Options ?? [];
@@ -287,6 +350,8 @@ public sealed class PanelView : UserControl
             _getters[id] = () => combo.SelectedItem as string ?? "";
             _setters[id] = value => combo.SelectedItem =
                 options.FirstOrDefault(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+            if (publish != null)
+                combo.SelectionChanged += (_, _) => PublishIfDeclared(publish, id);
             return combo;
         }
 
@@ -298,7 +363,23 @@ public sealed class PanelView : UserControl
         box.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
         _getters[id] = () => box.Text;
         _setters[id] = value => box.Text = value;
+        if (publish != null)
+            box.TextChanged += (_, _) => PublishIfDeclared(publish, id);
         return box;
+    }
+
+    /// <summary>
+    /// 控件值变了就发上通道——但只发**登记成功的那些**。
+    ///
+    /// 处理器挂在控件实例上，而登记是建完之后才做的：抢注失败的那一条如果照发，
+    /// 就是往一个别人拥有的通道上写值，表现为"另一处的显示莫名其妙跟着我变"。
+    /// </summary>
+    private void PublishIfDeclared(string channel, string controlId)
+    {
+        if (_publishers.Any(item =>
+                string.Equals(item.Channel, channel, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.ControlId, controlId, StringComparison.OrdinalIgnoreCase)))
+            PublishValue(channel, controlId);
     }
 
     private FrameworkElement BuildButton(PanelWidget widget)

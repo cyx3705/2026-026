@@ -106,6 +106,21 @@ public sealed class PageNode
     /// </summary>
     public string? Channel { get; init; }
 
+    /// <summary>
+    /// switch 专用：按哪个值决定显示哪一支，写法 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c>
+    /// （REQ-UI-046）。通常指向控制面板里一个声明了 <c>channel</c> 的轮换选项框。
+    ///
+    /// 通道当前没有值时显示第一支——页面一打开就得有东西可看，
+    /// 「等一个可能永远不来的值」在界面上与「这块坏了」没有区别。
+    /// </summary>
+    public string? Source { get; init; }
+
+    /// <summary>
+    /// switch 子节点专用：本支对应 <see cref="Source"/> 的哪一个取值。大小写不敏感。
+    /// 不写的话这一支只能作为兜底被显示（没有任何一支匹配上时用第一支）。
+    /// </summary>
+    public string? Case { get; init; }
+
     /// <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
     public double? Min { get; init; }
 
