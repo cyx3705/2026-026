@@ -1,5 +1,3 @@
-using System.Windows;
-using System.Windows.Controls;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
@@ -41,6 +39,10 @@ internal sealed class ModulePageLoader(
 
     /// <summary>协议约定的描述命令后缀；模块以自己的域注册，例如 mercury.ui.describe。</summary>
     public const string DescribeSuffix = ".ui.describe";
+
+    /// <summary>描述 → 一页。模块页与自持页共用这一条（REQ-UI-051）。</summary>
+    private readonly PageRegistrar _registrar =
+        new(bus, log, docking, actions, completions, channels, refresher);
 
     private readonly List<MissingComponent> _missing = [];
     private readonly HashSet<string> _owners = new(StringComparer.OrdinalIgnoreCase);
@@ -215,89 +217,23 @@ internal sealed class ModulePageLoader(
         return registered;
     }
 
+    /// <summary>
+    /// 建一页并把缺件入账。渲染、包边、注册三步全在 <see cref="PageRegistrar"/> 里，
+    /// 本类只管「缺件记给谁」——那是拉取器的账，不是注册器的。
+    /// </summary>
     private bool Register(string owner, PageDescription page)
     {
-        RenderedPage rendered;
-        try
-        {
-            rendered = PageRenderer.Render(
-                page,
-                new PageRenderContext
-                {
-                    Bus = bus,
-                    Log = log,
-                    Owner = owner,
-                    Actions = actions,
-                    Completions = completions,
-                    Channels = channels,
-                    Refresher = refresher,
-                });
-        }
-        catch (Exception ex)
-        {
-            // 渲染失败只影响这一页，不牵连同模块的其他页，更不牵连别的模块（协议 §1.5）。
-            log.Log(ShellLogLevel.Warn, Source, $"{owner}: 页面 {page.Id} 渲染失败: {ex.Message}");
-            return false;
-        }
+        var outcome = _registrar.Register(owner, page);
 
-        foreach (var component in rendered.MissingComponents)
+        foreach (var component in outcome.Missing)
         {
             _missing.Add(new MissingComponent(owner, page.Id, component));
             // 用出来的申请自动进台账：它来自真实使用，比设想出来的需求可信。
             requests?.Record(component, owner, owner + "/" + page.Id, null);
         }
 
-        var content = Inset(rendered.Root);
-
-        try
-        {
-            docking.RegisterWindow(new ToolWindowDescriptor
-            {
-                Id = page.Id,
-                Title = page.Title,
-                DefaultSide = ParseSide(page.Placement.Side),
-                DefaultRatio = Clamp(page.Placement.Ratio),
-                DefaultTabTarget = page.Placement.TabTarget,
-                DefaultVisible = page.Placement.Visible,
-                IsSingleton = page.Placement.Singleton,
-                ContentFactory = () => content,
-            }, owner);
-        }
-        catch (Exception ex)
-        {
-            log.Log(ShellLogLevel.Warn, Source, $"{owner}: 页面 {page.Id} 注册失败: {ex.Message}");
-            return false;
-        }
-
-        return true;
+        return outcome.Registered;
     }
-
-    /// <summary>
-    /// 页面内容相对窗格的内边距（REQ-UI-047）。
-    ///
-    /// **这一层归 Aurora，不归模块。** 界面自持的 XAML 页按风格规范 §7 自己写
-    /// <c>Margin="{DynamicResource Aurora.Space.Pad}"</c>，组件测试页也在
-    /// <c>ComponentGalleryView</c> 里写了一句 12；而描述协议这一路没有任何字段能表达它，
-    /// 于是模块页的第一个控件一直是贴着窗格边框画的——同一个界面里两种页看得出差别，
-    /// 而模块作者没有任何办法把它补上。
-    ///
-    /// 补在这里而不是 <see cref="PageRenderer.Render"/>：渲染器交出的是**组件树**，
-    /// 内边距是它与停靠窗格之间的关系，不属于任何一个组件。放进渲染器还会让
-    /// 嵌套渲染（组件测试页、单元测试）各自多套一层。
-    /// </summary>
-    private static FrameworkElement Inset(FrameworkElement content)
-        => new Border { Child = content, Padding = new Thickness(PagePad) };
-
-    /// <summary>
-    /// <c>Aurora.Space.Pad</c> 的值。
-    ///
-    /// **不走 DynamicResource**，与 <see cref="PageRenderer"/> 里的间距同一条理由：
-    /// 间距令牌在浅色与深色里取值相同（都是 12），不随主题变化；而要让
-    /// <c>SetResourceReference</c> 在这一层解析得到，就得把主题字典并进这个 Border——
-    /// 那会把整棵模块页钉在被并进来的那一套配色上，主题一切换它不跟。
-    /// 一个不随主题变的数字，不值得用一条会破坏主题跟随的机制去取。
-    /// </summary>
-    private const double PagePad = 12;
 
     private void Drop(string owner)
     {
@@ -325,19 +261,4 @@ internal sealed class ModulePageLoader(
         log.Log(ShellLogLevel.Warn, Source, $"跳过模块 {domain}: {reason}");
         return 0;
     }
-
-    private static DockSide ParseSide(string? side)
-        => (side ?? "").ToLowerInvariant() switch
-        {
-            "left" => DockSide.Left,
-            "top" => DockSide.Top,
-            "bottom" => DockSide.Bottom,
-            "center" => DockSide.Center,
-            "tab" => DockSide.Tab,
-            _ => DockSide.Right,
-        };
-
-    /// <summary>比例必须严格落在 (0,1)，越界按缺省值处理而不是让停靠库抛。</summary>
-    private static double Clamp(double ratio)
-        => ratio is > 0 and < 1 ? ratio : 0.25;
 }

@@ -832,8 +832,20 @@ public static partial class PageRenderer
                 var value = SelectionPlaceholder().Replace(pair.Value ?? "", match =>
                 {
                     var name = match.Groups[1].Value;
+
+                    // **判 null，不判空**。通道里有没有行，与那一行的某一格是不是空串，
+                    // 是两件事：没有行 → 取不到值，照旧拒绝取数并说清等谁；
+                    // 有行但那一格是空的 → 那就是个空值，照常取数。
+                    //
+                    // 混为一谈的后果是：控制面板的文本框在页面打开时就会把自己的初值
+                    // 发上通道（REQ-UI-045），而初值通常是空串——于是一个用作**筛选**的
+                    // 搜索框会让整张表停在「请先选中一行」，而那一格根本不是让人选行的。
+                    // 1.9.0 命令集改成描述式时当场撞上（CommandPagesContractTests 有专条）。
+                    //
+                    // 动作那一侧（ActionRegistry.BuildCommandText）本来就是判 null 的，
+                    // 因此这里也是把两处口径对齐。
                     var resolved = context.Channels?.Resolve(name);
-                    if (resolved is { Length: > 0 })
+                    if (resolved != null)
                         return resolved;
                     unresolved.Add(name);
                     return match.Value;

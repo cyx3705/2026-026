@@ -50,6 +50,15 @@ internal sealed class ShellCommandServices
 
     /// <summary>组件申请台账;与 PageLoader 同进同出。</summary>
     public ComponentRequestStore? ComponentRequests { get; init; }
+
+    /// <summary>
+    /// 命令目录会话，供自持页面的 aurora.ui.data 取数。
+    ///
+    /// 为 null 时取数返回**空表而不是失败**：目录快照那一路
+    /// （<see cref="FrontendCommandCatalog"/>）只取描述符、从不执行处理器，
+    /// 在那里把它做成必填只会逼出一个假实例。
+    /// </summary>
+    public CommandSurface.LocalCommandCatalogSession? Catalog { get; init; }
 }
 /// <summary>
 /// 框架内置指令组(§5.3 / 附录 B):help / history / run /
@@ -73,6 +82,13 @@ internal static partial class BuiltinCommands
         // 在宿主那边永远不存在——症状就是一条 `✗ 未知指令: aurora.preview.rows`。
         // 1.8.10 把这批指令挪到"页面打开前登记"，正是踩了这条不变量。
         Views.ComponentGalleryCommands.Register(r);
+        // 自持页面的取数与组合指令同理，而且更要紧：命令集、指令详情、模块管理三页
+        // 的全部数据都从 aurora.ui.data 来，它进不了宿主注册表就是三页一起空白。
+        Views.HostedPageData.Register(r, new Views.HostedPageData.Sources
+        {
+            Bus = () => s.Bus,
+            Catalog = () => s.Catalog,
+        });
         if (s.Panels != null)
             RegisterPanel(r, s, s.Panels);
         if (s.Actions != null)

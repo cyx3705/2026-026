@@ -49,6 +49,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
     private readonly Pages.ModulePageLoader _pageLoader;
     private readonly Pages.ComponentRequestStore _componentRequests;
+
+    /// <summary>自持页面的渲染器。没有停靠层——注册走 TakeOverDescriptor（REQ-UI-052）。</summary>
+    private readonly Pages.PageRegistrar _hostedPages;
+
+    /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
+    private readonly bool _hostedModulesPage;
     private readonly Modules.ShellUiRegistrar _shellUi;
     private Modules.UiAnnotationClaimer? _annotationClaimer;
     private Action? _hostRegistryChanged;
@@ -167,18 +173,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             0.25,
             () => _console);
 
-        if (config.EnableModules || config.EnableRemoteManagementViews)
-        {
-            TakeOverDescriptor(StandardWindowIds.Modules, "模块管理", DockSide.Right, 0.32,
-                () => new Views.ModulesView(() => _bus));
-        }
-
-        // 命令集是中央主文档（DockingHost 按这个 id 认"主窗口"）；指令详情停在右侧与它联动。
-        TakeOverDescriptor(StandardWindowIds.Mcp, "命令集", DockSide.Center, 0.5,
-            () => new Views.CommandCatalogView(_catalog, _bus, log, _commandSelection));
-        TakeOverDescriptor(StandardWindowIds.CommandDetail, "指令详情", DockSide.Right, 0.28,
-            () => new Views.CommandDetailView(_catalog, _bus, _commandSelection));
-
         // 动作声明台账要早于面板:面板按钮绑的是动作 id,构建时就要能解析。
         // 首次拉取不在这里做——那时模块还没装载,问谁都是空。见 DiscoverModuleSurfacesAsync。
         _actions = new Actions.ActionRegistry(_bus, log);
@@ -190,6 +184,23 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 取数刷新台账在这里就要建好：它在构造时订阅通道变化，
         // 晚于第一次建页创建的话，那一批表格就永远不跟选中走。
         _dataRefresher = new Pages.PageDataRefresher(_channels);
+
+        _componentRequests = new Pages.ComponentRequestStore(settings, log);
+
+        // 自持页面（命令集 / 指令详情 / 模块管理 / 组件测试）由描述建出来，
+        // 与模块页共用渲染、包边与裁切（REQ-UI-051/052）。
+        //
+        // **这四条台账必须先于建页存在**，顺序反了不会报错，只会让页面安静地少一半功能：
+        // 动作台账晚了，按钮全判成「未声明的动作」；通道台账晚了，表格选中发不出去，
+        // 跟随框与按钮启停一起失效。这正是 1.8.9 真机上花了两轮才认出来的形态。
+        // 模块管理页只在开关打开时建。这是一条**装配决定**，不属于页面描述——
+        // 描述说的是「这一页长什么样」，不是「这台机器要不要这一页」。
+        _hostedModulesPage = config.EnableModules || config.EnableRemoteManagementViews;
+
+        DeclareHostedPageActions();
+        _hostedPages = new Pages.PageRegistrar(
+            _bus, log, docking: null, _actions, _catalog.CompleteAsync, _channels, _dataRefresher);
+        RegisterHostedPages();
 
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
         _panels = new Panels.PanelManager(
@@ -274,7 +285,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
         // 页面注册协议 V1：拉取器要早于内置指令组构造，指令组才能拿到它。
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
-        _componentRequests = new Pages.ComponentRequestStore(settings, log);
         _pageLoader = new Pages.ModulePageLoader(
             _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync,
             _channels, _dataRefresher);
@@ -471,7 +481,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             // 动作声明先于页面:页面按钮与泳道的点击都要按 id 解析动作,
             // 顺序反了会在冷启动那一轮把每个按钮都判成「未声明」。
             await _actions.ReloadAsync().ConfigureAwait(true);
-            RegisterComponentGallery();
             _panels.RebuildAll();
             await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
@@ -557,7 +566,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         DockSide fallbackSide,
         double fallbackRatio,
         Func<object> factory,
-        bool forcePlacement = false)
+        bool forcePlacement = false,
+        bool fallbackVisible = true,
+        bool fallbackSingleton = true)
     {
         var index = _config.ToolWindows.FindIndex(
             d => d.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
@@ -569,6 +580,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
                 Title = fallbackTitle,
                 DefaultSide = fallbackSide,
                 DefaultRatio = fallbackRatio,
+                // 自持页的描述里写得出 visible / singleton，这里就必须收下。
+                // 两个默认值恰好都是 true，因此漏传**今天**看不出差别——而那正是
+                // 「描述里写了、实现里没读」这类缺陷的标准形态（见 1.9.0 查出的
+                // view.filterable：声明了、解析了、全仓没有一处读它）。
+                DefaultVisible = fallbackVisible,
+                IsSingleton = fallbackSingleton,
                 ContentFactory = factory,
             });
             return;

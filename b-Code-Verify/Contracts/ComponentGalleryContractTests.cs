@@ -18,15 +18,19 @@ public sealed class ComponentGalleryContractTests
     public void DescriptionCoversEveryPageComponentAndKeepsTheProtocolVersion()
     {
         var parsed = PageDescriptionReader.Read(
-            HistoryAurora.Shell.Views.ComponentGalleryDescription.Json,
-            HistoryAurora.Shell.Views.ComponentGalleryCommands.Owner);
+            HostedPageDescriptions.Json,
+            ComponentGalleryCommands.Owner);
 
         Assert.True(parsed.Ok, parsed.Error);
         Assert.Equal(1, parsed.Value!.SchemaVersion);
 
-        using var document = JsonDocument.Parse(HistoryAurora.Shell.Views.ComponentGalleryDescription.Json);
+        // 1.9.0 起自持描述里有四页，组件测试只是其中一页——**按 id 找，不按下标**。
+        // 按下标取会在下一次调整页序时静默换成另一页，而断言仍然全绿。
+        using var document = JsonDocument.Parse(HostedPageDescriptions.Json);
         var types = document.RootElement
-            .GetProperty("pages")[0]
+            .GetProperty("pages")
+            .EnumerateArray()
+            .Single(page => page.GetProperty("id").GetString() == "components")
             .GetProperty("content")
             .ToString();
 
@@ -68,8 +72,29 @@ public sealed class ComponentGalleryContractTests
             // 通道台账必须真的传进去：漏传的症状不是崩，而是「表格声明的 channel 已忽略」
             // 一条 Warn，随后跟随框与按钮启停全部不生效——正好是这条用例要挡的形态。
             var channels = new SelectionChannels();
-            var view = new ComponentGalleryView(bus, log, actions, null!, channels);
-            var host = new Window { Width = 900, Height = 700, ShowActivated = false, Content = view };
+            // 页面由描述渲染，与模块页同一条路——测试里也不许有第二条。
+            var parsed = PageDescriptionReader.Read(
+                HostedPageDescriptions.Json, ComponentGalleryCommands.Owner);
+            Assert.True(parsed.Ok, parsed.Error);
+            var page = parsed.Value!.Pages.Single(p => p.Id == "components");
+
+            var rendered = PageRenderer.Render(page, new PageRenderContext
+            {
+                Bus = bus,
+                Log = log,
+                Owner = ComponentGalleryCommands.Owner,
+                Actions = actions,
+                Channels = channels,
+            });
+            Assert.Empty(rendered.MissingComponents);
+
+            var host = new Window
+            {
+                Width = 900,
+                Height = 700,
+                ShowActivated = false,
+                Content = PageRegistrar.Inset(rendered.Root),
+            };
             host.Show();
 
             // 取数走 Loaded → 后台派发 → 线程池，两条数据源都回来了才算画完。

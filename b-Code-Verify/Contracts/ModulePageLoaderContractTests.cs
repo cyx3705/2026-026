@@ -239,8 +239,20 @@ public sealed class ModulePageLoaderContractTests
             Assert.IsType<System.Windows.Controls.TextBlock>(border.Child);
 
             // Aurora.Space.Pad 的值。间距令牌浅色与深色相同，因此写成数字而不是资源引用——
-            // 详见 ModulePageLoader.PagePad 上的说明。
+            // 详见 PageRegistrar.PagePad 上的说明。
             Assert.Equal(new System.Windows.Thickness(12), border.Padding);
+
+            // **与自持页逐项对比**，而不是各自记一个 12。
+            //
+            // 这条用例此前只查了模块页这一侧，名字却写着「与自持页一致」——而 1.8.18 的
+            // 真实情况是自持页写 8、模块页写 12，用户一眼看出了差别，这条全绿的用例
+            // 一个字都没说。两侧现在共用 PageRegistrar.Inset，那就让断言也共用它：
+            // 哪天有人在某一路上单独改了内边距或去掉裁切，这里立刻红。
+            var hosted = Assert.IsType<System.Windows.Controls.Border>(
+                PageRegistrar.Inset(new System.Windows.Controls.TextBlock()));
+            Assert.Equal(hosted.Padding, border.Padding);
+            Assert.Equal(hosted.ClipToBounds, border.ClipToBounds);
+            Assert.True(border.ClipToBounds, "工具页必须裁切而不是滚动（REQ-UI-050）");
 
             Assert.Same(border, factory!());
         });
