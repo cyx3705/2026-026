@@ -1,6 +1,7 @@
 using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryVulcan.Services.Commands;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -72,6 +73,35 @@ public sealed class CommandCatalogContractTests
         var result = await session.CompleteAsync("rename", 6);
 
         Assert.Contains(result.Candidates, candidate => candidate.InsertText == "demo.branch.rename");
+    }
+
+    [Fact]
+    public async Task Refresh_CoalescesOverlappingRemoteCatalogFetches()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(Command("demo.branch.rename", "branch", "重命名"));
+        var log = new MemoryLog();
+        var bus = new CommandBus(registry, log);
+        var gate = new TaskCompletionSource();
+        var lists = 0;
+        bus.RemoteExecutor = async (_, _, _) =>
+        {
+            Interlocked.Increment(ref lists);
+            await gate.Task.ConfigureAwait(false);
+            return CommandResult.Ok("ok", Array.Empty<CommandCatalogRow>());
+        };
+
+        var session = new LocalCommandCatalogSession(bus, log);
+        var first = session.RefreshAsync();
+        var second = session.RefreshAsync();
+        var third = session.RefreshAsync();
+
+        Assert.Same(first, second);
+        Assert.Same(first, third);
+
+        gate.SetResult();
+        Assert.True(await first);
+        Assert.Equal(2, lists);
     }
 
     [Fact]

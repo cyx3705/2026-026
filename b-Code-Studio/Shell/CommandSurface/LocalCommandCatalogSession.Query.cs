@@ -41,7 +41,10 @@ internal sealed partial class LocalCommandCatalogSession
     /// 重建快照。本地注册表直接读；接了远端执行器时再并入宿主目录——
     /// 界面自己那张表里没有模块与宿主的指令，只看本地的话命令集会少掉九成。
     /// </summary>
-    public async Task<bool> RefreshAsync(bool force = false, CancellationToken cancellationToken = default)
+    public Task<bool> RefreshAsync(bool force = false, CancellationToken cancellationToken = default)
+        => _refresh.RunAsync(() => RefreshCoreAsync(force, cancellationToken));
+
+    private async Task<bool> RefreshCoreAsync(bool force, CancellationToken cancellationToken)
     {
         var merged = new Dictionary<string, CatalogEntry>(StringComparer.OrdinalIgnoreCase);
 
