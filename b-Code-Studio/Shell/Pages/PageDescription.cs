@@ -121,6 +121,18 @@ public sealed class PageNode
     /// </summary>
     public string? Case { get; init; }
 
+    /// <summary>
+    /// popup 专用：怎么把它打开（REQ-UI-056）。
+    ///
+    /// <c>button</c>（缺省）自带一个按钮，看得见「这里还有东西」；
+    /// <c>context</c> 不占版面，右键页面空白处弹出——适合「低频、且页面上本来就有别的东西可看」
+    /// 的编辑器。同一页最多接一个 <c>context</c>：右键只有一次，接第二个的话
+    /// 「弹出哪一个」就取决于建页顺序，而那个顺序不受任何东西保证。
+    ///
+    /// 写了别的值按缺省处理并记一条 Warn——静默当成 button 的症状是「右键怎么点都没反应」。
+    /// </summary>
+    public string? Trigger { get; init; }
+
     /// <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
     public double? Min { get; init; }
 

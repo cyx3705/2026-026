@@ -141,6 +141,8 @@ public static partial class PageRenderer
             "table.datasource.selection", "swimlane.datasource.selection",
             // REQ-UI-045：控制面板的文本框/轮换选项框把当前值发布到选择通道。
             "panel.channel",
+            // REQ-UI-056：弹出层可以接到页面右键上，从而连按钮都不占版面。
+            "popup.trigger",
         };
 
     private static readonly JsonSerializerOptions RowOptions = new()
@@ -165,11 +167,41 @@ public static partial class PageRenderer
             ? Placeholder("content", state)
             : Build(page.Content, state);
 
+        root = AttachContextPopup(root, state);
+
         return new RenderedPage
         {
             Root = root,
             MissingComponents = state.Missing.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         };
+    }
+
+    /// <summary>
+    /// 把 <c>trigger: "context"</c> 的弹出层接到整页的右键上（REQ-UI-056）。
+    ///
+    /// **必须在整棵树建完之后做**：弹出层节点可以写在页面的任何位置，而它要接的是
+    /// 「这一页」，不是它自己那一格。
+    ///
+    /// **必须自己包一层透明底的容器**：<see cref="Panel"/> 的 Background 为 null 时
+    /// 空白处不参与命中测试，而空白处正是这条路唯一会被右键到的地方——行上是行菜单，
+    /// 表格自己也有底色。直接往 root 上写底色则不行：root 可能就是某个组件本体
+    /// （只有一个 table 的页面），覆盖它的底色等于从外面改组件的外观。
+    ///
+    /// **浮层本体挂在这一层，不留在它声明的那一格**。两个理由：
+    /// 声明的位置对右键式浮层没有意义（它接的是整页），而留在原位就得让那一格
+    /// 既不占空间又保持可见——WPF 的 Popup 在 Collapsed 的父级下**开不出来**，
+    /// 且不抛异常、不触发 Closed，IsOpen 写进去就是 false。
+    /// </summary>
+    private static FrameworkElement AttachContextPopup(FrameworkElement root, RenderState state)
+    {
+        if (state.ContextPopup is not { } flyout)
+            return root;
+
+        var surface = new Grid { Background = System.Windows.Media.Brushes.Transparent };
+        surface.Children.Add(root);
+        surface.Children.Add(flyout);
+        flyout.AttachContextTrigger(surface);
+        return surface;
     }
 
     /// <summary>
@@ -471,7 +503,12 @@ public static partial class PageRenderer
         return grid;
     }
 
-    /// <summary>弹出层：内容仍是面板那三种小组件，只是不再常驻占版面（REQ-UI-012）。</summary>
+    /// <summary>
+    /// 弹出层：内容仍是面板那三种小组件，只是不再常驻占版面（REQ-UI-012）。
+    ///
+    /// <c>trigger</c> 决定怎么打开它（REQ-UI-056）：缺省自带一个按钮，
+    /// <c>context</c> 则连按钮都不占版面，改由整页的右键唤起。浮层本体是同一个。
+    /// </summary>
     private static FrameworkElement BuildPopup(PageNode node, RenderState state)
     {
         if (state.Actions == null)
@@ -489,10 +526,32 @@ public static partial class PageRenderer
         if (!parsed.Ok)
             return Unbound(parsed.Error!, state);
 
-        return new AuroraFlyout(
+        var trigger = (node.Trigger ?? "").Trim().ToLowerInvariant();
+        var context = trigger == "context";
+        if (trigger.Length > 0 && !context && trigger != "button")
+            // 静默按缺省处理的症状是「右键怎么点都没反应」，而版面上确实多了个按钮，
+            // 看上去就像这个组件本来就长这样。
+            state.WarnUnbound(
+                $"弹出层 {definition.Id} 的 trigger={node.Trigger} 无法识别，按 button 处理；只支持 button / context");
+
+        var flyout = new AuroraFlyout(
             node.Text ?? "更多",
             new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner),
-            string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase));
+            string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase),
+            context);
+
+        if (!context)
+            return flyout;
+
+        if (!state.TryTakeContextPopup(flyout))
+            return Unbound(
+                $"弹出层 {definition.Id} 声明了 trigger=context，但本页已经接了一个；"
+                + "右键只有一次，第二个不会被接上", state);
+
+        // 浮层本体由 AttachContextPopup 挂到整页那一层去，这一格只留一个不占版面的空位：
+        // 顺序容器给每个子节点分一行并补一段间距，零尺寸的元素照样会留下那段间距，
+        // 而 Collapsed 的元素连边距都不参与。
+        return new Grid { Visibility = Visibility.Collapsed };
     }
 
     /// <summary>面板：直接复用控制面板那套组件与校验，不为页面另造一份。</summary>
@@ -578,6 +637,22 @@ public static partial class PageRenderer
         private readonly Dictionary<AuroraTable, Dictionary<string, PageRowAction>> _rowActions = [];
 
         public List<string> Missing { get; } = [];
+
+        /// <summary>
+        /// 本页接到右键上的那个弹出层（REQ-UI-056）。**只留一个**：右键只有一次，
+        /// 留两个的话「弹出哪一个」就取决于建页顺序，而那个顺序不受任何东西保证——
+        /// 与选择通道的抢注规则同一条理由。
+        /// </summary>
+        public AuroraFlyout? ContextPopup { get; private set; }
+
+        public bool TryTakeContextPopup(AuroraFlyout flyout)
+        {
+            if (ContextPopup != null)
+                return false;
+
+            ContextPopup = flyout;
+            return true;
+        }
 
         public CommandBus Bus => context.Bus;
 
