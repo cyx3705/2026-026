@@ -82,8 +82,13 @@ public sealed class PageNode
 
     public IReadOnlyList<PageColumn>? Columns { get; init; }
 
-    /// <summary>panel 专用：面板内的小组件（文字 / 文本框 / 按钮），与控制面板同一套契约。</summary>
-    public IReadOnlyList<HistoryAurora.Shell.Panels.PanelWidget>? Widgets { get; init; }
+    /// <summary>
+    /// panel / popup 专用：面板的行，与控制面板同一套契约（REQ-UI-060）。
+    ///
+    /// 1.9.2 之前这里是平铺的 <c>widgets</c>，行由 <c>inline</c> 的位置副产出来。
+    /// 现在行是一等结构：每行自己说是均布还是可变宽度，元素自己说最窄多宽。
+    /// </summary>
+    public IReadOnlyList<HistoryAurora.Shell.Panels.PanelRow>? Rows { get; init; }
 
     /// <summary>
     /// table 专用：行操作（REQ-UI-011）。一份声明同时给出行内按钮与右键菜单，
@@ -96,6 +101,42 @@ public sealed class PageNode
     /// 声明了但当前拿不到补全会话时退回普通输入框，并记一条 Warn——不静默。
     /// </summary>
     public string? Suggest { get; init; }
+
+    /// <summary>
+    /// table 专用：把当前选中行发布到这个**选择通道**（REQ-UI-041）。
+    ///
+    /// 通道名是界面级的，因此别的页面上的控制面板也能按它取值——
+    /// 「选中一行 → 另一页的按钮变可用」只能这样表达，页内节点 id 出不了这一页。
+    /// 建议以自己的域起头（<c>janus.project</c>）；同名通道只认第一个声明方。
+    /// </summary>
+    public string? Channel { get; init; }
+
+    /// <summary>
+    /// switch 专用：按哪个值决定显示哪一支，写法 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c>
+    /// （REQ-UI-046）。通常指向控制面板里一个声明了 <c>channel</c> 的轮换选项框。
+    ///
+    /// 通道当前没有值时显示第一支——页面一打开就得有东西可看，
+    /// 「等一个可能永远不来的值」在界面上与「这块坏了」没有区别。
+    /// </summary>
+    public string? Source { get; init; }
+
+    /// <summary>
+    /// switch 子节点专用：本支对应 <see cref="Source"/> 的哪一个取值。大小写不敏感。
+    /// 不写的话这一支只能作为兜底被显示（没有任何一支匹配上时用第一支）。
+    /// </summary>
+    public string? Case { get; init; }
+
+    /// <summary>
+    /// popup 专用：怎么把它打开（REQ-UI-056）。
+    ///
+    /// <c>button</c>（缺省）自带一个按钮，看得见「这里还有东西」；
+    /// <c>context</c> 不占版面，右键页面空白处弹出——适合「低频、且页面上本来就有别的东西可看」
+    /// 的编辑器。同一页最多接一个 <c>context</c>：右键只有一次，接第二个的话
+    /// 「弹出哪一个」就取决于建页顺序，而那个顺序不受任何东西保证。
+    ///
+    /// 写了别的值按缺省处理并记一条 Warn——静默当成 button 的症状是「右键怎么点都没反应」。
+    /// </summary>
+    public string? Trigger { get; init; }
 
     /// <summary>grid 专用：一列的下限宽度（像素）。列数由可用宽度算出，**不接受声明**。</summary>
     public double? Min { get; init; }

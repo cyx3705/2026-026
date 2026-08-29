@@ -3,6 +3,7 @@ using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryAurora.Shell.Modules;
 
+
 namespace HistoryAurora.Shell.Pages;
 
 /// <summary>一次拉取的结果，供命令回显与测试断言。</summary>
@@ -30,12 +31,19 @@ internal sealed class ModulePageLoader(
     IShellLog log,
     ComponentRequestStore? requests = null,
     HistoryAurora.Shell.Actions.ActionRegistry? actions = null,
-    HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null)
+    HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null,
+    HistoryAurora.Shell.Selection.SelectionChannels? channels = null,
+    PageDataRefresher? refresher = null,
+    HistoryAurora.Shell.Table.IColumnOrderStore? columnOrder = null)
 {
     private const string Source = "page";
 
     /// <summary>协议约定的描述命令后缀；模块以自己的域注册，例如 mercury.ui.describe。</summary>
     public const string DescribeSuffix = ".ui.describe";
+
+    /// <summary>描述 → 一页。模块页与自持页共用这一条（REQ-UI-051）。</summary>
+    private readonly PageRegistrar _registrar =
+        new(bus, log, docking, actions, completions, channels, refresher, columnOrder);
 
     private readonly List<MissingComponent> _missing = [];
     private readonly HashSet<string> _owners = new(StringComparer.OrdinalIgnoreCase);
@@ -131,9 +139,16 @@ internal sealed class ModulePageLoader(
             registered += count;
         }
 
+        // 通道断链只能在**整轮建页之后**判：面板所在的页可能先于表格所在的页渲染，
+        // 建时判会把正常情况报成断链。这也是它不做成渲染期占位的原因。
+        var dangling = channels?.Dangling ?? [];
+        foreach (var reason in dangling)
+            log.Log(ShellLogLevel.Warn, Source, "选择通道断链: " + reason);
+
         log.Log(ShellLogLevel.Info, Source,
             $"页面拉取完成: 问了 {owners.Count} 个模块，建了 {registered} 页"
-            + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 个" : ""));
+            + (skipped.Count > 0 ? $"，跳过 {skipped.Count} 个" : "")
+            + (dangling.Count > 0 ? $"，{dangling.Count} 条通道断链" : ""));
 
         return new PageLoadReport(owners.Count, registered, skipped, Missing);
     }
@@ -203,63 +218,34 @@ internal sealed class ModulePageLoader(
         return registered;
     }
 
+    /// <summary>
+    /// 建一页并把缺件入账。渲染、包边、注册三步全在 <see cref="PageRegistrar"/> 里，
+    /// 本类只管「缺件记给谁」——那是拉取器的账，不是注册器的。
+    /// </summary>
     private bool Register(string owner, PageDescription page)
     {
-        RenderedPage rendered;
-        try
-        {
-            rendered = PageRenderer.Render(
-                page,
-                new PageRenderContext
-                {
-                    Bus = bus,
-                    Log = log,
-                    Owner = owner,
-                    Actions = actions,
-                    Completions = completions,
-                });
-        }
-        catch (Exception ex)
-        {
-            // 渲染失败只影响这一页，不牵连同模块的其他页，更不牵连别的模块（协议 §1.5）。
-            log.Log(ShellLogLevel.Warn, Source, $"{owner}: 页面 {page.Id} 渲染失败: {ex.Message}");
-            return false;
-        }
+        var outcome = _registrar.Register(owner, page);
 
-        foreach (var component in rendered.MissingComponents)
+        foreach (var component in outcome.Missing)
         {
             _missing.Add(new MissingComponent(owner, page.Id, component));
             // 用出来的申请自动进台账：它来自真实使用，比设想出来的需求可信。
             requests?.Record(component, owner, owner + "/" + page.Id, null);
         }
 
-        try
-        {
-            docking.RegisterWindow(new ToolWindowDescriptor
-            {
-                Id = page.Id,
-                Title = page.Title,
-                DefaultSide = ParseSide(page.Placement.Side),
-                DefaultRatio = Clamp(page.Placement.Ratio),
-                DefaultTabTarget = page.Placement.TabTarget,
-                DefaultVisible = page.Placement.Visible,
-                IsSingleton = page.Placement.Singleton,
-                ContentFactory = () => rendered.Root,
-            }, owner);
-        }
-        catch (Exception ex)
-        {
-            log.Log(ShellLogLevel.Warn, Source, $"{owner}: 页面 {page.Id} 注册失败: {ex.Message}");
-            return false;
-        }
-
-        return true;
+        return outcome.Registered;
     }
 
     private void Drop(string owner)
     {
         if (!_owners.Remove(owner))
             return;
+
+        // 页面撤了，它声明的通道跟着撤。留着的话就是一条永远不会再有人发布的幽灵通道，
+        // 而跟着它的按钮会一直灰着——那正是宿主侧 web.frontendcatalog 的老毛病。
+        channels?.DropOwner(owner);
+        refresher?.DropOwner(owner);
+
         try
         {
             docking.UnregisterOwner(owner);
@@ -276,19 +262,4 @@ internal sealed class ModulePageLoader(
         log.Log(ShellLogLevel.Warn, Source, $"跳过模块 {domain}: {reason}");
         return 0;
     }
-
-    private static DockSide ParseSide(string? side)
-        => (side ?? "").ToLowerInvariant() switch
-        {
-            "left" => DockSide.Left,
-            "top" => DockSide.Top,
-            "bottom" => DockSide.Bottom,
-            "center" => DockSide.Center,
-            "tab" => DockSide.Tab,
-            _ => DockSide.Right,
-        };
-
-    /// <summary>比例必须严格落在 (0,1)，越界按缺省值处理而不是让停靠库抛。</summary>
-    private static double Clamp(double ratio)
-        => ratio is > 0 and < 1 ? ratio : 0.25;
 }
