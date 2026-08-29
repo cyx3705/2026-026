@@ -7,6 +7,7 @@ using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Panels;
 using HistoryAurora.Shell.Selection;
 using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -245,13 +246,16 @@ public sealed class SelectionChannelContractTests
     }
 
     /// <summary>
-    /// 同行按钮与它前面的控件在**同一个 Grid 行**里（REQ-UI-043）。
+    /// 同一声明行里的控件与按钮排在**同一个视觉行**里（REQ-UI-060）。
     ///
-    /// 判据是行号相等而不是"看起来在一起"：按钮独占一行时版面上也挨着上一行，
-    /// 肉眼分不出来，而参数取值的那一行到底是哪一行是分得出来的。
+    /// 判据是排完版后两者的纵向区间重合，而不是"看起来在一起"：
+    /// 各占一行时版面上也挨着，肉眼分不出来。
+    ///
+    /// 1.9.2 之前这条靠 <c>inline</c> 表达——「与前一个控件同行」。
+    /// 行成为一等结构之后，同行就是同一个 <c>widgets</c> 数组，没有第二种写法。
     /// </summary>
     [Fact]
-    public void AnInlineButtonSharesItsRowWithTheControlBeforeIt()
+    public void ControlsInOneDeclaredRowShareOneVisualLine()
     {
         UiTestHost.RunSta(() =>
         {
@@ -260,15 +264,15 @@ public sealed class SelectionChannelContractTests
             {
                 var (box, button) = host.Panel();
 
-                var boxRow = RowOf(box);
-                var buttonRow = RowOf(button);
+                var boxTop = box.TranslatePoint(new Point(0, 0), host.PanelRoot).Y;
+                var buttonTop = button.TranslatePoint(new Point(0, 0), host.PanelRoot).Y;
                 Assert.True(
-                    boxRow >= 0 && boxRow == buttonRow,
-                    $"输入框在第 {boxRow} 行、按钮在第 {buttonRow} 行——同行按钮没有和控件同行");
+                    Math.Abs(boxTop - buttonTop) < box.ActualHeight,
+                    $"输入框顶在 {boxTop}、按钮顶在 {buttonTop}——同一声明行没有排成同一个视觉行");
 
-                // 左标签 / 中控件 / 右按钮：三段各占一列。
-                Assert.Equal(1, Grid.GetColumn(AncestorInSameGrid(box)));
-                Assert.Equal(2, Grid.GetColumn(AncestorInSameGrid(button)));
+                // 标签 / 输入区 / 按钮：三个元素，各占一格。
+                var line = Assert.Single(Assert.Single(host.PanelBoard.CellBounds));
+                Assert.Equal(3, line.Count);
             }
             finally
             {
@@ -277,41 +281,19 @@ public sealed class SelectionChannelContractTests
         });
     }
 
-    /// <summary>同行按钮前面没有控件时整份面板作废——"按钮自己占一行"与没写 inline 一模一样。</summary>
+    /// <summary>空行整份作废：一个没有小组件的行在版面上只是一段说不出来历的留白。</summary>
     [Fact]
-    public void AnInlineButtonWithNothingBeforeItIsRejected()
+    public void AnEmptyRowIsRejected()
     {
         var parsed = PanelDefinitionValidator.Validate(new PanelDefinition
         {
             Id = "ops",
             Title = "项目操作",
-            Widgets = [new PanelWidget { Kind = "button", Action = "demo.rename", Inline = true }],
+            Rows = [new PanelRow()],
         });
 
         Assert.False(parsed.Ok);
-        Assert.Contains("inline", parsed.Error!, StringComparison.Ordinal);
-    }
-
-    private static int RowOf(DependencyObject element)
-    {
-        for (var node = element; node != null; node = VisualTreeHelper.GetParent(node))
-        {
-            if (VisualTreeHelper.GetParent(node) is Grid && node is UIElement cell)
-                return Grid.GetRow(cell);
-        }
-
-        return -1;
-    }
-
-    private static FrameworkElement AncestorInSameGrid(DependencyObject element)
-    {
-        for (var node = element; node != null; node = VisualTreeHelper.GetParent(node))
-        {
-            if (VisualTreeHelper.GetParent(node) is Grid && node is FrameworkElement framework)
-                return framework;
-        }
-
-        throw new InvalidOperationException("没找到 Grid 里的那一层");
+        Assert.Contains("空行", parsed.Error!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -497,10 +479,15 @@ public sealed class SelectionChannelContractTests
               "type": "panel",
               "id": "ops",
               "text": "项目操作",
-              "widgets": [
-                { "kind": "textbox", "id": "project-name", "label": "项目名", "follows": "demo.project.name" },
-                { "kind": "button", "action": "demo.rename", "text": "改名", "inline": true,
-                  "enabledWhen": { "selected": "demo.project" } }
+              "rows": [
+                {
+                  "widgets": [
+                    { "kind": "textbox", "id": "project-name", "label": "项目名", "flex": true,
+                      "follows": "demo.project.name" },
+                    { "kind": "button", "action": "demo.rename", "text": "改名",
+                      "enabledWhen": { "selected": "demo.project" } }
+                  ]
+                }
               ]
             }
             """;
@@ -595,10 +582,21 @@ public sealed class SelectionChannelContractTests
             return _table;
         }
 
+        /// <summary>面板那一页的根，供断言两个控件排在同一个视觉行里。</summary>
+        public FrameworkElement PanelRoot { get; private set; } = null!;
+
+        /// <summary>面板的排版面，供读取版面快照。</summary>
+        public AuroraPanelBoard PanelBoard { get; private set; } = null!;
+
         public (TextBox Box, Button Button) Panel()
         {
             var root = Render("projops", PanelJson);
-            Mount(root, 320, 200);
+            var window = Mount(root, 320, 200);
+            window.UpdateLayout();
+            UiTestHost.Pump();
+
+            PanelRoot = root;
+            PanelBoard = Descendants<AuroraPanelBoard>(root).First();
             return (Descendants<TextBox>(root).First(), Descendants<Button>(root).First());
         }
 

@@ -1,4 +1,4 @@
-# HistoryAurora 组件清单与用法
+﻿# HistoryAurora 组件清单与用法
 
 > 面向模块作者。本文列出 Aurora 前端提供的样式键与页面注册方式，以及**怎么用**。
 > 颜色、间距、嵌入页结构和顶栏归属见
@@ -260,13 +260,18 @@ aurora.ui.dialog kind=content title=预览 body="摘要" content="<大段正文>
 悬停态、选中态和空态仍由 `AuroraTable` 统一提供。表格可以与控制面板作为响应式栅格的同级项，
 宽屏并列、窄屏上下排列，不要在调用方再包一层卡片。
 
-## 控制面板层级（1.8.9）
+## 控制面板层级（1.9.2）
 
-`PanelView` 继续接受原有 `widgets` 合同，不增加调用方外观参数。面板只有一个 `SurfaceAlt` 浅色圆角外层，
-面板可声明 `orientation: "horizontal"`，控件同级横向排列并由竖向渐隐线分隔；未声明时保持纵向排列。
-按钮、输入框和轮换选项框属于控制面板内部控件，组件本身不再绘制圆角矩形外框。
-不添加阴影或第二层卡片；面板内的文字、标签、输入框、轮换选项框和按钮均为扁平组件。
-相邻组件之间由一像素横向渐隐分隔线分开，首尾不绘制分隔线。普通操作使用 Ghost 按钮，危险操作继续使用 Danger 按钮。
+`PanelView` 接受 `rows` 合同（见下方「面板的行」），不增加调用方外观参数。
+面板只有一个 `SurfaceAlt` 浅色圆角外层，按钮、输入框和轮换选项框属于控制面板内部控件，
+组件本身不再绘制圆角矩形外框。不添加阴影或第二层卡片；面板内的文字、标签、输入框、
+轮换选项框和按钮均为扁平组件。普通操作使用 Ghost 按钮，危险操作继续使用 Danger 按钮。
+
+分隔线：**行内相邻元素之间**一像素竖向渐隐线（含标签与它的输入区之间——控件不带边框，
+那条线是两者唯一的分界），**声明行之间**一像素横向渐隐线；首尾不绘制。
+
+面板上下的留白只有底板那 2px，与控制台顶部的过滤器工具条完全一致（1.9.2 起）——
+两处用的本来就是同一份 `Aurora.Panel.Surface`。
 
 Aurora 自带的组件测试页会以描述协议真实渲染路径展示 `stack`、三种文本、四种按钮、表格、普通与补全输入框、
 轮换选项框、面板、泳道、响应式栅格和弹出层。该页面只使用 Aurora 内部预览指令，不依赖其他模块的数据或动作。
@@ -374,7 +379,7 @@ registry.Register(new CommandDescriptor
   "follows": "janus.project.name"
 },
 {
-  "kind": "button", "action": "janus.project.rename", "text": "改名", "inline": true,
+  "kind": "button", "action": "janus.project.rename", "text": "改名",
   "enabledWhen": { "selected": "janus.project" }
 }
 ```
@@ -465,11 +470,11 @@ new { id = "mymodule.rules.refresh", title = "刷新",
       "type": "panel",
       "id": "janus-projops",
       "text": "项目操作",
-      "widgets": [
+      "rows": [ { "widgets": [
         { "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
           "channel": "janus.section",
           "options": [ "Git 文件规则", "分支历史", "GitHub" ] }
-      ]
+      ] } ]
     },
     {
       "type": "switch",
@@ -507,30 +512,71 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 （前两种渲染成写明原因的牌子，后两种记 Warn）。它们**不算缺件**，不会进组件申请台账：
 组件是有的，缺的是声明。
 
-## 面板的一行：左标签 / 中控件 / 右按钮（1.8.16）
+## 面板的行（1.9.2，破坏性）
 
-按钮默认自己占一行。写 `"inline": true` 让它跟**前一个控件**同行：
+**行是你声明出来的**，不是排版算出来的。`widgets` 换成 `rows`，每行 `{ mode, widgets }`：
 
 ```json
-"widgets": [
-  { "kind": "textbox", "id": "project-name", "label": "项目名", "follows": "janus.project.name" },
-  { "kind": "button", "action": "janus.project.rename", "text": "改名", "inline": true },
-
-  { "kind": "textbox", "id": "new-project", "label": "新项目名" },
-  { "kind": "button", "action": "janus.project.create", "text": "新建", "inline": true },
-
-  { "kind": "textbox", "id": "commit-message", "label": "提交描述" },
-  { "kind": "button", "action": "janus.project.commit", "text": "提交当前项目", "inline": true },
-  { "kind": "button", "action": "janus.project.push", "text": "推送当前项目", "inline": true }
+"rows": [
+  { "widgets": [
+    { "kind": "textbox", "id": "project-name", "label": "项目名", "flex": true,
+      "follows": "janus.project.name" },
+    { "kind": "button", "action": "janus.project.rename", "text": "改名" }
+  ] },
+  { "widgets": [
+    { "kind": "textbox", "id": "new-project", "label": "新项目名", "flex": true },
+    { "kind": "button", "action": "janus.project.create", "text": "新建" }
+  ] },
+  { "widgets": [
+    { "kind": "textbox", "id": "commit-message", "label": "提交描述", "flex": true },
+    { "kind": "button", "action": "janus.project.commit", "text": "提交当前项目" },
+    { "kind": "button", "action": "janus.project.push", "text": "推送当前项目" }
+  ] },
+  { "mode": "even", "widgets": [
+    { "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
+      "channel": "janus.section", "options": [ "规则", "历史", "GitHub" ] }
+  ] }
 ]
 ```
 
-三行，每行「左标签 / 中控件 / 右按钮」；第三行右侧并排两个按钮。
-连续的 `inline` 按钮都归到同一行的右侧。
+### 一行是怎么排出来的
 
-`inline` 缺省是 `false`（注意与表格 `rowActions` 的 `inline` 相反）——
-默认改成 true 会让每一份既有面板的版面当场变样，而它们并没有要求过这件事。
-`inline` 只属于按钮，且它前面必须有控件，否则整份面板作废。
+1. **每个元素先有一个最窄宽度。** 按钮与说明文字按字宽量出来，**你不必注册**；
+   文本框量不出来（空框的内容宽度是 0），因此按你写的 `minWidth`，不写就是 120。
+2. **放得下就不换行。** 一行的元素按最窄宽度加起来还装得进可用宽度时不折行，
+   余量按这一行的 `mode` 分掉。
+3. **放不下才折行**，折成的每一截仍然属于**同一个声明行**：各自按这一行的 `mode`
+   分配余量，而行与行之间那条横分隔线**不会**因为折行多出一条。
+
+### 两种 mode
+
+| mode | 余量怎么分 |
+|---|---|
+| `flex`（缺省） | 除一个可变元素外，其余停在最窄宽度，余量全给它。可变元素由 `"flex": true` 指定；一个都没写时是**最右边**那个 |
+| `even` | 余量按最窄宽度**等比放大**——宽的还是宽、窄的还是窄，一起长 |
+
+一行里写了两个 `flex` 只认第一个：拒绝整份声明太重，而「两个都变宽」没有一种分法说得出道理。
+
+### 标签是一个独立的元素
+
+文本框的标签自己占一格，参与最窄宽度的计算，并因此在它与输入区之间落下一条竖分隔线。
+把 `label` 写成空串就不放这一格。
+
+### 从 V2 迁过来
+
+| V2 | V3 |
+|---|---|
+| `widgets: [...]` | `rows: [ { widgets: [...] } ]` |
+| `orientation: "horizontal"` | 删掉——只有一套排版了 |
+| 按钮 `inline: true` | 删掉——放进**同一个** `widgets` 数组就是同行 |
+| 按钮不写 `inline`（自己一行） | 各自单独一个 `rows` 项 |
+| `required: true` | **删掉**，见下 |
+
+`required` 退役的理由要写清楚：它的校验是**全局**的——面板上任何一个必填框为空，
+**每个**按钮都拒绝执行，而报出来的错说的是那个框的名字，看上去与你点的按钮毫无关系。
+Janus 因此一直不敢用它，Mercury 三个数字框全写了它却共用同一批按钮，
+等于把整块面板锁在「三个都填了」上。参数缺失请交给你自己那条指令的 `Required` 去报——
+报出来的还是那条指令的话。
 
 ## 面板：三种小组件（1.6.0）
 
@@ -542,12 +588,16 @@ new { id = "mymodule.rules.refresh", title = "刷新",
   "title": "发布",
   "side": "right",
   "ratio": 0.22,
-  "widgets": [
-    { "kind": "text", "text": "填写说明后发布" },
-    { "kind": "textbox", "id": "note", "label": "说明", "required": true },
-    { "kind": "textbox", "id": "channel", "label": "通道",
-      "mode": "select", "options": [ "stable", "beta" ], "value": "stable" },
-    { "kind": "button", "action": "mymodule.publish", "text": "发布" }
+  "rows": [
+    { "widgets": [ { "kind": "text", "text": "填写说明后发布" } ] },
+    { "widgets": [
+      { "kind": "textbox", "id": "note", "label": "说明", "flex": true },
+      { "kind": "textbox", "id": "channel", "label": "通道",
+        "mode": "select", "options": [ "stable", "beta" ], "value": "stable" }
+    ] },
+    { "mode": "even", "widgets": [
+      { "kind": "button", "action": "mymodule.publish", "text": "发布" }
+    ] }
   ]
 }
 ```
@@ -555,13 +605,49 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 | kind | 说明 |
 |---|---|
 | `text` | 一段说明文字，不参与取值 |
-| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在 `options` 里选）；可加 `follows`（跟着通道取值）与 `channel`（把自己的值发上通道，1.8.17） |
-| `button` | 绑 `action`（动作 id）。**写指令名会校验失败**；可加 `enabledWhen` / `inline` |
+| `textbox` | `mode` 为 `input`（缺省，自由输入）或 `select`（在候选里选）；候选写 `options`（静态）或 `optionsSource`（取数，1.9.2，二选一）；可加 `follows`（跟着通道取值）与 `channel`（把自己的值发上通道，1.8.17） |
+| `button` | 绑 `action`（动作 id）。**写指令名会校验失败**；可加 `enabledWhen` |
+
+三种 kind 都可以写 `minWidth`（最窄宽度，像素）与 `flex`（本行的可变宽度元素）。
+
+**破坏性变更（V2 → V3，1.9.2）**：`widgets` 换成 `rows`；
+`orientation`、按钮的 `inline`、文本框的 `required` **全部删除**，不留兼容分支。
+迁移对照见上一节。
 
 **破坏性变更（V1 → V2）**：`controls` 改名为 `widgets`；
-`combo` / `check` / `slider` / `file` / `dir` / `number` / `label` **全部删除**，
-不留兼容分支。`combo` 请改用 `textbox` + `mode=select`，`label` 改用 `text`。
+`combo` / `check` / `slider` / `file` / `dir` / `number` / `label` **全部删除**。
+`combo` 请改用 `textbox` + `mode=select`，`label` 改用 `text`。
 按钮的 `command` 字段删除，改 `action`。
+
+### 候选可以是活的：optionsSource（1.9.2）
+
+`options` 是写死在描述里的常量数组，表达不了「候选从一条指令来」，
+更表达不了「上一级变了这一级跟着换一批」。两级联动下拉写成这样：
+
+```json
+{ "kind": "textbox", "id": "domain", "label": "域", "mode": "select",
+  "channel": "mymodule.domain",
+  "optionsSource": { "command": "mymodule.ui.data", "args": { "view": "domains" } } },
+{ "kind": "textbox", "id": "class", "label": "类", "mode": "select",
+  "optionsSource": {
+    "command": "mymodule.ui.data",
+    "args": { "view": "classes", "domain": "{selection.mymodule.domain.value}" }
+  } }
+```
+
+形状与表格的 `dataSource` 是**同一套**：一条只读指令加固定参数，返回行集，
+**列名固定 `value`**；`args` 的值里可以写 `{selection.<通道>.<列>}`，引用的通道一变就重取。
+
+几条要知道的：
+
+- **与 `options` 二选一。** 两个都写会校验失败——同时写的话，界面上看到的那一份
+  取决于取数回来的时机，而两次打开可能不一样。
+- **候选里要自己带一项「全部」之类的兜底。** 轮换选项框没有「清空」这个动作，
+  不给一个不筛的选项，人筛了就退不回来。
+- **通道还没有值时候选保持原样**，不会被清空——「还没轮到我」与「这一级真的没有候选」
+  在界面上必须看得出区别。
+- **重取会尽量留住选中项**：还在新候选里就留着，否则退到 `value`，再否则第一项。
+- **取数失败不静默**：候选留在原样，日志里记一条带指令名的 Warn。
 
 声明里任何一处不合规，**整份面板跳过**并记一条错误——面板是一组互相取值的控件，
 少掉其中一个则按钮拿到的参数就是错的，半个面板比没有面板更危险。
@@ -634,11 +720,15 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 {
   "type": "popup",
   "text": "收录策略",
-  "widgets": [
-    { "kind": "textbox", "id": "depth", "label": "深度", "value": "2" },
-    { "kind": "textbox", "id": "mode", "label": "模式", "mode": "select",
-      "options": [ "全部", "仅主线" ] },
-    { "kind": "button", "action": "mymodule.policy.save", "text": "保存" }
+  "rows": [
+    { "widgets": [ { "kind": "textbox", "id": "depth", "label": "深度", "value": "2" } ] },
+    { "widgets": [
+      { "kind": "textbox", "id": "mode", "label": "模式", "mode": "select",
+        "options": [ "全部", "仅主线" ] }
+    ] },
+    { "mode": "even", "widgets": [
+      { "kind": "button", "action": "mymodule.policy.save", "text": "保存" }
+    ] }
   ]
 }
 ```
@@ -657,11 +747,10 @@ new { id = "mymodule.rules.refresh", title = "刷新",
   "id": "dock-add",
   "text": "加入扩展坞",
   "trigger": "context",
-  "orientation": "horizontal",
-  "widgets": [
-    { "kind": "textbox", "id": "value", "label": "名称 / 指令 / 路径", "required": true },
-    { "kind": "button", "action": "mymodule.add", "text": "加入", "inline": true }
-  ]
+  "rows": [ { "widgets": [
+    { "kind": "textbox", "id": "value", "label": "名称 / 指令 / 路径", "flex": true },
+    { "kind": "button", "action": "mymodule.add", "text": "加入" }
+  ] } ]
 }
 ```
 
@@ -744,7 +833,8 @@ new { id = "mymodule.rules.refresh", title = "刷新",
 
 - 新的**节点类型** → `PageRenderer.SupportedComponents`；
 - 挂在已有节点上的**能力**（如 `table.rowactions`、`table.channel`、`panel.follows`、
-  `panel.enabledwhen`、`panel.inline`、`table.datasource.selection`）→ `SupportedCapabilities`。
+  `panel.enabledwhen`、`panel.rows`、`panel.minwidth`、`panel.flex`、`panel.optionssource`、
+  `table.datasource.selection`）→ `SupportedCapabilities`。
   两份分开是有原因的：把能力名混进组件清单，会让 `type: "table.rowactions"`
   一边被判为"已支持"、一边渲染成缺件占位。
 - 再在本文加一节用法。

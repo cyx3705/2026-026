@@ -1427,20 +1427,11 @@
         <Setter Property="Padding" Value="8,4" />
     </Style>
 
-    <Style x:Key="Aurora.Panel.Divider" TargetType="Border">
-        <Setter Property="Height" Value="1" />
-        <Setter Property="Margin" Value="8,1" />
-        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Hairline}" />
-        <Setter Property="OpacityMask">
-            <Setter.Value>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="Transparent" Offset="0" />
-                    <GradientStop Color="Black" Offset="0.18" />
-                    <GradientStop Color="Black" Offset="0.82" />
-                    <GradientStop Color="Transparent" Offset="1" />
-                </LinearGradientBrush>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <!--
+        Aurora.Panel.Divider 随 REQ-UI-060 一同删除。它是竖排面板拿来当子元素用的那条横线，
+        而分隔线现在由 AuroraPanelBoard 在 OnRender 里按最终版面画——位置只有排完版才知道，
+        做成子元素就得先假设一个位置，折行处于是会冒出一条贴着行首的线。
+        留一份没人用的样式，下一个人只会照着它再摆一条子元素回去。
+    -->
 
 </ResourceDictionary>

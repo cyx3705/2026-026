@@ -54,6 +54,11 @@ public sealed class PageRenderContext
     /// 但此后既不会跟着选中变化重取，也不接受 <c>aurora.ui.refreshdata</c>。
     /// </summary>
     public PageDataRefresher? Refresher { get; init; }
+
+    /// <summary>
+    /// 列序记忆（REQ-UI-062）。为 null 时列照样拖得动，只是重开页面回到声明顺序。
+    /// </summary>
+    public IColumnOrderStore? ColumnOrder { get; init; }
 }
 
 /// <summary>渲染结果。缺件被记录下来而不是丢弃，供缺件清单查询。</summary>
@@ -135,8 +140,12 @@ public static partial class PageRenderer
             // 「表格选中行 → 按钮变可用」这条链路 1.8.14 随页面按钮一起没了，这三条把它接回来，
             // 落点从页内节点 id 换成界面级通道，因此顺带能跨页。
             "table.channel", "panel.follows", "panel.enabledwhen",
-            // REQ-UI-043：按钮与前一个控件同行，一行因此是「左标签 / 中控件 / 右按钮」。
-            "panel.inline",
+            // REQ-UI-060：面板的行是声明出来的一等结构，行内可以指定均布或可变宽度，
+            // 元素可以注册自己的最窄宽度。它取代了 REQ-UI-043 的 panel.inline——
+            // 「与前一个控件同行」在有了真正的行之后没有存在的余地。
+            "panel.rows", "panel.minwidth", "panel.flex",
+            // REQ-UI-059：选择框的候选来自一条只读指令，可跟着通道重取（两级联动下拉）。
+            "panel.optionssource",
             // REQ-UI-044：取数参数可引用选中行，通道一变自动重取；也可被显式刷新。
             "table.datasource.selection", "swimlane.datasource.selection",
             // REQ-UI-045：控制面板的文本框/轮换选项框把当前值发布到选择通道。
@@ -321,7 +330,13 @@ public static partial class PageRenderer
         table.SetData(AuroraTableData.Create(columns, []));
 
         if (node.Id is { Length: > 0 } id)
+        {
             state.RegisterNode(id, table);
+
+            // 列序按「模块/页面/节点」记（REQ-UI-062）。没写 id 的表不记：
+            // 那样的表拖完也认不出是哪一张，记下来只会张冠李戴。
+            table.UseColumnOrder(state.ColumnOrder, state.ColumnOrderKey(id));
+        }
 
         if (node.Channel is { Length: > 0 } channel)
             state.PublishSelectionTo(table, channel, node.Id);
@@ -518,8 +533,7 @@ public static partial class PageRenderer
         {
             Id = node.Id ?? "page-popup",
             Title = node.Text ?? "更多",
-            Orientation = node.Orientation ?? "vertical",
-            Widgets = (node.Widgets ?? []).ToList(),
+            Rows = (node.Rows ?? []).ToList(),
         };
 
         var parsed = PanelDefinitionValidator.Validate(definition);
@@ -564,10 +578,9 @@ public static partial class PageRenderer
         {
             Id = node.Id ?? "page-panel",
             Title = node.Text ?? "面板",
-            // 声明里的 orientation 必须传下去。漏传的症状不是报错而是"少了点东西"：
-            // 面板照样画出来，只是横排变竖排、控件之间那条渐隐分隔线一并消失。
-            Orientation = node.Orientation ?? "vertical",
-            Widgets = (node.Widgets ?? []).ToList(),
+            // 行必须原样传下去（REQ-UI-060）。漏传的症状不是报错而是"版面变了"：
+            // 面板照样画出来，只是所有元素挤成一行或散成一列。
+            Rows = (node.Rows ?? []).ToList(),
         };
 
         var parsed = PanelDefinitionValidator.Validate(definition);
@@ -667,6 +680,15 @@ public static partial class PageRenderer
 
 
         public void RegisterNode(string id, AuroraTable table) => _nodes[id] = table;
+
+        /// <summary>列序记忆的落点。</summary>
+        public IColumnOrderStore? ColumnOrder => context.ColumnOrder;
+
+        /// <summary>
+        /// 一张表在列序台账里的身份：<c>模块/页面/节点</c>。
+        /// 与通道来源用的是同一套三段式——同一张表在两本账里应该叫同一个名字。
+        /// </summary>
+        public string ColumnOrderKey(string nodeId) => $"{context.Owner}/{pageId}/{nodeId}";
 
         /// <summary>
         /// 把一张表接到选择通道上。**来源写成 owner/页/节点**：热重载时同一个节点重新渲染，

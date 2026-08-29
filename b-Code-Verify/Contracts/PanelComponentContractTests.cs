@@ -14,11 +14,15 @@ using Xunit;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 面板组件的契约（REQ-UI-008）。V2 相对 V1 只改了两件事，但两件都是为了同一个失败形态：
+/// 面板组件的契约（REQ-UI-008 / REQ-UI-060，协议 V3）。
+///
+/// V2 定下的两条不变：小组件只有三种，其余一律拒绝；按钮只认动作 id。
+/// V3 加的是**版面**这一层，本文件因此多了四类断言：
 /// <list type="number">
-///   <item>小组件收成三种（文字 / 文本框 / 按钮），其余一律拒绝，不静默忽略；</item>
-///   <item>按钮**只认动作 id**。V1 的按钮直接写指令模板，模块改一次指令名按钮就哑了；
-///         现在指令名归模块自己的声明管，面板 JSON 一个字不动。</item>
+///   <item>行是声明出来的一等结构，不是 <c>inline</c> 的副产品；</item>
+///   <item>元素按最窄宽度排，**放得下就不换行**；</item>
+///   <item>余量按行的模式分：均布等比放大，可变全给一个；</item>
+///   <item>折行不产生新的声明行——折出来的两截之间没有那条横分隔线。</item>
 /// </list>
 /// </summary>
 [Collection(TestCollections.Ui)]
@@ -36,7 +40,7 @@ public sealed class PanelComponentContractTests
         var parsed = PanelDefinitionValidator.Validate(Parse("""
             {
               "id": "demo", "title": "演示",
-              "widgets": [ { "kind": "button", "text": "执行" } ]
+              "rows": [ { "widgets": [ { "kind": "button", "text": "执行" } ] } ]
             }
             """));
 
@@ -51,7 +55,7 @@ public sealed class PanelComponentContractTests
         var parsed = PanelDefinitionValidator.Validate(Parse("""
             {
               "id": "demo", "title": "演示",
-              "widgets": [ { "kind": "slider", "id": "speed" } ]
+              "rows": [ { "widgets": [ { "kind": "slider", "id": "speed" } ] } ]
             }
             """));
 
@@ -60,12 +64,12 @@ public sealed class PanelComponentContractTests
     }
 
     [Fact]
-    public void Validate_RejectsSelectWithoutOptions()
+    public void Validate_RejectsSelectWithoutAnyOptionSource()
     {
         var parsed = PanelDefinitionValidator.Validate(Parse("""
             {
               "id": "demo", "title": "演示",
-              "widgets": [ { "kind": "textbox", "id": "pick", "mode": "select" } ]
+              "rows": [ { "widgets": [ { "kind": "textbox", "id": "pick", "mode": "select" } ] } ]
             }
             """));
 
@@ -73,16 +77,69 @@ public sealed class PanelComponentContractTests
         Assert.Contains("options", parsed.Error);
     }
 
+    /// <summary>
+    /// 静态候选与动态候选只能二选一（REQ-UI-059）。
+    /// 两个都写的话，界面上看到的那一份取决于取数回来的时机，而两次打开可能不一样——
+    /// 那种缺陷只会以"偶尔选项不对"的形态出现，查不出来。
+    /// </summary>
     [Fact]
-    public void Validate_RejectsDuplicateControlIds()
+    public void Validate_RejectsStaticAndDynamicOptionsTogether()
     {
-        // 占位符按 id 取值，重名意味着按钮拿到的参数取决于构建顺序。
         var parsed = PanelDefinitionValidator.Validate(Parse("""
             {
               "id": "demo", "title": "演示",
-              "widgets": [
-                { "kind": "textbox", "id": "name" },
-                { "kind": "textbox", "id": "name" }
+              "rows": [ { "widgets": [
+                { "kind": "textbox", "id": "pick", "mode": "select",
+                  "options": [ "甲" ],
+                  "optionsSource": { "command": "demo.ui.data" } }
+              ] } ]
+            }
+            """));
+
+        Assert.False(parsed.Ok);
+        Assert.Contains("二选一", parsed.Error);
+    }
+
+    [Fact]
+    public void Validate_RejectsUnknownRowMode()
+    {
+        var parsed = PanelDefinitionValidator.Validate(Parse("""
+            {
+              "id": "demo", "title": "演示",
+              "rows": [ { "mode": "justify", "widgets": [ { "kind": "text", "text": "一" } ] } ]
+            }
+            """));
+
+        Assert.False(parsed.Ok);
+        Assert.Contains("justify", parsed.Error);
+    }
+
+    /// <summary>最窄宽度写成 0 或负数的症状是「那一格没了」，必须在收下声明时判死。</summary>
+    [Fact]
+    public void Validate_RejectsNonPositiveMinWidth()
+    {
+        var parsed = PanelDefinitionValidator.Validate(Parse("""
+            {
+              "id": "demo", "title": "演示",
+              "rows": [ { "widgets": [ { "kind": "textbox", "id": "note", "minWidth": 0 } ] } ]
+            }
+            """));
+
+        Assert.False(parsed.Ok);
+        Assert.Contains("minWidth", parsed.Error);
+    }
+
+    [Fact]
+    public void Validate_RejectsDuplicateControlIdsAcrossRows()
+    {
+        // 占位符按 id 取值，重名意味着按钮拿到的参数取决于构建顺序。
+        // **跨行也要判**：行只是版面，取值作用域是整个面板。
+        var parsed = PanelDefinitionValidator.Validate(Parse("""
+            {
+              "id": "demo", "title": "演示",
+              "rows": [
+                { "widgets": [ { "kind": "textbox", "id": "name" } ] },
+                { "widgets": [ { "kind": "textbox", "id": "name" } ] }
               ]
             }
             """));
@@ -99,7 +156,7 @@ public sealed class PanelComponentContractTests
             var (bus, log, actions) = Host(declare: false);
             var view = new PanelView(Valid(), bus, log, actions);
 
-            var widgets = Widgets(view);
+            var widgets = Elements(view);
             // 按钮不渲染成按钮：看起来能点、其实不能，比点了没反应还难查。
             Assert.DoesNotContain(widgets, element => element is Button);
             Assert.Contains(widgets, element => element is Border);
@@ -123,7 +180,7 @@ public sealed class PanelComponentContractTests
             Assert.True(view.TrySetValue("note", "第一版"));
 
             var button = Assert.IsType<Button>(
-                Assert.Single(Widgets(view), element => element is Button));
+                Assert.Single(Elements(view), element => element is Button));
             button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             UiTestHost.PumpUntil(() => executed.Count > 0);
 
@@ -132,8 +189,15 @@ public sealed class PanelComponentContractTests
         });
     }
 
+    /// <summary>
+    /// <c>required</c> 退役（REQ-UI-060）：一个空着的文本框**不再锁住整块面板的按钮**。
+    ///
+    /// 旧行为是全局的——任何一个必填框为空，面板上每个按钮都拒绝执行。
+    /// Janus 因此不敢用它，Mercury 三个数字框全写了 required 却共用同一批按钮。
+    /// 参数缺失交给指令自己的 Required 去报，报出来的还是那条指令的话。
+    /// </summary>
     [Fact]
-    public void Button_RefusesWhenRequiredTextBoxEmpty()
+    public void Button_IsNotBlockedByAnEmptySiblingTextBox()
     {
         UiTestHost.RunSta(() =>
         {
@@ -143,83 +207,228 @@ public sealed class PanelComponentContractTests
             var executed = new List<string>();
             bus.Executed += (text, _, _) => executed.Add(text);
 
+            // note 一个字都没填，而旧协议里它是 required。
             var view = new PanelView(Valid(), bus, log, actions);
             var button = Assert.IsType<Button>(
-                Assert.Single(Widgets(view), element => element is Button));
+                Assert.Single(Elements(view), element => element is Button));
             button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-            UiTestHost.Pump();
+            UiTestHost.PumpUntil(() => executed.Count > 0);
 
-            Assert.Empty(executed);
-            Assert.Contains(log.Snapshot(), entry =>
-                entry.Level == ShellLogLevel.Error && entry.Message.Contains("必填"));
+            Assert.Equal("demo.release.publish note=\"\" channel=stable", Assert.Single(executed));
         });
     }
 
+    /// <summary>
+    /// 分隔线**不是子元素**。做成子元素就得在排版之前假设一个位置，
+    /// 于是折行处会冒出一条贴着行首的竖线——1.9.2 之前竖排面板正是靠子元素画横线的。
+    /// </summary>
     [Fact]
-    public void PanelUsesOneSurfaceAndASeparatorBetweenEachWidget()
+    public void DividersAreNotChildrenOfTheBoard()
     {
         UiTestHost.RunSta(() =>
         {
             var (bus, log, actions) = Host(declare: true);
             actions.ReloadAsync().GetAwaiter().GetResult();
             var view = new PanelView(Valid(), bus, log, actions);
+            var board = Board(view);
 
-            var surface = Assert.IsType<System.Windows.Controls.Border>(view.Content);
-            var grid = Assert.IsType<System.Windows.Controls.Grid>(surface.Child);
-
-            Assert.Equal(3, grid.Children.OfType<System.Windows.Controls.Border>().Count());
-            Assert.All(
-                grid.Children.OfType<System.Windows.Controls.Border>(),
-                divider =>
-                {
-                    Assert.Equal(1, divider.Height);
-                    Assert.NotNull(divider.OpacityMask);
-                });
+            // 四个小组件，其中两个文本框各自多一个独立的标签元素 → 六格。
+            Assert.Equal(6, board.Children.Count);
         });
     }
 
     /// <summary>
-    /// 横排面板是**多行多列**：一行放不下就换行。分隔线由排版面按最终行列画出来，
-    /// 不作为子元素混在控件里——那样换行处会冒出一条贴着行首的竖线。
+    /// 标签是**独立的一个元素**（REQ-UI-060）：它自己占一格，因此与输入区之间有一条竖线。
+    /// 面板里的控件不带边框，那条线是「这是标签、那是输入区」唯一的分界。
     /// </summary>
     [Fact]
-    public void HorizontalPanelWrapsIntoRowsAndColumns()
+    public void LabelOccupiesItsOwnCellNextToTheControl()
     {
         UiTestHost.RunSta(() =>
         {
             var (bus, log, actions) = Host(declare: true);
             actions.ReloadAsync().GetAwaiter().GetResult();
-            var definition = Valid();
-            definition.Orientation = "horizontal";
 
-            var view = new PanelView(definition, bus, log, actions);
-            var surface = Assert.IsType<Border>(view.Content);
-            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "widgets": [
+                    { "kind": "textbox", "id": "note", "label": "说明" }
+                  ] } ]
+                }
+                """), bus, log, actions);
 
-            // 每个小组件一个排版单元，分隔线不占子元素。
-            Assert.Equal(definition.Widgets.Count, board.Children.Count);
+            var board = Board(view);
+            board.Measure(new Size(600, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 600, board.DesiredSize.Height));
 
-            // 窄到只放得下一列时必须换行，而不是横向溢出。
-            board.Measure(new Size(board.MinItemWidth + 16, double.PositiveInfinity));
-            Assert.True(
-                board.DesiredSize.Width <= board.MinItemWidth + 16,
-                $"面板在窄宽度下溢出了: {board.DesiredSize.Width}");
-
-            // 宽到一行放得下时，高度必须比换行时矮——即真的排成了多列。
-            var narrowHeight = board.DesiredSize.Height;
-            board.Measure(new Size((board.MaxItemWidth + 16) * definition.Widgets.Count, double.PositiveInfinity));
-            Assert.True(
-                board.DesiredSize.Height < narrowHeight,
-                "放宽可用宽度后没有排成多列");
+            var line = Assert.Single(Assert.Single(board.CellBounds));
+            Assert.Equal(2, line.Count);
+            Assert.True(line[0].Right < line[1].Left, "标签与输入区之间没有留出画分隔线的空档");
         });
     }
 
     /// <summary>
-    /// 面板底板与控制台过滤器工具条**必须是同一份样式**。
+    /// 均布：余量按最窄宽度**等比放大**——宽的还是宽、窄的还是窄，一起长。
+    /// 不是等宽平分：把一个按钮和一段长说明拉成同一个宽度，两边都不合适。
+    /// </summary>
+    [Fact]
+    public void EvenRowScalesEveryCellProportionally()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "mode": "even", "widgets": [
+                    { "kind": "textbox", "id": "a", "label": "", "minWidth": 100 },
+                    { "kind": "textbox", "id": "b", "label": "", "minWidth": 200 }
+                  ] } ]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+            board.Measure(new Size(624, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 624, board.DesiredSize.Height));
+
+            // 624 － 排版面左右各 6 的内缩 = 612 可用宽；扣掉 12 的间距还剩 600。
+            // 100:200 等比放大到 200:400。
+            var line = Assert.Single(Assert.Single(board.CellBounds));
+            Assert.Equal(200, line[0].Width, 0);
+            Assert.Equal(400, line[1].Width, 0);
+        });
+    }
+
+    /// <summary>可变宽度：其余各自停在最窄宽度，余量全给声明了 flex 的那一个。</summary>
+    [Fact]
+    public void FlexRowGivesTheRemainderToTheDeclaredElement()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "widgets": [
+                    { "kind": "textbox", "id": "a", "label": "", "minWidth": 100, "flex": true },
+                    { "kind": "textbox", "id": "b", "label": "", "minWidth": 200 }
+                  ] } ]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+            board.Measure(new Size(624, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 624, board.DesiredSize.Height));
+
+            var line = Assert.Single(Assert.Single(board.CellBounds));
+            Assert.Equal(400, line[0].Width, 0);
+            Assert.Equal(200, line[1].Width, 0);
+        });
+    }
+
+    /// <summary>一个都没声明 flex 时，可变的是**最右边**那一个——这是既有面板的样子。</summary>
+    [Fact]
+    public void FlexDefaultsToTheRightmostElement()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "widgets": [
+                    { "kind": "textbox", "id": "a", "label": "", "minWidth": 100 },
+                    { "kind": "textbox", "id": "b", "label": "", "minWidth": 200 }
+                  ] } ]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+            board.Measure(new Size(624, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 624, board.DesiredSize.Height));
+
+            var line = Assert.Single(Assert.Single(board.CellBounds));
+            Assert.Equal(100, line[0].Width, 0);
+            Assert.Equal(500, line[1].Width, 0);
+        });
+    }
+
+    /// <summary>
+    /// **放得下就不换行，放不下才折**——而折出来的仍然是同一个声明行。
+    ///
+    /// 这一条是本轮的核心：折行是宽度不够时的应对，不是版面结构的变化。
+    /// 让它变出一条横分隔线，等于让窗口宽度去改声明。
+    /// </summary>
+    [Fact]
+    public void RowWrapsOnlyWhenItCannotFitAndStaysOneDeclaredRow()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "widgets": [
+                    { "kind": "textbox", "id": "a", "label": "", "minWidth": 100 },
+                    { "kind": "textbox", "id": "b", "label": "", "minWidth": 100 },
+                    { "kind": "textbox", "id": "c", "label": "", "minWidth": 100 }
+                  ] } ]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+
+            // 336 － 12 内缩 = 324 = 3×100 + 2×12，正好放得下：一个视觉行。
+            board.Measure(new Size(336, double.PositiveInfinity));
+            Assert.Equal([1], board.LineCounts);
+
+            // 窄一点就放不下了：折成两个视觉行，但**声明行仍然只有一行**。
+            board.Measure(new Size(252, double.PositiveInfinity));
+            Assert.Equal([2], board.LineCounts);
+            Assert.Single(board.CellBounds);
+        });
+    }
+
+    /// <summary>折出来的视觉行按**母行**的模式分配余量，不退回缺省。</summary>
+    [Fact]
+    public void WrappedLinesKeepTheParentRowMode()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [ { "mode": "even", "widgets": [
+                    { "kind": "textbox", "id": "a", "label": "", "minWidth": 100 },
+                    { "kind": "textbox", "id": "b", "label": "", "minWidth": 200 },
+                    { "kind": "textbox", "id": "c", "label": "", "minWidth": 100 }
+                  ] } ]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+            board.Measure(new Size(324, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 324, board.DesiredSize.Height));
+
+            var row = Assert.Single(board.CellBounds);
+            Assert.Equal(2, row.Count);
+
+            // 可用宽 312，第一行两个元素正好占满（100 + 12 + 200），没有余量可分。
+            Assert.Equal(100, row[0][0].Width, 0);
+            Assert.Equal(200, row[0][1].Width, 0);
+
+            // 第二行只剩一个，等比放大在只有一个元素时就是铺满可用宽。
+            Assert.Equal(312, row[1][0].Width, 0);
+        });
+    }
+
+    /// <summary>
+    /// 面板底板与控制台过滤器工具条**必须是同一份样式**（REQ-UI-061）。
     ///
     /// 控制台原先自带一份 `Aurora.Segment.Bar`：同一种东西两套边距，改了一处另一处不动，
-    /// 实测表现为面板那份 Padding 4 + 内容 Margin 8 撑出一圈明显比控制台粗的边。
-    /// 判据取「同一个 Style 实例」而不是「数值相等」——数值相等挡不住有人再复制一份。
+    /// 实测表现为面板那份撑出一圈明显比控制台粗的边。
     /// </summary>
     [Fact]
     public void PanelSurfaceAndConsoleToolbarShareOneStyle()
@@ -264,6 +473,35 @@ public sealed class PanelComponentContractTests
     }
 
     /// <summary>
+    /// 面板上下的留白必须与控制台顶栏一致（REQ-UI-061）。
+    ///
+    /// 判据是**排版面相对底板的内缩**，不是"我改了一个常量"：
+    /// 此前底板 Padding 2 之外还叠了 4 的内缩与控件自带的 3～6 上下边距，
+    /// 于是同一份底板在控制台上薄薄一条、在控制面板里厚得像加了道边框。
+    /// </summary>
+    [Fact]
+    public void PanelAddsNoVerticalInsetBeyondTheSharedSurface()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            var view = new PanelView(Valid(), bus, log, actions);
+            var board = Board(view);
+
+            Assert.Equal(0, board.Margin.Top);
+            Assert.Equal(0, board.Margin.Bottom);
+
+            // 控件自己也不许再带上下边距——它们叠起来同样是"厚边框"。
+            foreach (var child in board.Children.OfType<FrameworkElement>())
+            {
+                Assert.Equal(0, child.Margin.Top);
+                Assert.Equal(0, child.Margin.Bottom);
+            }
+        });
+    }
+
+    /// <summary>
     /// 分隔线必须**真的画在屏幕上**。
     ///
     /// 判据是渲染出来的像素，不是"我设了 Style / 加了子元素"。
@@ -271,16 +509,14 @@ public sealed class PanelComponentContractTests
     /// 一次是分隔线高度被算成 0。两次在"结构"上都挑不出毛病。
     /// </summary>
     [Fact]
-    public void HorizontalPanelActuallyPaintsItsSeparators()
+    public void BoardActuallyPaintsItsSeparators()
     {
         UiTestHost.RunSta(() =>
         {
             var (bus, log, actions) = Host(declare: true);
             actions.ReloadAsync().GetAwaiter().GetResult();
-            var definition = Valid();
-            definition.Orientation = "horizontal";
 
-            var view = new PanelView(definition, bus, log, actions);
+            var view = new PanelView(Valid(), bus, log, actions);
             var host = new Window
             {
                 Content = view,
@@ -293,29 +529,26 @@ public sealed class PanelComponentContractTests
             host.Show();
             UiTestHost.Pump();
 
-            var surface = Assert.IsType<Border>(view.Content);
-            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
-
-            var before = string.Join("/", board.RowColumnCounts);
+            var board = Board(view);
+            var before = string.Join("/", board.LineCounts);
             AssertSeparatorsPainted(board, "初次排版");
 
-            // 收窄后列数必须变，线也要跟着换位置重画。
+            // 收窄后必须折行，线也要跟着换位置重画。
             // OnRender 只在**视觉**失效时跑，排版重算不会自动带上它——
             // 不补一次重画，窗口一改宽度线就留在老位置上。
-            host.Width = 300;
+            host.Width = 260;
             UiTestHost.Pump();
             board.UpdateLayout();
             UiTestHost.Pump();
 
-            var after = string.Join("/", board.RowColumnCounts);
-            Assert.NotEqual(before, after);
-            AssertSeparatorsPainted(board, "收窄重排后");
+            Assert.NotEqual(before, string.Join("/", board.LineCounts));
+            AssertSeparatorsPainted(board, "收窄折行后");
 
             host.Close();
         });
     }
 
-    /// <summary>数排版面空档里的像素：那里只可能是分隔线画出来的。</summary>
+    /// <summary>数元素之间空档里的像素：那里只可能是分隔线画出来的。</summary>
     private static void AssertSeparatorsPainted(AuroraPanelBoard board, string stage)
     {
         board.UpdateLayout();
@@ -335,10 +568,25 @@ public sealed class PanelComponentContractTests
         var pixels = new byte[stride * height];
         bitmap.CopyPixels(pixels, stride, 0);
 
-        // 只看列与列之间的空档。控件都被安排在自己那一列里，画不到空档上，
+        // 只看元素与元素之间的空档。控件都被安排在自己那一格里，画不到空档上，
         // 所以空档里的不透明像素只可能是分隔线——"整块有像素"是不够的判据，
         // 子控件的文字也会让它通过。
-        var gutter = (int)Math.Round(board.ColumnWidth + (board.ColumnGap / 2) + offset.X);
+        var gutter = -1;
+        foreach (var row in board.CellBounds)
+        {
+            foreach (var line in row)
+            {
+                if (line.Count < 2)
+                    continue;
+                gutter = (int)Math.Round(((line[0].Right + line[1].Left) / 2) + offset.X);
+                break;
+            }
+
+            if (gutter >= 0)
+                break;
+        }
+
+        Assert.True(gutter is >= 0, $"{stage}：没有任何一行有两个以上的元素，测不到空档");
         Assert.True(gutter < width, $"{stage}：空档位置落在画面之外 {gutter} >= {width}");
 
         var painted = 0;
@@ -353,9 +601,8 @@ public sealed class PanelComponentContractTests
 
         Assert.True(
             painted > 0,
-            $"{stage}：列与列之间一条分隔线都没画出来（列宽={board.ColumnWidth} "
-            + $"行列={string.Join("/", board.RowColumnCounts)} "
-            + $"行高={string.Join("/", board.RowHeights)} 画面={width}x{height} 空档x={gutter}）");
+            $"{stage}：元素之间一条分隔线都没画出来（"
+            + $"折行={string.Join("/", board.LineCounts)} 画面={width}x{height} 空档x={gutter}）");
     }
 
     /// <summary>面板不得出现滚动条：它只是一块面板，内容多了往下长，不往里滚。</summary>
@@ -367,14 +614,8 @@ public sealed class PanelComponentContractTests
             var (bus, log, actions) = Host(declare: true);
             actions.ReloadAsync().GetAwaiter().GetResult();
 
-            foreach (var orientation in new[] { "vertical", "horizontal" })
-            {
-                var definition = Valid();
-                definition.Orientation = orientation;
-                var view = new PanelView(definition, bus, log, actions);
-
-                Assert.Empty(FindDescendants<ScrollViewer>(view));
-            }
+            var view = new PanelView(Valid(), bus, log, actions);
+            Assert.Empty(FindDescendants<ScrollViewer>(view));
         });
     }
 
@@ -409,14 +650,14 @@ public sealed class PanelComponentContractTests
     }
 
     /// <summary>
-    /// 页面描述里的 orientation 必须落到面板上。
+    /// 页面描述里的行必须原样落到面板上。
     ///
-    /// 1.8.9 的实测故障：<c>BuildPanel</c> 装 PanelDefinition 时漏抄了这一项。
-    /// 症状不是报错——面板照样画出来，只是横排变竖排，
-    /// 控件之间那条竖向渐隐分隔线一并消失，看上去像"分隔线没做"。
+    /// 1.8.9 的实测故障是同一类：<c>BuildPanel</c> 装 PanelDefinition 时漏抄了 orientation，
+    /// 症状不是报错——面板照样画出来，只是版面变了，看上去像"分隔线没做"。
+    /// 现在漏抄的会是 rows，症状是所有元素挤成一行或散成一列。
     /// </summary>
     [Fact]
-    public void PageLevelPanelKeepsTheDeclaredOrientationAndItsFadeSeparators()
+    public void PageLevelPanelKeepsTheDeclaredRows()
     {
         UiTestHost.RunSta(() =>
         {
@@ -424,7 +665,7 @@ public sealed class PanelComponentContractTests
             actions.ReloadAsync().GetAwaiter().GetResult();
 
             var rendered = HistoryAurora.Shell.Pages.PageRenderer.Render(
-                PagePanel("horizontal"),
+                PagePanel(),
                 new HistoryAurora.Shell.Pages.PageRenderContext
                 {
                     Bus = bus,
@@ -434,15 +675,20 @@ public sealed class PanelComponentContractTests
                 });
 
             var view = Assert.IsType<PanelView>(rendered.Root);
-            var surface = Assert.IsType<Border>(view.Content);
-            var board = Assert.IsType<AuroraPanelBoard>(surface.Child);
-            Assert.Equal(3, board.Children.Count);
+            var board = Board(view);
+            board.Measure(new Size(600, double.PositiveInfinity));
+
+            // 两个声明行；第二行的文本框自带一个标签元素。
+            Assert.Equal(2, board.CellBounds.Count);
+            Assert.Equal([1, 1], board.LineCounts);
+            Assert.Single(board.CellBounds[0][0]);
+            Assert.Equal(2, board.CellBounds[1][0].Count);
         });
     }
 
-    private static HistoryAurora.Shell.Pages.PageDescription PagePanel(string orientation)
+    private static HistoryAurora.Shell.Pages.PageDescription PagePanel()
     {
-        var parsed = HistoryAurora.Shell.Pages.PageDescriptionReader.Read($$"""
+        var parsed = HistoryAurora.Shell.Pages.PageDescriptionReader.Read("""
             {
               "schemaVersion": 1,
               "owner": "HistoryDemo",
@@ -451,11 +697,9 @@ public sealed class PanelComponentContractTests
                 "content": {
                   "type": "panel",
                   "id": "demo-panel",
-                  "orientation": "{{orientation}}",
-                  "widgets": [
-                    { "kind": "text", "text": "一" },
-                    { "kind": "textbox", "id": "note", "label": "说明" },
-                    { "kind": "text", "text": "三" }
+                  "rows": [
+                    { "widgets": [ { "kind": "text", "text": "一" } ] },
+                    { "widgets": [ { "kind": "textbox", "id": "note", "label": "说明" } ] }
                   ]
                 }
               } ]
@@ -470,12 +714,14 @@ public sealed class PanelComponentContractTests
     private static PanelDefinition Valid() => Parse("""
         {
           "id": "release", "title": "发布",
-          "widgets": [
-            { "kind": "text", "text": "填写说明后发布" },
-            { "kind": "textbox", "id": "note", "label": "说明", "required": true },
-            { "kind": "textbox", "id": "channel", "label": "通道", "mode": "select",
-              "options": [ "stable", "beta" ] },
-            { "kind": "button", "action": "demo.publish", "text": "发布" }
+          "rows": [
+            { "widgets": [ { "kind": "text", "text": "填写说明后发布" } ] },
+            { "widgets": [
+              { "kind": "textbox", "id": "note", "label": "说明", "flex": true },
+              { "kind": "textbox", "id": "channel", "label": "通道", "mode": "select",
+                "options": [ "stable", "beta" ] }
+            ] },
+            { "mode": "even", "widgets": [ { "kind": "button", "action": "demo.publish", "text": "发布" } ] }
           ]
         }
         """);
@@ -529,13 +775,13 @@ public sealed class PanelComponentContractTests
         return (bus, log, new ActionRegistry(bus, log));
     }
 
-    /// <summary>取面板栅格里的直接子元素（标签 + 控件）。</summary>
-    private static List<FrameworkElement> Widgets(PanelView view)
-    {
-        var surface = Assert.IsType<Border>(view.Content);
-        var grid = Assert.IsType<Grid>(surface.Child);
-        return grid.Children.OfType<FrameworkElement>().ToList();
-    }
+    /// <summary>面板的排版面。</summary>
+    private static AuroraPanelBoard Board(PanelView view)
+        => Assert.IsType<AuroraPanelBoard>(Assert.IsType<Border>(view.Content).Child);
+
+    /// <summary>排版面上的全部元素（标签、控件、按钮各算一个）。</summary>
+    private static List<FrameworkElement> Elements(PanelView view)
+        => Board(view).Children.OfType<FrameworkElement>().ToList();
 
     private sealed class MemoryLog : IShellLog
     {

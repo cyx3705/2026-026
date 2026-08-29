@@ -53,6 +53,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
     /// <summary>自持页面的渲染器。没有停靠层——注册走 TakeOverDescriptor（REQ-UI-052）。</summary>
     private readonly Pages.PageRegistrar _hostedPages;
 
+    /// <summary>列序台账（REQ-UI-062）；自持页与模块页共用一本。</summary>
+    private readonly Table.ColumnOrderStore _columnOrder;
+
     /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
     private readonly bool _hostedModulesPage;
     private readonly Modules.ShellUiRegistrar _shellUi;
@@ -187,6 +190,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
         _componentRequests = new Pages.ComponentRequestStore(settings, log);
 
+        // 列序台账（REQ-UI-062）。落在设置里，因此跨重启还在；
+        // 自持页与模块页共用同一本账，两条通道不各记各的。
+        _columnOrder = new Table.ColumnOrderStore(settings);
+
         // 自持页面（命令集 / 指令详情 / 模块管理 / 组件测试）由描述建出来，
         // 与模块页共用渲染、包边与裁切（REQ-UI-051/052）。
         //
@@ -199,7 +206,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
         DeclareHostedPageActions();
         _hostedPages = new Pages.PageRegistrar(
-            _bus, log, docking: null, _actions, _catalog.CompleteAsync, _channels, _dataRefresher);
+            _bus, log, docking: null, _actions, _catalog.CompleteAsync, _channels, _dataRefresher,
+            _columnOrder);
         RegisterHostedPages();
 
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
@@ -287,7 +295,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
         _pageLoader = new Pages.ModulePageLoader(
             _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync,
-            _channels, _dataRefresher);
+            _channels, _dataRefresher, _columnOrder);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
@@ -305,6 +313,15 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             DataRefresher = _dataRefresher,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
+
+            // 命令目录会话（REQ-UI-057）。**漏掉这一行的代价是三页一起空白**：
+            // 1.9.0 把命令集、指令详情两页改成描述式，取数从视图里的私有状态换成了
+            // aurora.ui.data，而这一路的目录会话从来没接上来——处理器里
+            // `sources.Catalog?.Invoke()` 拿到 null，按当时的写法返回空表而不是失败，
+            // 于是页面画得好好的、表头齐全、一行数据也没有，日志里一个字都没有。
+            // 现在取数在会话缺席时改判失败（HostedPageData.CommandsAsync），
+            // 这一行再漏掉就会当场报出来。
+            Catalog = _catalog,
         });
 
         RegisterFrontendLifecycleCommands(registry);

@@ -33,8 +33,9 @@ public sealed class ModulesPageContractTests
 
         var children = page.GetProperty("content").GetProperty("children").EnumerateArray().ToList();
         var panel = children.Single(child => child.GetProperty("type").GetString() == "panel");
-        var actions = panel.GetProperty("widgets")
+        var actions = panel.GetProperty("rows")
             .EnumerateArray()
+            .SelectMany(row => row.GetProperty("widgets").EnumerateArray())
             .Where(widget => widget.GetProperty("kind").GetString() == "button")
             .Select(widget => widget.GetProperty("action").GetString())
             .ToList();

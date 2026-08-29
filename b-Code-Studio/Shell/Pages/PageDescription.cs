@@ -82,8 +82,13 @@ public sealed class PageNode
 
     public IReadOnlyList<PageColumn>? Columns { get; init; }
 
-    /// <summary>panel 专用：面板内的小组件（文字 / 文本框 / 按钮），与控制面板同一套契约。</summary>
-    public IReadOnlyList<HistoryAurora.Shell.Panels.PanelWidget>? Widgets { get; init; }
+    /// <summary>
+    /// panel / popup 专用：面板的行，与控制面板同一套契约（REQ-UI-060）。
+    ///
+    /// 1.9.2 之前这里是平铺的 <c>widgets</c>，行由 <c>inline</c> 的位置副产出来。
+    /// 现在行是一等结构：每行自己说是均布还是可变宽度，元素自己说最窄多宽。
+    /// </summary>
+    public IReadOnlyList<HistoryAurora.Shell.Panels.PanelRow>? Rows { get; init; }
 
     /// <summary>
     /// table 专用：行操作（REQ-UI-011）。一份声明同时给出行内按钮与右键菜单，

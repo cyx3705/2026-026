@@ -33,7 +33,8 @@ internal sealed class ModulePageLoader(
     HistoryAurora.Shell.Actions.ActionRegistry? actions = null,
     HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null,
     HistoryAurora.Shell.Selection.SelectionChannels? channels = null,
-    PageDataRefresher? refresher = null)
+    PageDataRefresher? refresher = null,
+    HistoryAurora.Shell.Table.IColumnOrderStore? columnOrder = null)
 {
     private const string Source = "page";
 
@@ -42,7 +43,7 @@ internal sealed class ModulePageLoader(
 
     /// <summary>描述 → 一页。模块页与自持页共用这一条（REQ-UI-051）。</summary>
     private readonly PageRegistrar _registrar =
-        new(bus, log, docking, actions, completions, channels, refresher);
+        new(bus, log, docking, actions, completions, channels, refresher, columnOrder);
 
     private readonly List<MissingComponent> _missing = [];
     private readonly HashSet<string> _owners = new(StringComparer.OrdinalIgnoreCase);

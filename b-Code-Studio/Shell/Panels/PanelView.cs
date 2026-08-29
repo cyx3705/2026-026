@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using HistoryAurora.Shell.Actions;
@@ -12,14 +13,19 @@ namespace HistoryAurora.Shell.Panels;
 
 /// <summary>
 /// 面板组件（REQ-UI-008）。按声明构建三种小组件——文字、文本框、按钮——
-/// 外观全部由组件决定，声明侧只说「是什么」。
+/// 外观全部由组件决定，声明侧只说「是什么」和「哪几个是一行」。
 ///
 /// 按钮的落点是**动作 id**，不是指令：点击时向 <see cref="ActionRegistry"/> 现取声明，
 /// 由声明给出真正的指令名与参数形状。模块改指令名只需改自己的声明，面板 JSON 一个字不动。
 /// 反过来，动作没被声明时按钮**不渲染成按钮**，而是一块写着原因的警示牌——
 /// 「点了没反应」是这一轮要消灭的东西，把它换成「看起来能点但其实不能」并没有变好。
+///
+/// 版面全部交给 <see cref="AuroraPanelBoard"/>（REQ-UI-060）：本类只负责把一份声明
+/// 翻译成「哪几个元素、各自最窄多宽、哪个可变」，怎么排、怎么折行、分隔线画在哪里，
+/// 一行都不在这里。**标签与它的控件是两个元素**——面板里的控件不带边框，
+/// 中间那条渐隐竖线正是「这是标签、那是输入区」唯一的分界。
 /// </summary>
-public sealed class PanelView : UserControl
+public sealed partial class PanelView : UserControl
 {
     private readonly CommandBus _bus;
     private readonly IShellLog _log;
@@ -36,6 +42,9 @@ public sealed class PanelView : UserControl
 
     /// <summary>把自己的值发布到选择通道的文本框：通道名 → 控件 id（REQ-UI-045）。</summary>
     private readonly List<(string Channel, string ControlId)> _publishers = [];
+
+    /// <summary>候选项取数的选择框（REQ-UI-059）。</summary>
+    private readonly List<OptionFeed> _feeds = [];
 
     private readonly string _owner;
 
@@ -75,34 +84,45 @@ public sealed class PanelView : UserControl
     }
 
     /// <summary>
-    /// 内容相对底板的内缩。与控制台过滤器工具条对齐：底板 Padding 2 + 这里 6，
-    /// 首个控件的左边距因此落在 8px，和工具条里标签的 8px 左边距同一条线上。
+    /// 内容相对底板的内缩（REQ-UI-061）。
+    ///
+    /// **上下是 0**，垂直方向的留白只有底板 <c>Aurora.Panel.Surface</c> 的 Padding 2——
+    /// 与控制台顶部那条过滤器工具条完全一样，那条用的就是同一份底板样式、也没有额外内缩。
+    /// 此前这里是 4，控件自己还各带 3～6 的上下边距，叠起来是 9～12，
+    /// 于是同一份底板在控制台上薄薄一条、在控制面板里厚得像加了道边框。
+    ///
+    /// 左右保留 6：加上底板的 2 正好 8，与控制台工具条里标签的 8px 左边距同一条线。
     /// </summary>
-    private static readonly Thickness PanelInset = new(6, 4, 6, 4);
+    private static readonly Thickness PanelInset = new(6, 0, 6, 0);
 
     public string PanelId => _definition.Id;
 
-    /// <summary>可反向驱动的控件 id 清单（aurora.ui.panelset 报错提示用）。</summary>
-    public IReadOnlyList<string> ControlIds => _setters.Keys.ToList();
+    /// <summary>
+    /// 可反向驱动的控件 id 清单。**只给 <c>aurora.ui.panelset</c> 的报错提示用**——
+    /// 「没有这个控件」必须说得出有哪些控件，否则报错等于没报。
+    /// 收成 internal：它不是面板对外的能力，是一句错误信息的素材（REQ-UI-060）。
+    /// </summary>
+    internal IReadOnlyList<string> ControlIds => _setters.Keys.ToList();
 
     /// <summary>按新声明原地重建内容（aurora.ui.panelreload，以及动作声明刷新后重绑按钮）。</summary>
     public void Rebuild(PanelDefinition definition)
     {
+        ArgumentNullException.ThrowIfNull(definition);
+
         _definition = definition;
         _getters.Clear();
         _setters.Clear();
         _followers.Clear();
         _gates.Clear();
         _publishers.Clear();
+        _feeds.Clear();
 
-        var horizontal = string.Equals(definition.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
-        FrameworkElement content = horizontal
-            ? BuildBoard(definition)
-            : BuildColumn(definition);
+        var board = new AuroraPanelBoard { Margin = PanelInset };
+        board.SetRows(definition.Rows.Select(BuildRow).ToList());
 
         // 没有 ScrollViewer。面板就是一块面板：内容多了往下长，不往里滚。
-        // 横排靠换行消化宽度，竖排本来就只长高度，两个方向都不需要滚动条。
-        var surface = new Border { Child = content };
+        // 宽度靠折行消化，所以横向永远不会溢出；纵向由行数决定，交给外层布局。
+        var surface = new Border { Child = board };
         surface.SetResourceReference(StyleProperty, "Aurora.Panel.Surface");
         Content = surface;
 
@@ -110,14 +130,197 @@ public sealed class PanelView : UserControl
         // 发布方不算引用：它是通道的源头，把自己记成引用会让台账里出现一条自引用的断链。
         _channels?.Reference(
             "面板 " + definition.Id,
-            _followers.Select(f => f.Channel).Concat(_gates.Select(g => g.Channel)));
+            _followers.Select(f => f.Channel)
+                .Concat(_gates.Select(g => g.Channel))
+                .Concat(_feeds.SelectMany(feed => feed.Channels)));
 
         DeclarePublishers();
 
         // 先按当前通道状态对齐一次：面板可能是在选中之后才建出来的
         // （窗口懒实例化、模块热重载），只等下一次 Changed 会让它停在一个空壳状态。
         SyncFromChannels(null);
+
+        // 候选项取数排到下一拍：这一拍还在建控件，而取数会走总线、可能同步跑到底，
+        // 中途回头改一个还没挂进可视树的选择框，选中项会被随后的初值覆盖掉。
+        foreach (var feed in _feeds)
+            QueueReload(feed);
     }
+
+    private BoardRow BuildRow(PanelRow row)
+    {
+        var cells = new List<BoardCell>();
+        foreach (var widget in row.Widgets)
+            Build(cells, widget);
+
+        return new BoardRow
+        {
+            // 校验器已经把无法识别的 mode 拦在门外；真漏到这里按缺省处理，不抛。
+            Mode = row.ResolvedMode ?? PanelRowMode.Flex,
+            Cells = cells,
+        };
+    }
+
+    /// <summary>aurora.ui.panelset 落点：程序向面板控件回写值。</summary>
+    public bool TrySetValue(string controlId, string value)
+    {
+        if (!_setters.TryGetValue(controlId, out var setter))
+            return false;
+        setter(value);
+        return true;
+    }
+
+    // ---------------------------------------------------------------- 小组件构建
+
+    private void Build(List<BoardCell> cells, PanelWidget widget)
+    {
+        switch (widget.ResolvedKind)
+        {
+            case PanelWidgetKind.Text:
+                cells.Add(new BoardCell(BuildText(widget), widget.MinWidth, widget.Flex));
+                return;
+
+            case PanelWidgetKind.Button:
+                cells.Add(new BoardCell(BuildButton(widget), widget.MinWidth, widget.Flex));
+                return;
+
+            case PanelWidgetKind.TextBox:
+                // 标签是**独立的一个元素**（REQ-UI-060）：它参与最窄宽度的计算，
+                // 也因此在它与输入区之间落下一条渐隐竖线。
+                // 标签为空时不放这一格——空标签会画出一条紧贴左边、两侧什么都没有的线。
+                if (Label(widget) is { Length: > 0 } text)
+                    cells.Add(new BoardCell(BuildLabel(text), null, false));
+
+                cells.Add(new BoardCell(
+                    BuildTextBox(widget),
+                    // 空输入框量不出宽度（内容宽度是 0），因此没声明就给一个够用的下限。
+                    widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth,
+                    widget.Flex));
+                return;
+
+            default:
+                // 校验器本该已经拦下；真漏到这里也要看得见，不静默跳过一格。
+                cells.Add(new BoardCell(Warning("无法识别的小组件: " + widget.Kind), null, false));
+                return;
+        }
+    }
+
+    private static string Label(PanelWidget widget) => widget.Label ?? widget.Id ?? "";
+
+    private static FrameworkElement BuildLabel(string text)
+    {
+        var label = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center };
+        label.SetResourceReference(StyleProperty, "Aurora.Panel.Label");
+        return label;
+    }
+
+    private static FrameworkElement BuildText(PanelWidget widget)
+    {
+        // 换行而不是撑宽：面板按最窄宽度排版，一段长文字不该把自己那一格顶出去
+        // 压到相邻元素上（表现为文字盖过分隔线）。
+        var text = new TextBlock
+        {
+            Text = widget.Text ?? "",
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        text.SetResourceReference(StyleProperty, "Aurora.Panel.Text");
+        return text;
+    }
+
+    private FrameworkElement BuildTextBox(PanelWidget widget)
+    {
+        var id = widget.Id!;
+        if (widget.Follows is { Length: > 0 } follows
+            && SelectionChannels.TrySplitBinding(follows, out var channel, out var column))
+            _followers.Add((channel, column, id));
+
+        var publish = widget.Channel is { Length: > 0 } declared ? declared : null;
+        if (publish != null)
+            _publishers.Add((publish, id));
+
+        if (widget.ResolvedMode == PanelTextBoxMode.Select)
+        {
+            // 候选是**可观察集合**：动态候选（REQ-UI-059）重取时就地换内容，
+            // 不换实例。换实例的话，下面闭进 getter/setter 的那一份就成了旧的，
+            // 表现为「程序回写的值明明在候选里，却选不中」。
+            var options = new ObservableCollection<string>(widget.Options ?? []);
+            var combo = new AuroraOptionBox { ItemsSource = options };
+            combo.SetResourceReference(StyleProperty, "Aurora.Panel.OptionBox");
+            combo.SelectedItem = widget.Value != null && options.Contains(widget.Value)
+                ? widget.Value
+                : options.FirstOrDefault();
+            _getters[id] = () => combo.SelectedItem as string ?? "";
+            _setters[id] = value => combo.SelectedItem =
+                options.FirstOrDefault(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+            if (publish != null)
+                combo.SelectionChanged += (_, _) => PublishIfDeclared(publish, id);
+
+            if (widget.OptionsSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
+                _feeds.Add(new OptionFeed(id, combo, options, source, ChannelsOf(source), widget.Value));
+
+            return combo;
+        }
+
+        var box = new TextBox
+        {
+            Text = widget.Value ?? "",
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        box.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
+        _getters[id] = () => box.Text;
+        _setters[id] = value => box.Text = value;
+        if (publish != null)
+            box.TextChanged += (_, _) => PublishIfDeclared(publish, id);
+        return box;
+    }
+
+    private FrameworkElement BuildButton(PanelWidget widget)
+    {
+        var binding = _actions.Resolve(widget.Action);
+        if (!binding.Ok)
+        {
+            // 声明缺失是面板作者与模块作者之间的事实不一致，必须当场说出来。
+            _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
+            return Warning(binding.Error!);
+        }
+
+        var action = binding.Action!;
+        var button = new Button
+        {
+            Content = widget.Text ?? (action.Title.Length > 0 ? action.Title : action.Id),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = string.IsNullOrWhiteSpace(action.Summary)
+                ? action.Id + " → " + action.Command + "（由 " + action.Owner + " 声明）"
+                : action.Summary,
+        };
+        button.SetResourceReference(
+            StyleProperty,
+            action.Danger ? "Aurora.Button.Danger" : "Aurora.Button.Ghost");
+        button.Click += (_, _) => Fire(widget.Action!);
+
+        if (widget.EnabledWhen?.Selected is { Length: > 0 } channel)
+        {
+            // 禁用态必须说得出原因。WPF 默认不给禁用控件弹提示，不开这一项的话
+            // 「灰着的按钮」与「坏掉的按钮」在界面上完全一样。
+            ToolTipService.SetShowOnDisabled(button, true);
+            _gates.Add((channel, button, $"需要先在「{channel}」通道对应的表格里选中一行", button.ToolTip));
+        }
+
+        return button;
+    }
+
+    /// <summary>缺件/断链的样子：看得见的一块，写清原因。</summary>
+    private static FrameworkElement Warning(string reason)
+    {
+        var text = new TextBlock { Text = reason, TextWrapping = TextWrapping.Wrap };
+        text.SetResourceReference(StyleProperty, "Aurora.Panel.Label");
+        var border = new Border { Child = text };
+        border.SetResourceReference(StyleProperty, "Aurora.Panel.Unbound");
+        return border;
+    }
+
+    // ---------------------------------------------------------------- 选择通道接线
 
     /// <summary>
     /// 登记发布方并立刻把初值发上通道（REQ-UI-045）。
@@ -161,214 +364,6 @@ public sealed class PanelView : UserControl
     }
 
     /// <summary>
-    /// 一行：一个主控件，外加零到多个声明了 <c>inline</c> 的同行按钮。
-    ///
-    /// 分组必须先于建控件做完。边建边判"下一个是不是同行按钮"的话，主控件已经按
-    /// 两列布好，第三列只能事后塞——而 Grid 的列定义是建之前就要定的。
-    /// </summary>
-    private sealed record WidgetRow(PanelWidget Lead, List<PanelWidget> Inline);
-
-    private static List<WidgetRow> GroupRows(IEnumerable<PanelWidget> widgets)
-    {
-        var rows = new List<WidgetRow>();
-        foreach (var widget in widgets)
-        {
-            if (widget.ResolvedKind == PanelWidgetKind.Button && widget.Inline && rows.Count > 0)
-                rows[^1].Inline.Add(widget);
-            else
-                rows.Add(new WidgetRow(widget, []));
-        }
-
-        return rows;
-    }
-
-    /// <summary>
-    /// 同行按钮组。多个按钮并排放在同一格里，各自按内容宽，不铺满。
-    /// 只有一个时也走这里：让"一个按钮"和"两个按钮"的边距是同一套。
-    /// </summary>
-    private FrameworkElement BuildInlineButtons(List<PanelWidget> widgets)
-    {
-        var strip = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        foreach (var widget in widgets)
-        {
-            var element = BuildButton(widget);
-            // 同行按钮不铺满：铺满会把它撑成一条横杠，把旁边的输入框挤没。
-            element.HorizontalAlignment = HorizontalAlignment.Right;
-            element.Margin = new Thickness(8, 2, 0, 2);
-            strip.Children.Add(element);
-        }
-
-        return strip;
-    }
-
-    /// <summary>竖排：一列，标签在左、控件在右、同行按钮在最右，行与行之间一条渐隐横线。</summary>
-    private Grid BuildColumn(PanelDefinition definition)
-    {
-        var grid = new Grid { Margin = PanelInset };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 56 });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        // 第三列给同行按钮。没有同行按钮时它宽度为 0，版面与两列时一模一样。
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var rows = GroupRows(definition.Widgets);
-        var row = 0;
-        for (var index = 0; index < rows.Count; index++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Build(grid, row, rows[index].Lead);
-
-            if (rows[index].Inline.Count > 0)
-            {
-                var strip = BuildInlineButtons(rows[index].Inline);
-                Grid.SetRow(strip, row);
-                Grid.SetColumn(strip, 2);
-                grid.Children.Add(strip);
-            }
-
-            row++;
-
-            if (index >= rows.Count - 1)
-                continue;
-
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var divider = new Border();
-            divider.SetResourceReference(StyleProperty, "Aurora.Panel.Divider");
-            Grid.SetRow(divider, row++);
-            Grid.SetColumnSpan(divider, 3);
-            grid.Children.Add(divider);
-        }
-
-        return grid;
-    }
-
-    /// <summary>
-    /// 横排：控件铺开，一行放不下就换行，因此是多行多列而不是单排。
-    /// 分隔线由 <see cref="AuroraPanelBoard"/> 按最终行列画出来，这里不放分隔件。
-    ///
-    /// 同行按钮跟主控件进同一格：换行时它们不会被拆到两行去，
-    /// 「改名」落在下一行开头而它要改的框留在上一行，是看得见的错。
-    /// </summary>
-    private AuroraPanelBoard BuildBoard(PanelDefinition definition)
-    {
-        var board = new AuroraPanelBoard { Margin = PanelInset };
-
-        foreach (var group in GroupRows(definition.Widgets))
-        {
-            var item = new Grid { VerticalAlignment = VerticalAlignment.Center };
-            item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            item.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Build(item, 0, group.Lead);
-
-            if (group.Inline.Count > 0)
-            {
-                var strip = BuildInlineButtons(group.Inline);
-                Grid.SetRow(strip, 0);
-                Grid.SetColumn(strip, 2);
-                item.Children.Add(strip);
-            }
-
-            board.Children.Add(item);
-        }
-
-        return board;
-    }
-
-    /// <summary>aurora.ui.panelset 落点：程序向面板控件回写值。</summary>
-    public bool TrySetValue(string controlId, string value)
-    {
-        if (!_setters.TryGetValue(controlId, out var setter))
-            return false;
-        setter(value);
-        return true;
-    }
-
-    // ---------------------------------------------------------------- 小组件构建
-
-    private void Build(Grid grid, int row, PanelWidget widget)
-    {
-        switch (widget.ResolvedKind)
-        {
-            case PanelWidgetKind.Text:
-                AddSpanning(grid, row, BuildText(widget));
-                return;
-
-            case PanelWidgetKind.Button:
-                AddSpanning(grid, row, BuildButton(widget));
-                return;
-
-            case PanelWidgetKind.TextBox:
-                AddLabelled(grid, row, widget, BuildTextBox(widget));
-                return;
-
-            default:
-                // 校验器本该已经拦下；真漏到这里也要看得见，不静默跳过一行。
-                AddSpanning(grid, row, Warning("无法识别的小组件: " + widget.Kind));
-                return;
-        }
-    }
-
-    private static FrameworkElement BuildText(PanelWidget widget)
-    {
-        // 换行而不是撑宽：面板按统一列宽排版，一段长文字不该把自己那一列顶出去
-        // 压到相邻控件上（横排时表现为文字盖过分隔线）。
-        var text = new TextBlock
-        {
-            Text = widget.Text ?? "",
-            Margin = new Thickness(0, 4, 0, 4),
-            TextWrapping = TextWrapping.Wrap,
-        };
-        text.SetResourceReference(StyleProperty, "Aurora.Panel.Text");
-        return text;
-    }
-
-    private FrameworkElement BuildTextBox(PanelWidget widget)
-    {
-        var id = widget.Id!;
-        if (widget.Follows is { Length: > 0 } follows
-            && SelectionChannels.TrySplitBinding(follows, out var channel, out var column))
-            _followers.Add((channel, column, id));
-
-        var publish = widget.Channel is { Length: > 0 } declared ? declared : null;
-        if (publish != null)
-            _publishers.Add((publish, id));
-
-        if (widget.ResolvedMode == PanelTextBoxMode.Select)
-        {
-            var options = widget.Options ?? [];
-            var combo = new AuroraOptionBox { ItemsSource = options };
-            combo.SetResourceReference(StyleProperty, "Aurora.Panel.OptionBox");
-            combo.SelectedItem = widget.Value != null && options.Contains(widget.Value)
-                ? widget.Value
-                : options.FirstOrDefault();
-            _getters[id] = () => combo.SelectedItem as string ?? "";
-            _setters[id] = value => combo.SelectedItem =
-                options.FirstOrDefault(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
-            if (publish != null)
-                combo.SelectionChanged += (_, _) => PublishIfDeclared(publish, id);
-            return combo;
-        }
-
-        var box = new TextBox
-        {
-            Text = widget.Value ?? "",
-            VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        box.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
-        _getters[id] = () => box.Text;
-        _setters[id] = value => box.Text = value;
-        if (publish != null)
-            box.TextChanged += (_, _) => PublishIfDeclared(publish, id);
-        return box;
-    }
-
-    /// <summary>
     /// 控件值变了就发上通道——但只发**登记成功的那些**。
     ///
     /// 处理器挂在控件实例上，而登记是建完之后才做的：抢注失败的那一条如果照发，
@@ -382,49 +377,11 @@ public sealed class PanelView : UserControl
             PublishValue(channel, controlId);
     }
 
-    private FrameworkElement BuildButton(PanelWidget widget)
-    {
-        var binding = _actions.Resolve(widget.Action);
-        if (!binding.Ok)
-        {
-            // 声明缺失是面板作者与模块作者之间的事实不一致，必须当场说出来。
-            _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
-            return Warning(binding.Error!);
-        }
-
-        var action = binding.Action!;
-        var button = new Button
-        {
-            Content = widget.Text ?? (action.Title.Length > 0 ? action.Title : action.Id),
-            Margin = new Thickness(0, 6, 0, 2),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            ToolTip = string.IsNullOrWhiteSpace(action.Summary)
-                ? action.Id + " → " + action.Command + "（由 " + action.Owner + " 声明）"
-                : action.Summary,
-        };
-        button.SetResourceReference(
-            StyleProperty,
-            action.Danger ? "Aurora.Button.Danger" : "Aurora.Button.Ghost");
-        button.Click += (_, _) => Fire(widget.Action!);
-
-        if (widget.EnabledWhen?.Selected is { Length: > 0 } channel)
-        {
-            // 禁用态必须说得出原因。WPF 默认不给禁用控件弹提示，不开这一项的话
-            // 「灰着的按钮」与「坏掉的按钮」在界面上完全一样。
-            ToolTipService.SetShowOnDisabled(button, true);
-            _gates.Add((channel, button, $"需要先在「{channel}」通道对应的表格里选中一行", button.ToolTip));
-        }
-
-        return button;
-    }
-
-    // ---------------------------------------------------------------- 选择通道接线
-
     private void OnSelectionChanged(object? sender, SelectionChannelChangedEventArgs e)
         => SyncFromChannels(e.Channel);
 
     /// <summary>
-    /// 按通道当前状态刷新跟随框与按钮启停。<paramref name="only"/> 为 null 时刷新全部
+    /// 按通道当前状态刷新跟随框、按钮启停与动态候选。<paramref name="only"/> 为 null 时刷新全部
     /// （面板刚建完），否则只碰这一个通道——别的通道没变，重刷会把用户正在改的名字冲掉。
     /// </summary>
     private void SyncFromChannels(string? only)
@@ -449,41 +406,17 @@ public sealed class PanelView : UserControl
             button.IsEnabled = ready;
             button.ToolTip = ready ? readyTip : reason;
         }
-    }
 
-    /// <summary>缺件/断链的样子：看得见的一块，写清原因。</summary>
-    private static FrameworkElement Warning(string reason)
-    {
-        var text = new TextBlock { Text = reason, TextWrapping = TextWrapping.Wrap };
-        text.SetResourceReference(StyleProperty, "Aurora.Panel.Label");
-        var border = new Border { Child = text, Margin = new Thickness(0, 6, 0, 2) };
-        border.SetResourceReference(StyleProperty, "Aurora.Panel.Unbound");
-        return border;
-    }
+        // 候选项取数只在**刚建完**（only == null）之外的路径上按通道过滤：
+        // 上一级选了别的域，这一级的候选要跟着换一批，否则「类」里留着的是上一个域的类名。
+        if (only == null)
+            return;
 
-    private static void AddSpanning(Grid grid, int row, FrameworkElement element)
-    {
-        Grid.SetRow(element, row);
-        Grid.SetColumn(element, 0);
-        // 跨到最后一列为止：少跨一列的症状是独占一行的按钮忽然只有半行宽，
-        // 而那半行宽正好等于同行按钮列的宽度，看上去像是排版随机。
-        Grid.SetColumnSpan(element, grid.ColumnDefinitions.Count);
-        grid.Children.Add(element);
-    }
-
-    private static void AddLabelled(Grid grid, int row, PanelWidget widget, FrameworkElement input)
-    {
-        var label = new TextBlock { Text = widget.Label ?? widget.Id ?? "" };
-        label.SetResourceReference(StyleProperty, "Aurora.Panel.Label");
-        Grid.SetRow(label, row);
-        Grid.SetColumn(label, 0);
-
-        input.Margin = new Thickness(0, 3, 0, 3);
-        Grid.SetRow(input, row);
-        Grid.SetColumn(input, 1);
-
-        grid.Children.Add(label);
-        grid.Children.Add(input);
+        foreach (var feed in _feeds)
+        {
+            if (feed.Channels.Contains(only, StringComparer.OrdinalIgnoreCase))
+                QueueReload(feed);
+        }
     }
 
     // ---------------------------------------------------------------- 按钮 → 动作 → 指令
@@ -499,19 +432,6 @@ public sealed class PanelView : UserControl
         {
             _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
             return;
-        }
-
-        foreach (var widget in _definition.Widgets)
-        {
-            if (widget.ResolvedKind != PanelWidgetKind.TextBox || !widget.Required)
-                continue;
-            if (widget.Id is not { } id || !_getters.TryGetValue(id, out var getter))
-                continue;
-            if (string.IsNullOrWhiteSpace(getter()))
-            {
-                _log.Error("panel", "面板 " + _definition.Id + ": " + (widget.Label ?? id) + " 为必填项");
-                return;
-            }
         }
 
         var text = ActionRegistry.BuildCommandText(

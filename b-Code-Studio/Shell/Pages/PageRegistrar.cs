@@ -42,7 +42,8 @@ internal sealed class PageRegistrar(
     HistoryAurora.Shell.Actions.ActionRegistry? actions = null,
     HistoryAurora.Shell.CommandSurface.AuroraCompletionProvider? completions = null,
     HistoryAurora.Shell.Selection.SelectionChannels? channels = null,
-    PageDataRefresher? refresher = null)
+    PageDataRefresher? refresher = null,
+    HistoryAurora.Shell.Table.IColumnOrderStore? columnOrder = null)
 {
     private const string Source = "page";
 
@@ -106,6 +107,7 @@ internal sealed class PageRegistrar(
                     Completions = completions,
                     Channels = channels,
                     Refresher = refresher,
+                    ColumnOrder = columnOrder,
                 });
 
             return new PageContent(Inset(rendered.Root), rendered.MissingComponents);

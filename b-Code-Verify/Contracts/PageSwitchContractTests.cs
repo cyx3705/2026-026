@@ -211,10 +211,10 @@ public sealed class PageSwitchContractTests
           "type": "panel",
           "id": "{{id}}",
           "text": "项目操作",
-          "widgets": [
+          "rows": [ { "widgets": [
             { "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
               "channel": "demo.section", "options": [ "规则", "历史" ] }
-          ]
+          ] } ]
         }
         """;
 
@@ -244,10 +244,10 @@ public sealed class PageSwitchContractTests
                   "type": "panel",
                   "id": "ops",
                   "text": "项目操作",
-                  "widgets": [
+                  "rows": [ { "widgets": [
                     { "kind": "textbox", "id": "section", "label": "子页面", "mode": "select",
                       "channel": "demo.section", "options": [ "规则", "历史" ] }
-                  ]
+                  ] } ]
                 },
                 {
                   "type": "switch",

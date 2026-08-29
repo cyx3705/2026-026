@@ -117,4 +117,147 @@ public sealed class AuroraTableContractTests
             Assert.Null(table.SelectedRow);
         });
     }
+
+    /// <summary>
+    /// 没被声明成列的键**原样留在选中行里**（REQ-UI-058）。
+    ///
+    /// 表格只画声明过的列，但选中行与行操作拿到的是整行。命令集把完整指令名
+    /// <c>name</c> 从列里去掉之后，右键菜单的四条动作、指令详情页与对外契约
+    /// <c>IShellCommandWorkbenchHost.CommandSelection</c> 都靠这一条活着——
+    /// 裁掉的话它们会一起断，而断法是「点了没反应」，不是报错。
+    /// </summary>
+    [Fact]
+    public void SetData_KeepsKeysThatWereNotDeclaredAsColumns()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var table = new AuroraTable();
+            table.SetData(AuroraTableData.Create(
+                [new AuroraTableColumn("method", "方法")],
+                [new Dictionary<string, string>
+                {
+                    ["method"] = "rename",
+                    ["name"] = "demo.branch.rename",
+                }]));
+
+            // 画出来的只有声明的那一列。
+            Assert.Equal(1, table.ColumnCount);
+
+            table.SelectedIndex = 0;
+            var row = table.SelectedRow;
+            Assert.NotNull(row);
+            Assert.Equal("demo.branch.rename", row!["name"]);
+        });
+    }
+
+    /// <summary>
+    /// 列拖得动，而占满剩余宽度的那一列钉在最右（REQ-UI-062）。
+    ///
+    /// 星号列是「吃掉剩余」的那一列，不在最后就没有「剩余」可占：
+    /// 拖它、或者把别的列拖到它右边，都会让它当场被拨回最右。
+    /// 一条规则盖住两种拖法——分开写的话总有一种拖法两边都没管到。
+    /// </summary>
+    [Fact]
+    public void Columns_AreReorderableButTheStarColumnStaysLast()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryColumnOrder();
+            var table = new AuroraTable();
+            table.SetData(AuroraTableData.Create(
+                [
+                    new AuroraTableColumn("a", "甲", "80"),
+                    new AuroraTableColumn("b", "乙", "80"),
+                    new AuroraTableColumn("c", "丙", "*"),
+                ],
+                [new Dictionary<string, string> { ["a"] = "1", ["b"] = "2", ["c"] = "3" }]));
+            table.UseColumnOrder(store, "demo/page/table");
+
+            var view = GridView(table);
+            Assert.True(view.AllowsColumnReorder, "列拖不动");
+
+            // 把「乙」拖到最前：普通列之间随便换。
+            view.Columns.Move(1, 0);
+            UiTestHost.Pump();
+            Assert.Equal(["乙", "甲", "丙"], Headers(view));
+            Assert.Equal(["b", "a", "c"], store.Read("demo/page/table"));
+
+            // 把星号列拖到最前：它会被拨回最右。
+            view.Columns.Move(2, 0);
+            UiTestHost.Pump();
+            Assert.Equal(["乙", "甲", "丙"], Headers(view));
+        });
+    }
+
+    /// <summary>
+    /// 记住的列序在下次建表时被用上，而声明变了也不会把表弄坏（REQ-UI-062）。
+    ///
+    /// 记录里有、声明里没有的键丢掉；声明里有、记录里没有的列按声明顺序补在后面。
+    /// 不做这两条对齐的话，改一次列声明就会让老用户的表少一列或者多一列空白。
+    /// </summary>
+    [Fact]
+    public void Columns_RestoreTheRememberedOrderAndTolerateADeclarationChange()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryColumnOrder();
+            store.Write("demo/page/table", ["c", "b", "gone"]);
+
+            var table = new AuroraTable();
+            table.UseColumnOrder(store, "demo/page/table");
+            table.SetData(AuroraTableData.Create(
+                [
+                    new AuroraTableColumn("a", "甲"),
+                    new AuroraTableColumn("b", "乙"),
+                    new AuroraTableColumn("c", "丙"),
+                ],
+                []));
+
+            // c、b 按记录排在前面；记录里没有的 a 按声明顺序补在后面；gone 直接丢掉。
+            Assert.Equal(["丙", "乙", "甲"], Headers(GridView(table)));
+        });
+    }
+
+    /// <summary>没有身份的表不记列序：拖完也认不出是哪一张，记下来只会张冠李戴。</summary>
+    [Fact]
+    public void Columns_AreNotRememberedForATableWithoutAnIdentity()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryColumnOrder();
+            var table = new AuroraTable();
+            table.SetData(AuroraTableData.Create(
+                [new AuroraTableColumn("a", "甲"), new AuroraTableColumn("b", "乙")],
+                []));
+            table.UseColumnOrder(store, null);
+
+            GridView(table).Columns.Move(1, 0);
+            UiTestHost.Pump();
+
+            Assert.Empty(store.Entries);
+        });
+    }
+
+    private static System.Windows.Controls.GridView GridView(AuroraTable table)
+    {
+        var surface = Assert.IsType<System.Windows.Controls.Border>(table.Content);
+        var grid = Assert.IsType<System.Windows.Controls.Grid>(surface.Child);
+        var list = grid.Children.OfType<System.Windows.Controls.ListView>().Single();
+        return Assert.IsType<System.Windows.Controls.GridView>(list.View);
+    }
+
+    private static string[] Headers(System.Windows.Controls.GridView view)
+        => view.Columns.Select(column => column.Header as string ?? "").ToArray();
+
+    /// <summary>内存里的列序台账。落盘那一路归设置服务，这里只验规则。</summary>
+    private sealed class MemoryColumnOrder : IColumnOrderStore
+    {
+        public Dictionary<string, List<string>> Entries { get; } = new(StringComparer.Ordinal);
+
+        public IReadOnlyList<string> Read(string key)
+            => Entries.TryGetValue(key, out var order) ? order : [];
+
+        public void Write(string key, IReadOnlyList<string> columnKeys)
+            => Entries[key] = columnKeys.ToList();
+    }
 }

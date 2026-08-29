@@ -42,7 +42,10 @@ public sealed class ComponentGalleryContractTests
             Assert.Contains("\"type\":\"" + type + "\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
         }
 
-        Assert.Contains("\"orientation\":\"horizontal\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+        // 面板的两种行模式都要在这一页上出现（REQ-UI-060）：
+        // 组件测试页是"组件能表达什么"的唯一目录，缺席的能力没人会先撞上。
+        Assert.Contains("\"mode\":\"even\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"flex\":true", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"kind\":\"button\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"kind\":\"textbox\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"mode\":\"select\"", types.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);

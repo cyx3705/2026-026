@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using HistoryAurora.Shell.CommandSurface;
 using HistoryAurora.Shell.Pages;
@@ -257,6 +258,191 @@ public sealed class CommandPagesContractTests
         var described = HostedPageDescriptions.Json;
         foreach (var id in HostedPageData.Actions.Select(a => a.Id))
             Assert.Contains("\"" + id + "\"", described, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 目录会话没接线时取数必须**失败**，不是给一张空表（REQ-UI-057）。
+    ///
+    /// 1.9.0 装配根漏了 <c>Catalog = _catalog</c> 这一行，而当时的写法是「拿不到会话就给空表」——
+    /// 于是命令集画得好好的、表头齐全、一行数据没有，日志里也一个字都没有，
+    /// 从截图上完全看不出是没接线还是真的一条指令都没有。
+    /// </summary>
+    [Fact]
+    public async Task Data_FailsLoudlyWhenTheCatalogSessionIsMissing()
+    {
+        var registry = new CommandRegistry();
+        var log = new NullShellLog();
+        var bus = new CommandBus(registry, log);
+        HostedPageData.Register(registry, new HostedPageData.Sources
+        {
+            Bus = () => bus,
+            Catalog = () => null,
+        });
+
+        foreach (var view in new[] { "commands", "domains", "classes" })
+        {
+            var result = await bus.ExecuteAsync("aurora.ui.data view=" + view, "UI");
+            Assert.False(result.Success, view + " 在没有目录会话时仍然报成功");
+            Assert.Contains("未接线", result.Message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 装配根真的把目录会话接上了（REQ-UI-057）。
+    ///
+    /// 上一条只证明「没接线会报错」，证明不了「这台机器接上了」——而漏掉那一行
+    /// 正是 1.9.0 到 1.9.1 命令集一直空着的原因。判据取源码里那一处赋值：
+    /// 装配根要跑起来得有真窗口、真停靠层，在门禁里立不起来。
+    /// </summary>
+    [Fact]
+    public void TheCompositionRootActuallyWiresTheCatalogSession()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "b-Code-Studio", "Shell", "ShellWindow.xaml.cs"));
+
+        Assert.Contains("Catalog = _catalog,", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 命令集的列是【域 / 类 / 方法 / 只读 / 说明】，而 <c>name</c> 仍然在行里（REQ-UI-058）。
+    ///
+    /// 完整指令名不再占一列——它的三段就在旁边三格里。但它**必须留在行数据里**：
+    /// 右键菜单的四条动作、指令详情页的两张表、以及对外契约
+    /// <c>IShellCommandWorkbenchHost.CommandSelection</c> 都按它取值。
+    /// 去掉一列是版面决定，去掉一个键是断链。
+    /// </summary>
+    [Fact]
+    public async Task Data_SplitsTheCommandNameIntoDomainClassAndMethod()
+    {
+        var bus = Host();
+        var rows = await RowsAsync(bus, "aurora.ui.data view=commands query=demo.branch");
+
+        var row = Assert.Single(rows);
+        Assert.Equal("demo.branch.rename", row["name"]);
+        Assert.Equal("demo", row["domain"]);
+        Assert.Equal("branch", row["class"]);
+        Assert.Equal("rename", row["method"]);
+
+        using var document = JsonDocument.Parse(HostedPageDescriptions.Json);
+        var table = document.RootElement.GetProperty("pages").EnumerateArray()
+            .Single(page => page.GetProperty("id").GetString() == "mcp")
+            .GetProperty("content").GetProperty("children").EnumerateArray()
+            .Single(child => child.GetProperty("type").GetString() == "table");
+
+        Assert.Equal(
+            new[] { "domain", "class", "method", "readonly", "summary" },
+            table.GetProperty("columns").EnumerateArray()
+                .Select(column => column.GetProperty("key").GetString()!)
+                .ToArray());
+
+        // 行内按钮那一列删掉，四条动作只进右键菜单（REQ-UI-058）。
+        Assert.All(
+            table.GetProperty("rowActions").EnumerateArray(),
+            action => Assert.False(
+                action.GetProperty("inline").GetBoolean(),
+                "命令集不该再有行内按钮列"));
+    }
+
+    /// <summary>
+    /// 方法是「去掉 <c>&lt;域&gt;.&lt;类&gt;.</c> 前缀剩下的全部」，不是「取第三段」。
+    ///
+    /// 取第三段会把四段名后面那截静默丢掉，于是两条只差最后一段的指令
+    /// 在表上变成两行一模一样的内容。无类指令只剥域，类那一格留空。
+    /// </summary>
+    [Fact]
+    public async Task Data_KeepsEverythingAfterTheDomainAndClassPrefix()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(new CommandDescriptor
+        {
+            Name = "demo.deep.branch.rename",
+            Domain = "demo",
+            CommandClass = "deep",
+            Summary = "四段名",
+            Readonly = true,
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
+        });
+        registry.Register(new CommandDescriptor
+        {
+            Name = "demo.help",
+            Domain = "demo",
+            Summary = "无类指令",
+            Readonly = true,
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
+        });
+
+        var log = new NullShellLog();
+        var bus = new CommandBus(registry, log);
+        var catalog = new LocalCommandCatalogSession(bus, log);
+        HostedPageData.Register(registry, new HostedPageData.Sources
+        {
+            Bus = () => bus,
+            Catalog = () => catalog,
+        });
+
+        var rows = await RowsAsync(bus, "aurora.ui.data view=commands query=demo.");
+
+        var deep = rows.Single(row => row["name"] == "demo.deep.branch.rename");
+        Assert.Equal("branch.rename", deep["method"]);
+
+        var classless = rows.Single(row => row["name"] == "demo.help");
+        Assert.Equal("", classless["class"]);
+        Assert.Equal("help", classless["method"]);
+    }
+
+    /// <summary>
+    /// 域与类两级联动的候选（REQ-UI-059 / DEC-021）。
+    ///
+    /// 域为「全部」时**不列类**：跨域列类名会把不同域里同名的类归成一条，
+    /// 筛出来的结果没有人能解释。两边的首项都固定是「全部」——
+    /// 选择框没有「清空」这个动作，不给一个「全部」的话筛了就退不回来。
+    /// </summary>
+    [Fact]
+    public async Task Data_ScopesTheClassOptionsToTheChosenDomain()
+    {
+        var bus = Host();
+
+        var domains = await RowsAsync(bus, "aurora.ui.data view=domains");
+        Assert.Equal(HostedPageData.All, domains[0]["value"]);
+        Assert.Contains(domains, row => row["value"] == "demo");
+
+        var all = await RowsAsync(bus, "aurora.ui.data view=classes domain=" + HostedPageData.All);
+        Assert.Equal(HostedPageData.All, Assert.Single(all)["value"]);
+
+        var scoped = await RowsAsync(bus, "aurora.ui.data view=classes domain=demo");
+        Assert.Equal(
+            [HostedPageData.All, "branch", "repo"],
+            scoped.Select(row => row["value"]).ToArray());
+    }
+
+    /// <summary>两个下拉真的在筛，而且是求交，不是互相取代。</summary>
+    [Fact]
+    public async Task Data_FiltersByDomainAndClassOnTopOfTheSearchWord()
+    {
+        var bus = Host();
+
+        var byClass = await RowsAsync(bus, "aurora.ui.data view=commands domain=demo class=repo");
+        Assert.Equal("demo.repo.list", Assert.Single(byClass)["name"]);
+
+        // 「全部」等于不筛，与留空是同一件事。
+        var unfiltered = await RowsAsync(
+            bus, $"aurora.ui.data view=commands domain={HostedPageData.All} class={HostedPageData.All}");
+        Assert.Equal(2, unfiltered.Count(row => row["domain"] == "demo"));
+
+        // 搜索词与下拉叠加：demo/branch 里没有「列出仓库」。
+        var intersected = await RowsAsync(
+            bus, "aurora.ui.data view=commands domain=demo class=branch query=列出仓库");
+        Assert.Empty(intersected);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "project.manifest.json")))
+            directory = directory.Parent;
+
+        Assert.NotNull(directory);
+        return directory!.FullName;
     }
 
     private static async Task<IReadOnlyList<Dictionary<string, string>>> RowsAsync(

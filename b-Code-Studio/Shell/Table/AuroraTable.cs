@@ -1,8 +1,10 @@
-﻿using System.Windows;
+﻿using System.Collections.Specialized;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using HistoryAurora.Shell.Themes;
 
 namespace HistoryAurora.Shell.Table;
@@ -58,8 +60,11 @@ public sealed class AuroraTable : UserControl
     private readonly ListView _list;
     private readonly GridView _view;
     private readonly TextBlock _empty;
-    /// <summary>数据列与它们的权重，按声明顺序。行操作列不在其中。</summary>
-    private readonly List<(GridViewColumn Column, double Weight)> _weighted = [];
+    /// <summary>数据列的权重。行操作列不在其中——它不参与分摊。</summary>
+    private readonly Dictionary<GridViewColumn, double> _weights = [];
+
+    /// <summary>数据列的取值键，用于记忆列序。行操作列不在其中。</summary>
+    private readonly Dictionary<GridViewColumn, string> _columnKeys = [];
     private readonly List<AuroraRowAction> _rowActions = [];
 
     private AuroraTableData _data = AuroraTableData.Empty;
@@ -67,7 +72,20 @@ public sealed class AuroraTable : UserControl
     private bool _widthPassQueued;
     private int _widthPasses;
     private GridViewColumn? _actionColumn;
+
+    /// <summary>占满剩余宽度的那一列；它钉在数据列的最右，拖不动（REQ-UI-062）。</summary>
+    private GridViewColumn? _starColumn;
+
     private ScrollViewer? _scrollHost;
+
+    /// <summary>列序记忆的落点；未接时列序只在本次可视树里有效。</summary>
+    private IColumnOrderStore? _orderStore;
+
+    /// <summary>本表在列序台账里的身份，形如 <c>模块/页面/节点</c>。</summary>
+    private string? _orderKey;
+
+    /// <summary>正在由组件自己动列集合；期间不把变化当成用户拖动。</summary>
+    private bool _reordering;
 
     /// <summary>右键按下时命中的那一行；空白处按下则为 null，菜单随之不弹。</summary>
     private IReadOnlyDictionary<string, string>? _menuRow;
@@ -80,7 +98,10 @@ public sealed class AuroraTable : UserControl
         // 组件自带控件字典：被拖进浮动窗口后 Aurora.Table.* 仍要解析得到。
         AuroraComponentResources.Ensure(this);
 
-        _view = new GridView { AllowsColumnReorder = false };
+        // 列可以拖着换位置（REQ-UI-062）。**一律开，不按声明开**：
+        // 表格外观本来就是"传不进来"的，而列序是看的人当下的习惯，不是页面作者的决定。
+        _view = new GridView { AllowsColumnReorder = true };
+        ((INotifyCollectionChanged)_view.Columns).CollectionChanged += OnColumnsChanged;
         _list = new ListView
         {
             View = _view,
@@ -115,7 +136,10 @@ public sealed class AuroraTable : UserControl
         };
     }
 
-    /// <summary>当前选中行；无选中时为 null。列里没有的键不会出现在这里。</summary>
+    /// <summary>
+    /// 当前选中行；无选中时为 null。
+    /// **取数返回的键一个不少**——没声明成列的键照样在里面（REQ-UI-058）。
+    /// </summary>
     public IReadOnlyDictionary<string, string>? SelectedRow
         => _list.SelectedItem as IReadOnlyDictionary<string, string>;
 
@@ -194,26 +218,95 @@ public sealed class AuroraTable : UserControl
         RestartWidthLayout();
     }
 
+    /// <summary>
+    /// 接上列序记忆（REQ-UI-062）。<paramref name="key"/> 是这张表的身份，
+    /// 形如 <c>模块/页面/节点</c>；没有身份的表（描述里没写 id）不接，
+    /// 那样的表拖完也认不出是哪一张，记下来只会张冠李戴。
+    /// </summary>
+    public void UseColumnOrder(IColumnOrderStore? store, string? key)
+    {
+        _orderStore = string.IsNullOrWhiteSpace(key) ? null : store;
+        _orderKey = _orderStore == null ? null : key;
+        RebuildColumns();
+        RestartWidthLayout();
+    }
+
+    /// <summary>
+    /// 按记住的列序重排声明列。
+    ///
+    /// 三条对齐规则，都是为了「声明改了、记录还是旧的」这一种情况：
+    /// 记录里有、声明里没有的键**丢掉**；声明里有、记录里没有的列**按声明顺序补在后面**；
+    /// 星号列无论记录怎么写都回到最后——它是"占满剩余"的那一列，不在最后就没有"剩余"可占。
+    /// </summary>
+    private List<AuroraTableColumn> OrderedColumns()
+    {
+        var declared = _data.Columns.ToList();
+        var remembered = _orderStore?.Read(_orderKey ?? "") ?? [];
+        if (remembered.Count > 0)
+        {
+            var byKey = declared.ToDictionary(column => column.Key, StringComparer.Ordinal);
+            var ordered = new List<AuroraTableColumn>(declared.Count);
+            var taken = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in remembered)
+            {
+                if (byKey.TryGetValue(key, out var column) && taken.Add(key))
+                    ordered.Add(column);
+            }
+
+            foreach (var column in declared)
+            {
+                if (!taken.Contains(column.Key))
+                    ordered.Add(column);
+            }
+
+            declared = ordered;
+        }
+
+        var star = declared.FirstOrDefault(column => column.IsStar);
+        if (star != null && declared[^1] != star)
+        {
+            declared.Remove(star);
+            declared.Add(star);
+        }
+
+        return declared;
+    }
+
     private void RebuildColumns()
     {
-        _weighted.Clear();
+        _weights.Clear();
+        _columnKeys.Clear();
         _actionColumn = null;
-        _view.Columns.Clear();
+        _starColumn = null;
 
-        foreach (var column in _data.Columns)
+        // 清空与重建也会打到 CollectionChanged 上；不挡住的话每次换数据都会被当成
+        // 一次用户拖动，把声明顺序当成"用户拖出来的顺序"写回台账。
+        _reordering = true;
+        try
         {
-            var gridColumn = new GridViewColumn
+            _view.Columns.Clear();
+
+            foreach (var column in OrderedColumns())
             {
-                Header = column.Title,
-                CellTemplate = CellTemplate(column.Key),
-            };
+                var gridColumn = new GridViewColumn
+                {
+                    Header = column.Title,
+                    CellTemplate = CellTemplate(column.Key),
+                };
 
-            // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
-            // 各列按权重分摊。写 150 / 70 的那张表，比例仍是 150:70，只是随宽度缩放。
-            var weight = column.FixedWidth ?? (column.IsStar ? StarWeight : AutoWeight);
-            _weighted.Add((gridColumn, weight));
+                // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
+                // 各列按权重分摊。写 150 / 70 的那张表，比例仍是 150:70，只是随宽度缩放。
+                _weights[gridColumn] = column.FixedWidth ?? (column.IsStar ? StarWeight : AutoWeight);
+                _columnKeys[gridColumn] = column.Key;
+                if (column.IsStar)
+                    _starColumn = gridColumn;
 
-            _view.Columns.Add(gridColumn);
+                _view.Columns.Add(gridColumn);
+            }
+        }
+        finally
+        {
+            _reordering = false;
         }
 
         var inline = _rowActions.Where(action => action.Inline).ToList();
@@ -228,7 +321,87 @@ public sealed class AuroraTable : UserControl
             Width = InlineWidth(inline),
             CellTemplate = RowActionTemplate(inline),
         };
-        _view.Columns.Add(_actionColumn);
+
+        _reordering = true;
+        try
+        {
+            _view.Columns.Add(_actionColumn);
+        }
+        finally
+        {
+            _reordering = false;
+        }
+    }
+
+    /// <summary>
+    /// 用户拖完一列之后（REQ-UI-062）。
+    ///
+    /// **修正必须排到下一拍**：这是 <c>ObservableCollection</c> 的通知过程中，
+    /// 在这里再动一次集合会抛「不允许重入」。排到 Background 优先级上，
+    /// 拖动的那一帧先画完，再把星号列拨回最右。
+    /// </summary>
+    private void OnColumnsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        if (_reordering || e.Action != NotifyCollectionChangedAction.Move)
+            return;
+
+        _reordering = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            try
+            {
+                KeepStarLast();
+            }
+            finally
+            {
+                _reordering = false;
+            }
+
+            SaveColumnOrder();
+
+            // 列序变了，"最后一列吃余数"这条规则落到的就是另一列，必须重排一次宽度。
+            RestartWidthLayout();
+        }));
+    }
+
+    /// <summary>
+    /// 把星号列拨回数据列的最右。
+    ///
+    /// 这一条同时实现了两件事：星号列自己拖不走（拖了就被拨回来），
+    /// 别的列也落不到它右边（落过去会把它顶开，随即被拨回最右）。
+    /// 一条规则、一处实现——两件事分开写的话，总有一种拖法两边都没盖住。
+    /// </summary>
+    private void KeepStarLast()
+    {
+        if (_starColumn is not { } star)
+            return;
+
+        var last = _view.Columns.Count - 1;
+        if (_actionColumn != null)
+            last--;
+        if (last < 0)
+            return;
+
+        var index = _view.Columns.IndexOf(star);
+        if (index >= 0 && index != last)
+            _view.Columns.Move(index, last);
+    }
+
+    /// <summary>把当前列序记进台账。行操作列不记——它不是数据列，位置也不归用户管。</summary>
+    private void SaveColumnOrder()
+    {
+        if (_orderStore is not { } store || _orderKey is not { Length: > 0 } key)
+            return;
+
+        var keys = new List<string>(_view.Columns.Count);
+        foreach (var column in _view.Columns)
+        {
+            if (_columnKeys.TryGetValue(column, out var columnKey))
+                keys.Add(columnKey);
+        }
+
+        store.Write(key, keys);
     }
 
     /// <summary>
@@ -405,15 +578,25 @@ public sealed class AuroraTable : UserControl
     /// 行按列声明补齐：缺的键填空串。
     /// 不补齐的话字典索引器会抛 <c>KeyNotFoundException</c>，WPF 把它吞成一条绑定错误，
     /// 表现为"这一格莫名其妙是空的"，而输出窗口以外看不到任何线索。
+    ///
+    /// **补齐，不是裁剪**（REQ-UI-058）：没被声明成列的键**原样留着**。
+    /// 表格只画声明过的列，但 <see cref="SelectedRow"/> 与行操作拿到的是整行——
+    /// 命令集把完整指令名 <c>name</c> 从列里去掉之后，右键菜单的四条动作、
+    /// 指令详情页与对外契约 <c>IShellCommandWorkbenchHost.CommandSelection</c> 都靠这一条活着。
+    /// 裁掉的话它们会一起断，而断法是"点了没反应"，不是报错。
     /// </summary>
     private static List<IReadOnlyDictionary<string, string>> BuildRows(AuroraTableData data)
     {
         var rows = new List<IReadOnlyDictionary<string, string>>(data.RowCount);
         foreach (var source in data.Rows)
         {
-            var row = new Dictionary<string, string>(data.ColumnCount, StringComparer.Ordinal);
+            var row = new Dictionary<string, string>(source, StringComparer.Ordinal);
             foreach (var column in data.Columns)
-                row[column.Key] = source.TryGetValue(column.Key, out var cell) ? cell ?? "" : "";
+            {
+                if (!row.ContainsKey(column.Key))
+                    row[column.Key] = "";
+            }
+
             rows.Add(row);
         }
 
@@ -515,7 +698,7 @@ public sealed class AuroraTable : UserControl
 
     private void QueueWidthPass()
     {
-        if (_weighted.Count == 0 || _widthPassQueued)
+        if (_weights.Count == 0 || _widthPassQueued)
             return;
 
         _widthPassQueued = true;
@@ -552,7 +735,17 @@ public sealed class AuroraTable : UserControl
     /// </summary>
     private void ApplyColumnWidths()
     {
-        if (_weighted.Count == 0 || _list.ActualWidth <= 0)
+        // **按可视顺序取列，不按声明顺序**（REQ-UI-062）：下面「最后一列吃余数」
+        // 那一条说的是屏幕上最右边那一列。列可以被拖着换位置之后，
+        // 照声明顺序算会把余数发给一列画在中间的列，右边就空出一条缝。
+        var ordered = new List<(GridViewColumn Column, double Weight)>(_weights.Count);
+        foreach (var column in _view.Columns)
+        {
+            if (_weights.TryGetValue(column, out var weight))
+                ordered.Add((column, weight));
+        }
+
+        if (ordered.Count == 0 || _list.ActualWidth <= 0)
             return;
 
         // 可用宽度以**滚动视口**为准：它已经扣掉纵向滚动条、列表边框与内距。
@@ -582,16 +775,16 @@ public sealed class AuroraTable : UserControl
             return;
 
         // 下限是软的：列多到连下限都排不下时按均分让位，不能因为守住下限而溢出。
-        var floor = Math.Min(MinColumnWidth, available / _weighted.Count);
-        var total = _weighted.Sum(entry => entry.Weight);
+        var floor = Math.Min(MinColumnWidth, available / ordered.Count);
+        var total = ordered.Sum(entry => entry.Weight);
         if (total <= 0)
             return;
 
         var used = 0d;
-        for (var index = 0; index < _weighted.Count; index++)
+        for (var index = 0; index < ordered.Count; index++)
         {
-            var (column, weight) = _weighted[index];
-            var width = index == _weighted.Count - 1
+            var (column, weight) = ordered[index];
+            var width = index == ordered.Count - 1
                 ? available - used
                 : Math.Max(floor, Math.Round(available * weight / total));
 

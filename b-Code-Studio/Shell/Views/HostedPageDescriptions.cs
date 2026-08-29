@@ -13,6 +13,8 @@ namespace HistoryAurora.Shell.Views;
 /// 唯一的区别是描述从这个常量来，而不是从 <c>&lt;域&gt;.ui.describe</c> 回来。
 ///
 /// 因此这里表达不出来的东西，就是组件层真正缺的东西——而且是界面自己先疼。
+/// 1.9.2 的域/类联动下拉就是一次兑现：这一页要它，协议表达不了，
+/// 于是补的是组件能力（<c>optionsSource</c>，REQ-UI-059），不是给这一页开个后门。
 /// </summary>
 internal static class HostedPageDescriptions
 {
@@ -35,10 +37,27 @@ internal static class HostedPageDescriptions
                   {
                     "type": "panel",
                     "id": "mcp-filter",
-                    "orientation": "horizontal",
-                    "widgets": [
-                      { "kind": "textbox", "id": "query", "label": "搜索",
-                        "channel": "aurora.mcp.query" }
+                    "rows": [
+                      {
+                        "mode": "flex",
+                        "widgets": [
+                          { "kind": "textbox", "id": "domain", "label": "域", "mode": "select",
+                            "minWidth": 96, "channel": "aurora.mcp.domain",
+                            "optionsSource": {
+                              "command": "aurora.ui.data",
+                              "args": { "view": "domains" }
+                            } },
+                          { "kind": "textbox", "id": "class", "label": "类", "mode": "select",
+                            "minWidth": 84, "channel": "aurora.mcp.class",
+                            "optionsSource": {
+                              "command": "aurora.ui.data",
+                              "args": { "view": "classes",
+                                        "domain": "{selection.aurora.mcp.domain.value}" }
+                            } },
+                          { "kind": "textbox", "id": "query", "label": "搜索", "flex": true,
+                            "channel": "aurora.mcp.query" }
+                        ]
+                      }
                     ]
                   },
                   {
@@ -47,18 +66,21 @@ internal static class HostedPageDescriptions
                     "channel": "aurora.mcp.command",
                     "dataSource": {
                       "command": "aurora.ui.data",
-                      "args": { "view": "commands", "query": "{selection.aurora.mcp.query.value}" }
+                      "args": { "view": "commands",
+                                "query": "{selection.aurora.mcp.query.value}",
+                                "domain": "{selection.aurora.mcp.domain.value}",
+                                "class": "{selection.aurora.mcp.class.value}" }
                     },
                     "columns": [
-                      { "key": "name", "title": "指令", "width": "230" },
                       { "key": "domain", "title": "域", "width": "90" },
                       { "key": "class", "title": "类", "width": "76" },
+                      { "key": "method", "title": "方法", "width": "150" },
                       { "key": "readonly", "title": "只读", "width": "48" },
                       { "key": "summary", "title": "说明", "width": "*" }
                     ],
                     "rowActions": [
-                      { "action": "mcp.detail", "title": "详情" },
-                      { "action": "mcp.prefill", "title": "填入" },
+                      { "action": "mcp.detail", "title": "详情", "inline": false },
+                      { "action": "mcp.prefill", "title": "填入", "inline": false },
                       { "action": "mcp.copyexample", "title": "复制示例", "inline": false },
                       { "action": "mcp.run", "title": "运行（仅只读指令）", "inline": false }
                     ]
@@ -74,6 +96,23 @@ internal static class HostedPageDescriptions
                 "type": "stack",
                 "gap": "tight",
                 "children": [
+                  {
+                    "type": "panel",
+                    "id": "detail-actions",
+                    "rows": [
+                      {
+                        "mode": "even",
+                        "widgets": [
+                          { "kind": "button", "action": "detail.prefill", "text": "填入控制台",
+                            "enabledWhen": { "selected": "aurora.mcp.command" } },
+                          { "kind": "button", "action": "detail.copyexample", "text": "复制示例",
+                            "enabledWhen": { "selected": "aurora.mcp.command" } },
+                          { "kind": "button", "action": "detail.run", "text": "运行（仅只读）",
+                            "enabledWhen": { "selected": "aurora.mcp.command" } }
+                        ]
+                      }
+                    ]
+                  },
                   {
                     "type": "table",
                     "id": "detail-facts",
@@ -116,11 +155,15 @@ internal static class HostedPageDescriptions
                   {
                     "type": "panel",
                     "id": "modules-actions",
-                    "orientation": "horizontal",
-                    "widgets": [
-                      { "kind": "button", "action": "modules.reload", "text": "刷新模块" },
-                      { "kind": "button", "action": "modules.hotreload", "text": "热重载" },
-                      { "kind": "button", "action": "modules.opendir", "text": "打开发现根" }
+                    "rows": [
+                      {
+                        "mode": "even",
+                        "widgets": [
+                          { "kind": "button", "action": "modules.reload", "text": "刷新模块" },
+                          { "kind": "button", "action": "modules.hotreload", "text": "热重载" },
+                          { "kind": "button", "action": "modules.opendir", "text": "打开发现根" }
+                        ]
+                      }
                     ]
                   },
                   {
@@ -148,7 +191,7 @@ internal static class HostedPageDescriptions
                 "children": [
                   { "type": "text", "text": "Aurora 组件测试页" },
                   { "type": "text", "style": "secondary", "text": "描述化页面、表格、面板和基础控件的统一视觉验收。" },
-                  { "type": "text", "style": "caption", "text": "浅色圆角只出现在控制面板；表格直接平铺。" },
+                  { "type": "text", "style": "caption", "text": "浅色圆角只出现在控制面板；表格直接平铺。列可以拖着换顺序，占满剩余宽度的那一列除外。" },
                   {
                     "type": "grid",
                     "min": 420,
@@ -167,25 +210,51 @@ internal static class HostedPageDescriptions
                         ],
                         "rowActions": [
                           { "action": "preview.row", "title": "查看行" }
-                        ],
-                        "view": { "filterable": true, "sortable": true, "selection": "single" }
+                        ]
                       },
                       {
                         "type": "panel",
-                         "id": "demo-panel",
-                         "text": "控制面板",
-                         "orientation": "horizontal",
-                         "widgets": [
-                           { "kind": "text", "text": "面板内控件同级排列，由渐隐线分割。" },
-                           { "kind": "textbox", "id": "picked", "label": "选中项", "follows": "aurora.preview.item.name" },
-                           { "kind": "button", "action": "preview.rename", "text": "跟随选中", "enabledWhen": { "selected": "aurora.preview.item" } },
-                           { "kind": "textbox", "id": "note", "label": "说明", "value": "组件演示", "required": true },
-                           { "kind": "textbox", "id": "option", "label": "选项", "mode": "select", "options": [ "浅色", "深色", "跟随系统" ], "value": "浅色" },
-                           { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
-                           { "kind": "button", "action": "preview.apply", "text": "强调按钮" },
-                           { "kind": "button", "action": "preview.apply", "text": "危险按钮" },
-                           { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select", "channel": "aurora.preview.section", "options": [ "第一项", "第二项", "第三项" ] }
-                         ]
+                        "id": "demo-panel",
+                        "text": "控制面板",
+                        "rows": [
+                          {
+                            "widgets": [
+                              { "kind": "text", "text": "第一行：可变宽度，最右边那个元素吃掉余量。" }
+                            ]
+                          },
+                          {
+                            "widgets": [
+                              { "kind": "textbox", "id": "picked", "label": "选中项",
+                                "follows": "aurora.preview.item.name" },
+                              { "kind": "button", "action": "preview.rename", "text": "跟随选中",
+                                "enabledWhen": { "selected": "aurora.preview.item" } }
+                            ]
+                          },
+                          {
+                            "widgets": [
+                              { "kind": "textbox", "id": "note", "label": "说明", "value": "组件演示",
+                                "flex": true },
+                              { "kind": "button", "action": "preview.apply", "text": "应用" }
+                            ]
+                          },
+                          {
+                            "mode": "even",
+                            "widgets": [
+                              { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
+                              { "kind": "button", "action": "preview.apply", "text": "强调按钮" },
+                              { "kind": "button", "action": "preview.apply", "text": "危险按钮" }
+                            ]
+                          },
+                          {
+                            "widgets": [
+                              { "kind": "textbox", "id": "option", "label": "选项", "mode": "select",
+                                "options": [ "浅色", "深色", "跟随系统" ], "value": "浅色" },
+                              { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select",
+                                "channel": "aurora.preview.section",
+                                "options": [ "第一项", "第二项", "第三项" ] }
+                            ]
+                          }
+                        ]
                       }
                     ]
                   },
@@ -206,6 +275,7 @@ internal static class HostedPageDescriptions
                       {
                         "type": "table",
                         "case": "第二项",
+                        "id": "demo-switch-table",
                         "dataSource": { "command": "aurora.preview.rows" },
                         "columns": [
                           { "key": "name", "title": "名称", "width": "150" },
@@ -217,24 +287,41 @@ internal static class HostedPageDescriptions
                         "case": "第三项",
                         "id": "demo-switch-panel",
                         "text": "第三支",
-                        "orientation": "horizontal",
-                        "widgets": [
-                          { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
-                          { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
+                        "rows": [
+                          {
+                            "widgets": [
+                              { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
+                              { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
+                            ]
+                          }
                         ]
                       }
                     ]
                   },
                   { "type": "text", "style": "secondary", "text": "弹出层内容继续复用控制面板控件" },
                   {
-                        "type": "popup",
-                        "id": "demo-popup",
-                        "text": "打开弹出层",
+                    "type": "popup",
+                    "id": "demo-popup",
+                    "text": "打开弹出层",
+                    "rows": [
+                      {
                         "widgets": [
-                          { "kind": "text", "text": "低频编辑内容放在这里。" },
-                          { "kind": "textbox", "id": "popup-option", "label": "模式", "mode": "select", "options": [ "全部", "仅主线", "仅分支" ] },
+                          { "kind": "text", "text": "低频编辑内容放在这里。" }
+                        ]
+                      },
+                      {
+                        "widgets": [
+                          { "kind": "textbox", "id": "popup-option", "label": "模式", "mode": "select",
+                            "options": [ "全部", "仅主线", "仅分支" ] }
+                        ]
+                      },
+                      {
+                        "mode": "even",
+                        "widgets": [
                           { "kind": "button", "action": "preview.apply", "text": "保存" }
                         ]
+                      }
+                    ]
                   },
                   { "type": "text", "style": "secondary", "text": "响应式栅格与泳道图" },
                   {

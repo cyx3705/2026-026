@@ -53,8 +53,8 @@ internal static class HostedPageData
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "自持页面的取数：命令目录、指令详情与模块清单",
-            Example = "aurora.ui.data view=commands query=git",
+            Summary = "自持页面的取数：命令目录、指令详情、筛选候选与模块清单",
+            Example = "aurora.ui.data view=commands domain=aurora query=git",
             Readonly = true,
             AllowUnspecifiedParameters = true,
             Parameters =
@@ -62,22 +62,44 @@ internal static class HostedPageData
                 new ParameterSpec
                 {
                     Name = "view",
-                    Description = "commands / commanddetail / commandparams / modules",
+                    Description = "commands / commanddetail / commandparams / domains / classes / modules",
                     Required = true,
                     Position = 0,
-                    AllowedValues = ["commands", "commanddetail", "commandparams", "modules"],
+                    AllowedValues =
+                    [
+                        "commands", "commanddetail", "commandparams",
+                        "domains", "classes", "modules",
+                    ],
                 },
                 new ParameterSpec { Name = "query", Description = "commands 视图的搜索词", Position = 1 },
                 new ParameterSpec { Name = "name", Description = "详情与参数视图的指令名", Position = 2 },
+                new ParameterSpec
+                {
+                    Name = "domain",
+                    Description = "commands 视图的域筛选，classes 视图的取值范围；全部 或留空表示不筛",
+                    Position = 3,
+                },
+                new ParameterSpec
+                {
+                    Name = "class",
+                    Description = "commands 视图的类筛选；全部 或留空表示不筛",
+                    Position = 4,
+                },
             ],
             Handler = async context =>
             {
                 var view = (context.GetString("view") ?? "").Trim().ToLowerInvariant();
                 return view switch
                 {
-                    "commands" => await CommandsAsync(sources, context.GetString("query")).ConfigureAwait(false),
+                    "commands" => await CommandsAsync(
+                        sources,
+                        context.GetString("query"),
+                        context.GetString("domain"),
+                        context.GetString("class")).ConfigureAwait(false),
                     "commanddetail" => await DetailAsync(sources, context.GetString("name")).ConfigureAwait(false),
                     "commandparams" => await ParametersAsync(sources, context.GetString("name")).ConfigureAwait(false),
+                    "domains" => await DomainsAsync(sources).ConfigureAwait(false),
+                    "classes" => await ClassesAsync(sources, context.GetString("domain")).ConfigureAwait(false),
                     "modules" => await ModulesAsync(sources).ConfigureAwait(false),
                     _ => CommandResult.Fail($"未知的 view: {view}"),
                 };
@@ -254,7 +276,56 @@ internal static class HostedPageData
             Args = new Dictionary<string, string> { ["name"] = "{name}" },
             Summary = "只读指令直接执行，其余只填进控制台",
         },
+
+        // 指令详情页控制面板上的同三件事（REQ-UI-058）。
+        //
+        // **必须是另外三条声明，不能复用上面那三条。** 占位符的作用域不一样：
+        // 行操作的 {name} 取的是**被操作那一行**，而面板按钮没有"那一行"这个上下文，
+        // 只能按选择通道取（{selection.<通道>.<列>}）。
+        // 复用的话，面板按钮会去找一个叫 name 的控件，找不到就整条拒绝执行——
+        // 症状是"按钮点了没反应"，而那正是动作声明这套东西存在的理由。
+        //
+        // 命令集那一列行内按钮 1.9.2 撤掉了（右键菜单保留），这三条是它们的新落点。
+        new ActionDeclaration
+        {
+            Id = "detail.prefill",
+            Title = "填入控制台",
+            Command = "aurora.log.prefill",
+            Args = new Dictionary<string, string>
+            {
+                ["text"] = "{selection." + ShellCommandChannel + ".name}",
+            },
+            Summary = "把当前指令名填进控制台输入框，不执行",
+        },
+        new ActionDeclaration
+        {
+            Id = "detail.copyexample",
+            Title = "复制示例",
+            Command = "aurora.command.copyexample",
+            Args = new Dictionary<string, string>
+            {
+                ["name"] = "{selection." + ShellCommandChannel + ".name}",
+            },
+            Summary = "把当前指令的示例复制到剪贴板",
+        },
+        new ActionDeclaration
+        {
+            Id = "detail.run",
+            Title = "运行（仅只读）",
+            Command = "aurora.command.runreadonly",
+            Args = new Dictionary<string, string>
+            {
+                ["name"] = "{selection." + ShellCommandChannel + ".name}",
+            },
+            Summary = "只读指令直接执行，其余只填进控制台",
+        },
     ];
+
+    /// <summary>
+    /// 命令集把选中行发到这个通道。与 <c>ShellWindow.CommandChannel</c> 是同一个名字——
+    /// 装配根那一侧按它把选中接回 <c>IShellCommandWorkbenchHost.CommandSelection</c>。
+    /// </summary>
+    private const string ShellCommandChannel = "aurora.mcp.command";
 
     private static async Task RefreshModulesAsync(CommandBus bus)
     {
@@ -270,22 +341,58 @@ internal static class HostedPageData
         }
     }
 
-    private static async Task<CommandResult> CommandsAsync(Sources sources, string? query)
+    /// <summary>筛选下拉里「不筛选」的那一项。与目录会话里的同名常量取值一致。</summary>
+    public const string All = "全部";
+
+    /// <summary>
+    /// 目录会话缺席时的统一出口（REQ-UI-057）。
+    ///
+    /// **这里必须失败，不能返回空表。** 1.9.0 把命令集与指令详情两页改成描述式时，
+    /// 装配根漏了 <c>Catalog = _catalog</c> 这一行，而当时的写法是「拿不到会话就给空表」——
+    /// 于是页面画得好好的、表头齐全、一行数据没有，日志里也一个字都没有。
+    /// 「没接线」和「真的一条指令都没有」在界面上长得一模一样，那正是本仓反复在消灭的形态。
+    ///
+    /// 目录快照那一路（<c>FrontendCommandCatalog</c>）不受影响：它只取描述符，从不执行处理器。
+    /// </summary>
+    private static CommandResult NoCatalog()
+        => CommandResult.Fail("命令目录会话未接线：aurora.ui.data 取不到任何指令");
+
+    /// <summary>
+    /// 命令集表格的行（REQ-UI-058）。
+    ///
+    /// 列改成【域 / 类 / 方法 / 只读 / 说明】：完整指令名的三段本来就是同一个事实的三份，
+    /// 旧版把它们并排在一起，第一列重复了后两列的全部内容。
+    ///
+    /// **<c>name</c> 仍然在行里，只是不再占一列**：右键菜单的四条动作、
+    /// 指令详情页的两张表、以及对外契约 <c>IShellCommandWorkbenchHost.CommandSelection</c>
+    /// 都按它取值。表格只画声明过的列，但选中行与行动作拿到的是整行（REQ-UI-058）。
+    /// </summary>
+    private static async Task<CommandResult> CommandsAsync(
+        Sources sources,
+        string? query,
+        string? domain,
+        string? commandClass)
     {
         if (sources.Catalog?.Invoke() is not { } catalog)
-            return Rows([]);
+            return NoCatalog();
 
         await catalog.RefreshAsync().ConfigureAwait(true);
 
         var needle = (query ?? "").Trim();
+        var domainFilter = Selected(domain);
+        var classFilter = Selected(commandClass);
         var rows = catalog.Entries
-            .Where(entry => Matches(entry, needle))
+            .Where(entry => Matches(entry, needle, domainFilter, classFilter))
             .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .Select(entry => new Dictionary<string, string>
             {
                 ["name"] = entry.Name,
                 ["domain"] = entry.Domain,
-                ["class"] = CommandClassLabels.Display(entry.CommandClass),
+                // 无类指令这一格留空，不写「无类」：表格里一列整齐的「无类」
+                // 比空白更吵，而空白本身就是「没有这一段」。
+                // 下拉候选里仍然是「无类」——那里需要一个选得中的标签。
+                ["class"] = entry.CommandClass ?? "",
+                ["method"] = Method(entry),
                 ["readonly"] = entry.Readonly ? "是" : "",
                 ["summary"] = entry.Summary,
             })
@@ -295,29 +402,116 @@ internal static class HostedPageData
     }
 
     /// <summary>
-    /// 搜索横跨指令名、说明与域。
+    /// 指令名去掉 <c>&lt;域&gt;.&lt;类&gt;.</c> 前缀剩下的全部。
     ///
-    /// 1.8.18 之前这一页有「域」「类」两个联动下拉：域选了才能选类，两级严格联动
-    /// （DEC-021）。它们随描述式改造一起去掉了——联动下拉的候选是动态的，
-    /// 而控制面板的选项框只收静态候选。**与其给面板加一种动态候选，不如让搜索词
-    /// 也能匹配域**：想只看 aurora 的，输 `aurora.` 就是了。
-    ///
-    /// 这是本轮「页面适配组件、组件保持克制」的一处具体取舍，能力确实少了一点，
-    /// 少的那一点写在这里，不假装没发生。
+    /// 不是「取第三段」：四段名的指令取第三段会把后面那段静默丢掉，
+    /// 而两条同域同类、只差最后一段的指令会在表上变成两行完全一样的内容。
+    /// 无类指令只剥 <c>&lt;域&gt;.</c>。
     /// </summary>
-    private static bool Matches(CatalogEntry entry, string needle)
+    internal static string Method(CatalogEntry entry)
     {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var name = entry.Name ?? "";
+        var prefix = (entry.Domain ?? "") + ".";
+        if (prefix.Length > 1 && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            name = name[prefix.Length..];
+
+        var classPrefix = (entry.CommandClass ?? "") + ".";
+        if (classPrefix.Length > 1 && name.StartsWith(classPrefix, StringComparison.OrdinalIgnoreCase))
+            name = name[classPrefix.Length..];
+
+        return name;
+    }
+
+    /// <summary>筛选值归一：空与「全部」都是「不筛选」。</summary>
+    private static string? Selected(string? value)
+    {
+        var trimmed = (value ?? "").Trim();
+        return trimmed.Length == 0 || trimmed == All ? null : trimmed;
+    }
+
+    /// <summary>
+    /// 域的候选（REQ-UI-059）。首项固定为「全部」：
+    /// 选择框没有「清空」这个动作，不给一个「全部」的话筛了就退不回来。
+    /// </summary>
+    private static async Task<CommandResult> DomainsAsync(Sources sources)
+    {
+        if (sources.Catalog?.Invoke() is not { } catalog)
+            return NoCatalog();
+
+        await catalog.RefreshAsync().ConfigureAwait(true);
+        return Options(catalog.Domains);
+    }
+
+    /// <summary>
+    /// 类的候选，取值范围随域收敛（DEC-021 严格两级）。
+    ///
+    /// 域为「全部」时只给「全部」一项：跨域列类名会把不同域里同名的类
+    /// 归成一条，筛出来的结果没有人能解释。
+    /// </summary>
+    private static async Task<CommandResult> ClassesAsync(Sources sources, string? domain)
+    {
+        if (sources.Catalog?.Invoke() is not { } catalog)
+            return NoCatalog();
+
+        await catalog.RefreshAsync().ConfigureAwait(true);
+
+        if (Selected(domain) is not { } scope)
+            return Options([]);
+
+        var classes = catalog.Entries
+            .Where(entry => (entry.Domain ?? "").Equals(scope, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => CommandClassLabels.Display(entry.CommandClass))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value == CommandClassLabels.None ? 1 : 0)
+            .ThenBy(value => value, StringComparer.Ordinal)
+            .ToList();
+
+        return Options(classes);
+    }
+
+    /// <summary>候选项行集：列名固定 <c>value</c>，与选择通道发布的列名同一个字。</summary>
+    private static CommandResult Options(IEnumerable<string> values)
+        => Rows(new[] { All }
+            .Concat(values ?? [])
+            .Select(value => new Dictionary<string, string> { ["value"] = value })
+            .ToList());
+
+    /// <summary>
+    /// 三个筛选条件求交：域、类、搜索词。
+    ///
+    /// 域与类的两级联动下拉 1.8.18 随描述式改造去掉过一版——理由是「联动下拉的候选是
+    /// 动态的，而控制面板的选项框只收静态候选」。1.9.2 补上了动态候选
+    /// （<c>optionsSource</c>，REQ-UI-059），这条限制不再成立，两级下拉因此回来了。
+    ///
+    /// 搜索词仍然横跨指令名、说明与域：它是「模糊找一条」，与「按域收窄范围」不是一件事，
+    /// 两者叠加而不是互相取代。
+    /// </summary>
+    private static bool Matches(CatalogEntry entry, string needle, string? domain, string? commandClass)
+    {
+        if (domain != null && !(entry.Domain ?? "").Equals(domain, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // 类按**显示标签**比对：下拉里选的是「无类」，而描述符里那一格是空串。
+        if (commandClass != null
+            && !CommandClassLabels.Display(entry.CommandClass)
+                .Equals(commandClass, StringComparison.OrdinalIgnoreCase))
+            return false;
+
         if (needle.Length == 0)
             return true;
 
         return entry.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
             || entry.Summary.Contains(needle, StringComparison.OrdinalIgnoreCase)
-            || entry.Domain.Contains(needle, StringComparison.OrdinalIgnoreCase);
+            || (entry.Domain ?? "").Contains(needle, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<CommandResult> DetailAsync(Sources sources, string? name)
     {
-        if (sources.Catalog?.Invoke() is not { } catalog || string.IsNullOrWhiteSpace(name))
+        if (sources.Catalog?.Invoke() is not { } catalog)
+            return NoCatalog();
+        if (string.IsNullOrWhiteSpace(name))
             return Rows([]);
 
         var detail = await catalog.DetailAsync(name).ConfigureAwait(true);
@@ -352,7 +546,9 @@ internal static class HostedPageData
 
     private static async Task<CommandResult> ParametersAsync(Sources sources, string? name)
     {
-        if (sources.Catalog?.Invoke() is not { } catalog || string.IsNullOrWhiteSpace(name))
+        if (sources.Catalog?.Invoke() is not { } catalog)
+            return NoCatalog();
+        if (string.IsNullOrWhiteSpace(name))
             return Rows([]);
 
         var detail = await catalog.DetailAsync(name).ConfigureAwait(true);
