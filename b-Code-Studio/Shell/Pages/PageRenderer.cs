@@ -1,4 +1,5 @@
-using System.Text.Json;
+﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -6,6 +7,7 @@ using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.CommandSurface;
 using HistoryAurora.Shell.Graph;
 using HistoryAurora.Shell.Panels;
+using HistoryAurora.Shell.Selection;
 using HistoryAurora.Shell.Table;
 using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Core.Commands;
@@ -33,7 +35,30 @@ public sealed class PageRenderContext
     /// 补全候选的来源（REQ-UI-013）。为 null 时声明了 <c>suggest</c> 的输入框
     /// 退回普通输入框并记一条 Warn——静默地少掉补全，正是"只有这一页不一样"的老形态。
     /// </summary>
+    /// <summary>
+    /// 补全会话。1.8.14 起页面这一层**没有节点消费它**——带补全的输入框随
+    /// <c>input</c> 节点一同退役（见 <see cref="PageRenderer.RetiredComponents"/>）。
+    /// 字段保留：控制面板日后要接补全时，取数口就在这里，调用方也已经在传了。
+    /// </summary>
     public AuroraCompletionProvider? Completions { get; init; }
+
+    /// <summary>
+    /// 选择通道台账（REQ-UI-041）。表格按 <c>channel</c> 把选中行发上通道，
+    /// 控制面板按通道名取值——**这是页面之间唯一的接线方式**，页内节点 id 不跨页。
+    /// 为 null 时表格的 <c>channel</c> 声明记一条 Warn 并忽略。
+    /// </summary>
+    public SelectionChannels? Channels { get; init; }
+
+    /// <summary>
+    /// 取数刷新台账（REQ-UI-044）。为 null 时取数仍在 <c>Loaded</c> 跑一次，
+    /// 但此后既不会跟着选中变化重取，也不接受 <c>aurora.ui.refreshdata</c>。
+    /// </summary>
+    public PageDataRefresher? Refresher { get; init; }
+
+    /// <summary>
+    /// 列序记忆（REQ-UI-062）。为 null 时列照样拖得动，只是重开页面回到声明顺序。
+    /// </summary>
+    public IColumnOrderStore? ColumnOrder { get; init; }
 }
 
 /// <summary>渲染结果。缺件被记录下来而不是丢弃，供缺件清单查询。</summary>
@@ -58,7 +83,7 @@ public sealed class RenderedPage
 ///         本类只做"描述 → 组件输入"的翻译，外观归组件（REQ-UI-007/008/010）。</item>
 /// </list>
 /// </summary>
-public static class PageRenderer
+public static partial class PageRenderer
 {
     /// <summary>
     /// 间距不走 DynamicResource：间距令牌在浅色与深色里取值相同（PadTight=8 / Pad=12），
@@ -76,8 +101,26 @@ public static class PageRenderer
     public static readonly IReadOnlySet<string> SupportedComponents =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "stack", "text", "button", "table", "input", "select", "panel", "swimlane",
-            "grid", "popup",
+            "stack", "text", "table", "panel", "swimlane", "grid", "popup", "switch",
+        };
+
+    /// <summary>
+    /// 曾经是页面节点、现已退役的类型。
+    ///
+    /// 小型交互控件（按钮、输入框、下拉）**只能出现在控制面板里**：页面这一层只放
+    /// 容器、展示组件和复合组件。散落在页面各处的单个控件没有共同的排版依据，
+    /// 每加一个就要重新决定它跟谁对齐、跟谁分组。
+    ///
+    /// 退役与"缺件"是两回事，因此**不进** <see cref="RenderedPage.MissingComponents"/>：
+    /// 缺件会被 <c>ModulePageLoader</c> 自动记进组件申请台账，
+    /// 把退役类型也记进去等于让模块不断申请一个已经决定不给的东西。
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> RetiredComponents =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["button"] = "按钮",
+            ["input"] = "输入框",
+            ["select"] = "下拉框",
         };
 
     /// <summary>
@@ -92,7 +135,25 @@ public static class PageRenderer
     public static readonly IReadOnlySet<string> SupportedCapabilities =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "table.rowactions", "menu", "input.suggest",
+            "table.rowactions", "menu",
+            // REQ-UI-041：表格发布选中行、面板跟随取值与按选中启停。
+            // 「表格选中行 → 按钮变可用」这条链路 1.8.14 随页面按钮一起没了，这三条把它接回来，
+            // 落点从页内节点 id 换成界面级通道，因此顺带能跨页。
+            "table.channel", "panel.follows", "panel.enabledwhen",
+            // REQ-UI-060：面板的行是声明出来的一等结构，行内可以指定均布或可变宽度，
+            // 元素可以注册自己的最窄宽度。它取代了 REQ-UI-043 的 panel.inline——
+            // 「与前一个控件同行」在有了真正的行之后没有存在的余地。
+            "panel.rows", "panel.minwidth", "panel.flex",
+            // REQ-UI-059：选择框的候选来自一条只读指令，可跟着通道重取（两级联动下拉）。
+            "panel.optionssource",
+            // REQ-UI-065：极简开关、来源选择器及输入提交动作。
+            "panel.switch", "panel.sourcepicker", "panel.commitaction",
+            // REQ-UI-044：取数参数可引用选中行，通道一变自动重取；也可被显式刷新。
+            "table.datasource.selection", "swimlane.datasource.selection",
+            // REQ-UI-045：控制面板的文本框/轮换选项框把当前值发布到选择通道。
+            "panel.channel",
+            // REQ-UI-056：弹出层可以接到页面右键上，从而连按钮都不占版面。
+            "popup.trigger",
         };
 
     private static readonly JsonSerializerOptions RowOptions = new()
@@ -100,18 +161,24 @@ public static class PageRenderer
         PropertyNameCaseInsensitive = true,
     };
 
+    /// <summary>
+    /// 取数参数里的通道引用。只认 <c>selection.</c> 打头的那一种——
+    /// 取数没有"面板控件"这个作用域，别的花括号原样留给指令自己解释。
+    /// </summary>
+    [GeneratedRegex(@"\{(selection\.[^{}\s]+)\}", RegexOptions.IgnoreCase)]
+    private static partial Regex SelectionPlaceholder();
+
     public static RenderedPage Render(PageDescription page, PageRenderContext context)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(context);
 
-        var state = new RenderState(context);
+        var state = new RenderState(context, page.Id);
         var root = page.Content == null
             ? Placeholder("content", state)
             : Build(page.Content, state);
 
-        // enabledWhen 依赖节点 id，必须等整棵树建完才能连线。
-        state.ApplyDeferredBindings();
+        root = AttachContextPopup(root, state);
 
         return new RenderedPage
         {
@@ -120,29 +187,88 @@ public static class PageRenderer
         };
     }
 
+    /// <summary>
+    /// 把 <c>trigger: "context"</c> 的弹出层接到整页的右键上（REQ-UI-056）。
+    ///
+    /// **必须在整棵树建完之后做**：弹出层节点可以写在页面的任何位置，而它要接的是
+    /// 「这一页」，不是它自己那一格。
+    ///
+    /// **必须自己包一层透明底的容器**：<see cref="Panel"/> 的 Background 为 null 时
+    /// 空白处不参与命中测试，而空白处正是这条路唯一会被右键到的地方——行上是行菜单，
+    /// 表格自己也有底色。直接往 root 上写底色则不行：root 可能就是某个组件本体
+    /// （只有一个 table 的页面），覆盖它的底色等于从外面改组件的外观。
+    ///
+    /// **浮层本体挂在这一层，不留在它声明的那一格**。两个理由：
+    /// 声明的位置对右键式浮层没有意义（它接的是整页），而留在原位就得让那一格
+    /// 既不占空间又保持可见——WPF 的 Popup 在 Collapsed 的父级下**开不出来**，
+    /// 且不抛异常、不触发 Closed，IsOpen 写进去就是 false。
+    /// </summary>
+    private static FrameworkElement AttachContextPopup(FrameworkElement root, RenderState state)
+    {
+        if (state.ContextPopup is not { } flyout)
+            return root;
+
+        var surface = new Grid { Background = System.Windows.Media.Brushes.Transparent };
+        surface.Children.Add(root);
+        surface.Children.Add(flyout);
+        flyout.AttachContextTrigger(surface);
+        return surface;
+    }
+
+    /// <summary>
+    /// 会把剩余空间吃掉的节点。纵向栈里它们拿星号行，其余按内容高度。
+    ///
+    /// 判据是"它自己带滚动"：表格与泳道图都有内部视口，**必须**被限住高度才谈得上滚动。
+    /// 放在 StackPanel 里的话它们量到的是无穷高，于是一次性把全部行画出来——
+    /// 表现就是"表格撑满整页、还滚不动"（Janus 实测）。
+    /// </summary>
+    private static bool IsGreedy(PageNode node)
+    {
+        var type = (node.Type ?? "").ToLowerInvariant();
+        if (type is "table" or "swimlane")
+            return true;
+
+        // 容器跟着里面走：栅格里放了表格，那一格照样得拿到高度。
+        // switch 同理，而且**必须**算上：它的分支里放着表格，少算的话
+        // 切过去看到的是一张只有表头、按内容高度缩成一条的表。
+        return type is "stack" or "grid" or "switch" && (node.Children ?? []).Any(IsGreedy);
+    }
+
     private static FrameworkElement Build(PageNode node, RenderState state)
-        => (node.Type ?? "").ToLowerInvariant() switch
+    {
+        var type = (node.Type ?? "").ToLowerInvariant();
+        if (RetiredComponents.TryGetValue(type, out var label))
+            return Retired(type, label, state);
+
+        if (node.Channel is { Length: > 0 } && type != "table")
+            state.WarnUnbound($"只有表格能声明选择通道，{type} 上的 channel={node.Channel} 已忽略");
+
+        return type switch
         {
             "stack" => BuildStack(node, state),
             "text" => BuildText(node),
-            "button" => BuildButton(node, state),
             "table" => BuildTable(node, state),
-            "input" => BuildInput(node, state),
-            "select" => BuildSelect(node),
             "panel" => BuildPanel(node, state),
             "swimlane" => BuildSwimlane(node, state),
             "grid" => BuildGrid(node, state),
             "popup" => BuildPopup(node, state),
+            "switch" => BuildSwitch(node, state),
             _ => Placeholder(node.Type, state),
         };
+    }
 
+    /// <summary>
+    /// 顺序容器。**用 Grid 而不是 StackPanel**：StackPanel 在排列方向上给子元素无穷尺寸，
+    /// 而表格与泳道图靠"被限住尺寸"才滚得起来——放进 StackPanel 的表格会把每一行都画出来，
+    /// 撑满整页且没有滚动条（Janus 项目总览页实测）。
+    ///
+    /// 因此按 <see cref="IsGreedy"/> 分两档：会吃空间的拿星号，其余按内容尺寸。
+    /// 一个都不吃时全是 Auto，行为与原来的 StackPanel 一致。
+    /// </summary>
     private static FrameworkElement BuildStack(PageNode node, RenderState state)
     {
         var horizontal = string.Equals(node.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
-        var panel = new StackPanel
-        {
-            Orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical,
-        };
+        var grid = new Grid();
 
         var gap = (node.Gap ?? "").ToLowerInvariant() switch
         {
@@ -154,15 +280,30 @@ public static class PageRenderer
         var children = node.Children ?? [];
         for (var i = 0; i < children.Count; i++)
         {
+            var length = IsGreedy(children[i])
+                ? new GridLength(1, GridUnitType.Star)
+                : GridLength.Auto;
+
+            if (horizontal)
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = length });
+            else
+                grid.RowDefinitions.Add(new RowDefinition { Height = length });
+
             var child = Build(children[i], state);
             if (gap > 0 && i < children.Count - 1)
                 child.Margin = horizontal
                     ? new Thickness(0, 0, gap, 0)
                     : new Thickness(0, 0, 0, gap);
-            panel.Children.Add(child);
+
+            if (horizontal)
+                Grid.SetColumn(child, i);
+            else
+                Grid.SetRow(child, i);
+
+            grid.Children.Add(child);
         }
 
-        return panel;
+        return grid;
     }
 
     private static FrameworkElement BuildText(PageNode node)
@@ -175,38 +316,6 @@ public static class PageRenderer
             _ => "Aurora.Text.Body",
         });
         return text;
-    }
-
-    private static FrameworkElement BuildButton(PageNode node, RenderState state)
-    {
-        // 动作优先：绑动作 id 的按钮不会因为模块改指令名而失效（REQ-UI-009）。
-        if (node.Invoke?.Action is { Length: > 0 } actionId)
-        {
-            var binding = state.ResolveAction(actionId);
-            if (!binding.Ok)
-                return Unbound(binding.Error!, state);
-        }
-        else if (node.Invoke is { Command.Length: > 0 })
-        {
-            state.WarnRawCommand(node.Invoke.Command);
-        }
-
-        var button = new Button { Content = node.Text ?? "", HorizontalAlignment = HorizontalAlignment.Left };
-        button.SetResourceReference(FrameworkElement.StyleProperty, (node.Style ?? "").ToLowerInvariant() switch
-        {
-            "accent" => "Aurora.Button.Accent",
-            "ghost" => "Aurora.Button.Ghost",
-            "danger" => "Aurora.Button.Danger",
-            _ => "Aurora.Button.Base",
-        });
-
-        if (node.Invoke is { } invoke)
-            button.Click += (_, _) => state.Invoke(invoke);
-
-        if (node.EnabledWhen?.Selected is { Length: > 0 } requires)
-            state.RequireSelection(button, requires);
-
-        return button;
     }
 
     /// <summary>
@@ -223,10 +332,19 @@ public static class PageRenderer
         table.SetData(AuroraTableData.Create(columns, []));
 
         if (node.Id is { Length: > 0 } id)
+        {
             state.RegisterNode(id, table);
 
+            // 列序按「模块/页面/节点」记（REQ-UI-062）。没写 id 的表不记：
+            // 那样的表拖完也认不出是哪一张，记下来只会张冠李戴。
+            table.UseColumnOrder(state.ColumnOrder, state.ColumnOrderKey(id));
+        }
+
+        if (node.Channel is { Length: > 0 } channel)
+            state.PublishSelectionTo(table, channel, node.Id);
+
         if (node.DataSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
-            state.LoadRows(table, columns, source);
+            state.BindRows(table, columns, source, node.Id);
 
         var declared = node.RowActions ?? [];
         if (declared.Count == 0)
@@ -276,21 +394,108 @@ public static class PageRenderer
         return stack;
     }
 
-    private static FrameworkElement BuildInput(PageNode node, RenderState state)
+    /// <summary>
+    /// 切换容器（REQ-UI-046）：同一块版面上按一个通道值轮换显示其中一支。
+    ///
+    /// **它换的是组件，不是页面。** 三块内容各自还是普通的 stack / table / panel，
+    /// 只是同一时刻只有一支挂在树上。这样才谈得上"三个页签收进一页"——
+    /// 收成三个页签是停靠层的事，收成一个控件是这里的事。
+    ///
+    /// 三条实现上的硬要求：
+    /// <list type="bullet">
+    ///   <item><b>全部分支在渲染时就建出来</b>。缺件、断链和通道声明都记在
+    ///         <see cref="RenderState"/> 上，而它在 <see cref="Render"/> 返回时就被快照走了；
+    ///         懒建的分支会让"这一支里有个缺件"永远不出账——正是本协议要消灭的静默；</item>
+    ///   <item><b>不显示的分支不挂在树上</b>，而不是 <c>Collapsed</c>。折叠元素照样收 Loaded，
+    ///         于是三支的取数会在开页那一刻一起打出去；Janus 的落地状态那一支每次跑两条
+    ///         <c>git ls-files</c>，没人看的两支不该付这个钱；</item>
+    ///   <item><b>切走再切回来用的是同一个控件实例</b>。重建的话，表格的滚动位置、
+    ///         筛选词和选中行会在每次切换时消失，而那些正是人切走之前留下的上下文。</item>
+    /// </list>
+    /// </summary>
+    private static FrameworkElement BuildSwitch(PageNode node, RenderState state)
     {
-        if (node.Suggest is { Length: > 0 } suggest)
-        {
-            if (state.Completions is { } completions)
-                return new AuroraSuggestBox(completions) { Text = node.Text ?? "" };
+        var children = node.Children ?? [];
+        if (children.Count == 0)
+            return Unbound("切换容器没有任何分支：switch 至少要声明一个 children", state);
 
-            // 声明了补全却给不出候选：退回普通输入框可以用，但必须留痕，
-            // 否则"这台机器上补不出来"只会被当成手感问题。
-            state.WarnUnbound($"输入框声明了 suggest={suggest}，但当前没有补全会话，已退回普通输入框");
+        var reference = Unwrap(node.Source);
+        if (!SelectionChannels.TrySplitReference(reference, out var channel, out var column))
+            return Unbound(
+                "切换容器的 source 必须写成 {selection.<通道>.<列>}: "
+                + (node.Source ?? "(未声明)"),
+                state);
+
+        // 重复的 case 只有第一支会被选中，另一支从此永远不显示——
+        // 而"某一支怎么点都出不来"是查不出来的，必须在建页时说出来。
+        foreach (var duplicate in children
+                     .Select(child => child.Case)
+                     .Where(name => name is { Length: > 0 })
+                     .GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Count() > 1))
+            state.WarnUnbound($"切换容器的分支 case 重复: {duplicate.Key}，只有第一支会被显示");
+
+        for (var index = 1; index < children.Count; index++)
+            if (string.IsNullOrWhiteSpace(children[index].Case))
+                state.WarnUnbound($"切换容器的第 {index + 1} 支没有 case，它永远不会被选中");
+
+        var host = new Grid();
+        var branches = children.Select(child => Build(child, state)).ToList();
+        var shown = -1;
+
+        void Apply()
+        {
+            var index = Match(children, state.Channels?.Value(channel, column));
+            if (index == shown)
+                return;
+
+            // 先摘再挂：WPF 的元素只能有一个父。摘下来的那支仍被 branches 持有，
+            // 因此它里面的数据、滚动位置和选中行都还在。
+            host.Children.Clear();
+            host.Children.Add(branches[index]);
+            shown = index;
         }
 
-        var box = new TextBox { Text = node.Text ?? "" };
-        box.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Segment.TextBox");
-        return box;
+        Apply();
+
+        // 订阅不解除，与 PanelView 同一处理：页面撤销由 ModulePageLoader 走 owner 维度，
+        // 控件这一级没有"页没了"的可靠信号——Unloaded 在切页签、浮出、自动隐藏时都会来。
+        if (state.Channels is { } channels)
+            channels.Changed += (_, e) =>
+            {
+                if (string.Equals(e.Channel, channel, StringComparison.OrdinalIgnoreCase))
+                    Apply();
+            };
+
+        // 发布方可能排在本节点之后建（面板写在 switch 下面），那样初值早于订阅发出。
+        // Loaded 时再对一次表，Apply 本身按当前支早退，重复调用不产生额外代价。
+        host.Loaded += (_, _) => Apply();
+        return host;
+    }
+
+    /// <summary>哪一支匹配当前值；没有任何一支匹配（含通道还没有值）时用第一支。</summary>
+    private static int Match(IReadOnlyList<PageNode> children, string? value)
+    {
+        if (value is not { Length: > 0 })
+            return 0;
+
+        for (var index = 0; index < children.Count; index++)
+            if (string.Equals(children[index].Case, value, StringComparison.OrdinalIgnoreCase))
+                return index;
+
+        return 0;
+    }
+
+    /// <summary>
+    /// 去掉 <c>source</c> 外面那对花括号。取数参数里的通道引用是嵌在字符串里的，
+    /// 因而带括号；这里整个字段就是一条引用，两种写法都收下，省得人按写法猜。
+    /// </summary>
+    private static string? Unwrap(string? reference)
+    {
+        var text = reference?.Trim();
+        return text is { Length: > 1 } && text[0] == '{' && text[^1] == '}'
+            ? text[1..^1].Trim()
+            : text;
     }
 
     /// <summary>响应式栅格：只声明"一列至少多宽"，列数由可用宽度算（REQ-UI-015）。</summary>
@@ -315,7 +520,12 @@ public static class PageRenderer
         return grid;
     }
 
-    /// <summary>弹出层：内容仍是面板那三种小组件，只是不再常驻占版面（REQ-UI-012）。</summary>
+    /// <summary>
+    /// 弹出层：内容仍是面板那三种小组件，只是不再常驻占版面（REQ-UI-012）。
+    ///
+    /// <c>trigger</c> 决定怎么打开它（REQ-UI-056）：缺省自带一个按钮，
+    /// <c>context</c> 则连按钮都不占版面，改由整页的右键唤起。浮层本体是同一个。
+    /// </summary>
     private static FrameworkElement BuildPopup(PageNode node, RenderState state)
     {
         if (state.Actions == null)
@@ -325,26 +535,39 @@ public static class PageRenderer
         {
             Id = node.Id ?? "page-popup",
             Title = node.Text ?? "更多",
-            Widgets = (node.Widgets ?? []).ToList(),
+            Rows = (node.Rows ?? []).ToList(),
         };
 
         var parsed = PanelDefinitionValidator.Validate(definition);
         if (!parsed.Ok)
             return Unbound(parsed.Error!, state);
 
-        return new AuroraFlyout(
-            node.Text ?? "更多",
-            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions),
-            string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase));
-    }
+        var trigger = (node.Trigger ?? "").Trim().ToLowerInvariant();
+        var context = trigger == "context";
+        if (trigger.Length > 0 && !context && trigger != "button")
+            // 静默按缺省处理的症状是「右键怎么点都没反应」，而版面上确实多了个按钮，
+            // 看上去就像这个组件本来就长这样。
+            state.WarnUnbound(
+                $"弹出层 {definition.Id} 的 trigger={node.Trigger} 无法识别，按 button 处理；只支持 button / context");
 
-    private static FrameworkElement BuildSelect(PageNode node)
-    {
-        var combo = new ComboBox();
-        combo.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Segment.ComboBox");
-        foreach (var child in node.Children ?? [])
-            combo.Items.Add(child.Text ?? "");
-        return combo;
+        var flyout = new AuroraFlyout(
+            node.Text ?? "更多",
+            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner),
+            string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase),
+            context);
+
+        if (!context)
+            return flyout;
+
+        if (!state.TryTakeContextPopup(flyout))
+            return Unbound(
+                $"弹出层 {definition.Id} 声明了 trigger=context，但本页已经接了一个；"
+                + "右键只有一次，第二个不会被接上", state);
+
+        // 浮层本体由 AttachContextPopup 挂到整页那一层去，这一格只留一个不占版面的空位：
+        // 顺序容器给每个子节点分一行并补一段间距，零尺寸的元素照样会留下那段间距，
+        // 而 Collapsed 的元素连边距都不参与。
+        return new Grid { Visibility = Visibility.Collapsed };
     }
 
     /// <summary>面板：直接复用控制面板那套组件与校验，不为页面另造一份。</summary>
@@ -357,14 +580,16 @@ public static class PageRenderer
         {
             Id = node.Id ?? "page-panel",
             Title = node.Text ?? "面板",
-            Widgets = (node.Widgets ?? []).ToList(),
+            // 行必须原样传下去（REQ-UI-060）。漏传的症状不是报错而是"版面变了"：
+            // 面板照样画出来，只是所有元素挤成一行或散成一列。
+            Rows = (node.Rows ?? []).ToList(),
         };
 
         var parsed = PanelDefinitionValidator.Validate(definition);
         if (!parsed.Ok)
             return Unbound(parsed.Error!, state);
 
-        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions);
+        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner);
     }
 
     /// <summary>泳道图：描述由取数命令给，布局与绘制归组件（REQ-UI-010）。</summary>
@@ -375,7 +600,7 @@ public static class PageRenderer
 
         var swimlane = new AuroraSwimlane(state.Bus, state.Log, state.Actions);
         if (node.DataSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
-            state.LoadSwimlane(swimlane, source);
+            state.BindSwimlane(swimlane, source, node.Id);
         else
             swimlane.ShowMessage("未声明取数命令");
         return swimlane;
@@ -390,6 +615,17 @@ public static class PageRenderer
         var name = string.IsNullOrWhiteSpace(type) ? "(未命名)" : type;
         state.Missing.Add(name);
         return Box("该组件待交付：" + name);
+    }
+
+    /// <summary>
+    /// 退役类型的样子。与缺件区分开：这不是"还没做"，是"决定了不放在这一层"，
+    /// 因此不记进缺件表，也就不会变成一条组件申请。
+    /// </summary>
+    private static FrameworkElement Retired(string type, string label, RenderState state)
+    {
+        var reason = $"{label}（{type}）不再是页面节点：小型交互控件请放进控制面板（panel / popup）";
+        state.WarnUnbound(reason);
+        return Box(reason);
     }
 
     /// <summary>动作没落点时的样子。与缺件区分开：组件是有的，缺的是声明。</summary>
@@ -410,13 +646,28 @@ public static class PageRenderer
     }
 
     /// <summary>一次渲染的可变状态：节点表、缺件表与待连线的启用条件。</summary>
-    private sealed class RenderState(PageRenderContext context)
+    private sealed class RenderState(PageRenderContext context, string pageId)
     {
         private readonly Dictionary<string, AuroraTable> _nodes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly List<(Button Button, string NodeId)> _deferred = [];
         private readonly Dictionary<AuroraTable, Dictionary<string, PageRowAction>> _rowActions = [];
 
         public List<string> Missing { get; } = [];
+
+        /// <summary>
+        /// 本页接到右键上的那个弹出层（REQ-UI-056）。**只留一个**：右键只有一次，
+        /// 留两个的话「弹出哪一个」就取决于建页顺序，而那个顺序不受任何东西保证——
+        /// 与选择通道的抢注规则同一条理由。
+        /// </summary>
+        public AuroraFlyout? ContextPopup { get; private set; }
+
+        public bool TryTakeContextPopup(AuroraFlyout flyout)
+        {
+            if (ContextPopup != null)
+                return false;
+
+            ContextPopup = flyout;
+            return true;
+        }
 
         public CommandBus Bus => context.Bus;
 
@@ -424,9 +675,48 @@ public static class PageRenderer
 
         public ActionRegistry? Actions => context.Actions;
 
-        public AuroraCompletionProvider? Completions => context.Completions;
+        public SelectionChannels? Channels => context.Channels;
+
+        /// <summary>提供方模块名。面板声明的通道按它登记，页面撤销时随 owner 一并撤掉。</summary>
+        public string Owner => context.Owner;
+
 
         public void RegisterNode(string id, AuroraTable table) => _nodes[id] = table;
+
+        /// <summary>列序记忆的落点。</summary>
+        public IColumnOrderStore? ColumnOrder => context.ColumnOrder;
+
+        /// <summary>
+        /// 一张表在列序台账里的身份：<c>模块/页面/节点</c>。
+        /// 与通道来源用的是同一套三段式——同一张表在两本账里应该叫同一个名字。
+        /// </summary>
+        public string ColumnOrderKey(string nodeId) => $"{context.Owner}/{pageId}/{nodeId}";
+
+        /// <summary>
+        /// 把一张表接到选择通道上。**来源写成 owner/页/节点**：热重载时同一个节点重新渲染，
+        /// 来源不变，因此不会被判成"两张表抢同一个通道"。
+        /// </summary>
+        public void PublishSelectionTo(AuroraTable table, string channel, string? nodeId)
+        {
+            if (context.Channels is not { } channels)
+            {
+                WarnUnbound($"选择通道台账不可用，表格声明的 channel={channel} 已忽略");
+                return;
+            }
+
+            var origin = $"{context.Owner}/{pageId}#{nodeId ?? "(无 id)"}";
+            if (!channels.TryDeclare(channel, context.Owner, origin, out var error))
+            {
+                WarnUnbound(error);
+                return;
+            }
+
+            table.SelectionChanged += (_, _) => channels.Publish(channel, table.SelectedRow);
+
+            // 换数据时 ListView 会清掉选中，SelectionChanged 随之把通道置空——
+            // 于是"刷新后按钮还亮着、点下去用的却是上一份数据里的行"这种事不成立。
+            channels.Publish(channel, table.SelectedRow);
+        }
 
         /// <summary>
         /// 记住某张表的某条行操作声明。每张表只挂一次事件：
@@ -460,7 +750,9 @@ public static class PageRenderer
 
             var text = ActionRegistry.BuildCommandText(
                 binding.Action!,
-                name => ResolveRowArgument(declared, e.Row, name),
+                SelectionChannels.Chain(
+                    context.Channels,
+                    name => ResolveRowArgument(declared, e.Row, name)),
                 out var error);
             if (text == null)
             {
@@ -485,8 +777,6 @@ public static class PageRenderer
             return row.TryGetValue(name, out var cell) ? cell : null;
         }
 
-        public void RequireSelection(Button button, string nodeId) => _deferred.Add((button, nodeId));
-
         public ActionBinding ResolveAction(string id)
             => context.Actions?.Resolve(id)
                ?? ActionBinding.Fail($"未声明的动作: {id}（动作声明台账不可用）");
@@ -504,26 +794,6 @@ public static class PageRenderer
                 "page",
                 context.Owner + ": 按钮直接绑定指令 " + command
                 + "，改名后会静默失效；建议改用模块声明的动作（<域>.ui.actions）");
-
-        public void ApplyDeferredBindings()
-        {
-            foreach (var (button, nodeId) in _deferred)
-            {
-                if (!_nodes.TryGetValue(nodeId, out var table))
-                {
-                    // 引用了不存在的节点：按"不静默"原则禁用并留日志，而不是当作永远可用。
-                    button.IsEnabled = false;
-                    context.Log.Log(
-                        ShellLogLevel.Warn,
-                        "page",
-                        context.Owner + ": enabledWhen 引用了不存在的节点 " + nodeId + "，按钮已禁用");
-                    continue;
-                }
-
-                button.IsEnabled = table.SelectedRow != null;
-                table.SelectionChanged += (_, _) => button.IsEnabled = table.SelectedRow != null;
-            }
-        }
 
         /// <summary>组件调用走指令总线：按钮点击变成一条命令，参数可从视图状态取值。</summary>
         public void Invoke(PageInvoke invoke)
@@ -599,14 +869,32 @@ public static class PageRenderer
         /// 优先读 <c>Data</c>；跨进程中继后结构化载荷不会原样存活，
         /// 因此协议要求同样的 JSON 也出现在 <c>Message</c> 里，这里回退到它。
         /// </summary>
-        public void LoadRows(
+        public void BindRows(
             AuroraTable table,
             IReadOnlyList<AuroraTableColumn> columns,
-            PageDataSource source)
-            => WhenLoaded(table, () => LoadRowsAsync(table, columns, Compose(source)));
+            PageDataSource source,
+            string? nodeId)
+            => Bind(table, source, nodeId, () => LoadRowsAsync(table, columns, source));
 
-        public void LoadSwimlane(AuroraSwimlane swimlane, PageDataSource source)
-            => WhenLoaded(swimlane, () => LoadSwimlaneAsync(swimlane, Compose(source)));
+        public void BindSwimlane(AuroraSwimlane swimlane, PageDataSource source, string? nodeId)
+            => Bind(swimlane, source, nodeId, () => LoadSwimlaneAsync(swimlane, source));
+
+        /// <summary>
+        /// 取数绑定：进树时取一次，此后由通道变化或显式刷新再取。
+        ///
+        /// **不能只在 Loaded 取一次**。取数参数可以引用选中行，而选中会变；
+        /// 只取一次的表在换选中之后显示的是上一个项目的数据，
+        /// 而"过期的数据"和"新数据"在界面上长得一模一样。
+        /// </summary>
+        private void Bind(
+            FrameworkElement element,
+            PageDataSource source,
+            string? nodeId,
+            Func<Task> reload)
+        {
+            WhenLoaded(element, reload);
+            context.Refresher?.Register(context.Owner, pageId, nodeId, ChannelsOf(source), reload);
+        }
 
         private static void WhenLoaded(FrameworkElement element, Func<Task> load)
         {
@@ -626,19 +914,83 @@ public static class PageRenderer
             element.Loaded += handler;
         }
 
-        private static string Compose(PageDataSource source)
+        /// <summary>
+        /// 组装取数指令。参数值里的 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c> 用当前选中行替换。
+        ///
+        /// 取不到值时**返回 null 而不是发一条参数为空的指令**：没选中项目就去问
+        /// 「这个项目的历史」，拿回来的要么是错误要么是别人的历史，两种都比空表糟。
+        /// </summary>
+        private string? Compose(PageDataSource source, out string reason)
         {
+            reason = "";
             var text = source.Command;
+            var unresolved = new List<string>();
+
             foreach (var pair in source.Args ?? new Dictionary<string, string>())
-                text += " " + pair.Key + "=" + CommandParser.QuoteArg(pair.Value);
-            return text;
+            {
+                var value = SelectionPlaceholder().Replace(pair.Value ?? "", match =>
+                {
+                    var name = match.Groups[1].Value;
+
+                    // **判 null，不判空**。通道里有没有行，与那一行的某一格是不是空串，
+                    // 是两件事：没有行 → 取不到值，照旧拒绝取数并说清等谁；
+                    // 有行但那一格是空的 → 那就是个空值，照常取数。
+                    //
+                    // 混为一谈的后果是：控制面板的文本框在页面打开时就会把自己的初值
+                    // 发上通道（REQ-UI-045），而初值通常是空串——于是一个用作**筛选**的
+                    // 搜索框会让整张表停在「请先选中一行」，而那一格根本不是让人选行的。
+                    // 1.9.0 命令集改成描述式时当场撞上（CommandPagesContractTests 有专条）。
+                    //
+                    // 动作那一侧（ActionRegistry.BuildCommandText）本来就是判 null 的，
+                    // 因此这里也是把两处口径对齐。
+                    var resolved = context.Channels?.Resolve(name);
+                    if (resolved != null)
+                        return resolved;
+                    unresolved.Add(name);
+                    return match.Value;
+                });
+
+                text += " " + pair.Key + "=" + CommandParser.QuoteArg(value);
+            }
+
+            if (unresolved.Count == 0)
+                return text;
+
+            reason = "请先选中一行（取数需要 " + string.Join("、", unresolved.Distinct()) + "）";
+            return null;
         }
+
+        /// <summary>这条取数引用了哪几个选择通道。空表示它与选中无关。</summary>
+        private static IReadOnlyList<string> ChannelsOf(PageDataSource source)
+            => (source.Args ?? new Dictionary<string, string>())
+                .Values
+                .SelectMany(value => SelectionPlaceholder().Matches(value ?? "")
+                    .Select(match => match.Groups[1].Value))
+                .Select(reference => SelectionChannels.TrySplitReference(reference, out var channel, out _)
+                    ? channel
+                    : "")
+                .Where(channel => channel.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private async Task LoadRowsAsync(
             AuroraTable table,
             IReadOnlyList<AuroraTableColumn> columns,
-            string text)
+            PageDataSource source)
         {
+            var text = Compose(source, out var reason);
+            if (text == null)
+            {
+                // 空表加一句"为什么空"。空表本身说不出它是没数据还是没选中。
+                table.EmptyText = reason;
+                table.SetData(columns.Count > 0
+                    ? AuroraTableData.Create(columns, [])
+                    : AuroraTableData.Empty);
+                return;
+            }
+
+            table.EmptyText = "暂无数据";
+
             // 模块取数可能在第一次 await 前做同步磁盘/Git 工作。放在线程池执行，
             // 避免模块实现细节阻塞 Aurora 的 UI 线程；await 后回 UI 线程更新控件。
             var payload = await Task.Run(() => FetchAsync(text)).ConfigureAwait(true);
@@ -658,8 +1010,15 @@ public static class PageRenderer
                 : AuroraTableData.FromRows(rows));
         }
 
-        private async Task LoadSwimlaneAsync(AuroraSwimlane swimlane, string text)
+        private async Task LoadSwimlaneAsync(AuroraSwimlane swimlane, PageDataSource source)
         {
+            var text = Compose(source, out var reason);
+            if (text == null)
+            {
+                swimlane.ShowMessage(reason);
+                return;
+            }
+
             var payload = await Task.Run(() => FetchAsync(text)).ConfigureAwait(true);
             if (payload == null)
             {
