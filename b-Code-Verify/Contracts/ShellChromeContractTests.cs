@@ -20,6 +20,7 @@ using HistoryAurora.Shell.Console;
 using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
+using AvalonDock.Themes.VS2013.Themes;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -139,6 +140,42 @@ public sealed class ShellChromeContractTests
                     $"深色令牌必须排在主题字典之后才能生效，实际 tokens={tokenIndex} theme={themeIndex}");
             },
             settings: settings);
+    }
+
+    [Fact]
+    public void DockingOverlayBrushesAreExplicitlyOpaque()
+    {
+        RunShell(window =>
+        {
+            // The overlay is an independent Window. These keys must resolve from
+            // the manager theme itself, not from the main window's resource tree.
+            var manager = window.DockManager;
+            var keys = new[]
+            {
+                ResourceKeys.DockingButtonForegroundBrushKey,
+                ResourceKeys.DockingButtonForegroundArrowBrushKey,
+                ResourceKeys.PreviewBoxBorderBrushKey,
+                ResourceKeys.PreviewBoxBackgroundBrushKey,
+            };
+
+            foreach (var key in keys)
+            {
+                var brush = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
+                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
+                    $"停靠覆盖层画刷 {key} 不能是透明回退值");
+            }
+
+            var starBorder = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.DockingButtonStarBorderBrushKey));
+            Assert.True(starBorder.Color.A > 0);
+
+            var starBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
+            Assert.Equal(0, starBackground.Color.A);
+            var buttonBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
+            Assert.Equal(0, buttonBackground.Color.A);
+        });
     }
 
     [Fact]
