@@ -26,7 +26,7 @@ internal static class DockingOverlayResourceRepair
         PutIfTransparent(overlay, ResourceKeys.DockingButtonForegroundArrowBrushKey,
             new SolidColorBrush(dark ? Color.FromRgb(0x93, 0xC5, 0xFD) : Color.FromRgb(0x1D, 0x4E, 0xD8)));
         PutIfTransparent(overlay, ResourceKeys.DockingButtonStarBorderBrushKey,
-            Brushes.Transparent);
+            new SolidColorBrush(dark ? Color.FromArgb(0xA0, 0x60, 0xA5, 0xFA) : Color.FromArgb(0x80, 0x60, 0xA5, 0xFA)));
         PutIfTransparent(overlay, ResourceKeys.DockingButtonStarBackgroundBrushKey,
             Brushes.Transparent);
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBorderBrushKey,

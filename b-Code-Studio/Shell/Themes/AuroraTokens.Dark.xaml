@@ -123,7 +123,7 @@
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonBackgroundBrushKey}" Color="Transparent" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundBrushKey}" Color="#FF60A5FA" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundArrowBrushKey}" Color="#FF93C5FD" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBorderBrushKey}" Color="Transparent" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBorderBrushKey}" Color="#A060A5FA" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBackgroundBrushKey}" Color="Transparent" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBorderBrushKey}" Color="#FF60A5FA" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBackgroundBrushKey}" Color="#703B82F6" />
