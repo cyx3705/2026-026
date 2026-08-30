@@ -666,7 +666,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     private void ContinueHostWindowGesture(object? sender, MouseEventArgs e)
     {
-        if (_dragSession is not { Kind: DockingDragKind.Window } session ||
+        if (_dragSession is not { Kind: DockingDragKind.Window, State: DockingDragState.Pressed } session ||
             !ReferenceEquals(sender, session.Surface))
         {
             return;
@@ -712,7 +712,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (_dragSession is { Kind: DockingDragKind.Window } session &&
             ReferenceEquals(sender, session.Surface))
         {
-            CompleteDragSession(session, "mouse capture lost", cancelled: true);
+            // Threshold handling deliberately releases WPF/Win32 capture before
+            // entering the native DragMove loop. That release raises LostMouseCapture
+            // synchronously; it is not a cancellation while the session is moving.
+            if (session.State == DockingDragState.Pressed)
+                CompleteDragSession(session, "mouse capture lost", cancelled: true);
         }
     }
 
@@ -722,6 +726,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
 
         var hostWindow = session.HostWindow;
+        if (session.State == DockingDragState.Pressed &&
+            !session.TryTransition(DockingDragState.ThresholdReached))
+        {
+            return;
+        }
         if (!session.TryTransition(DockingDragState.WindowMoving))
             return;
         session.LastScreenPoint = pointerPixels;
