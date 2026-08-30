@@ -1,4 +1,4 @@
-
+﻿
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -17,6 +17,7 @@ using HistoryAurora.Shell.CommandSurface;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell;
 using HistoryAurora.Shell.Console;
+using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using Xunit;
@@ -561,6 +562,45 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// 主窗口标题栏必须能拖动。
+    ///
+    /// 1.8.9 的实测故障：为了让页面里的 AuroraOptionBox（继承 Selector）被认成可交互件，
+    /// 命中判据从 ComboBox 放宽成 Selector；而 AvalonDock 的窗格控件本身就是 TabControl，
+    /// 也就是 Selector，于是标题栏上任何一点向上走都会撞见它，整条标题栏被判成
+    /// 「点在控件上」，主窗口从此拖不动。断言分两截，坏掉时能直接看出是哪一截：
+    /// 先钉住「窗格确实是 Selector」这个前提，再钉住「标题栏照样起手势」。
+    /// </summary>
+    [Fact]
+    public void MainChromeHeaderStartsAWindowGestureEvenThoughThePaneIsASelector()
+    {
+        RunShell(window =>
+        {
+            var surface = Assert.IsAssignableFrom<FrameworkElement>(
+                GetPrivateField(window, "_chromeDragSurface"));
+
+            // 前提：标题栏的祖先里确实有一个 Selector（窗格控件）。
+            Assert.NotNull(FindAncestor<System.Windows.Controls.Primitives.Selector>(surface, _ => true));
+
+            // 判据是「这一下被标题栏收下了」。手势收下后会把事件标成已处理；
+            // 判成「点在控件上」时会原样放行，Handled 保持 false。
+            // 不查 _dragSession：那一步还要 CaptureMouse，而测试里没有真实鼠标，
+            // 捕获失败会立刻反手清空手势，查它等于在查捕获而不是在查命中判定。
+            var press = new MouseButtonEventArgs(
+                Mouse.PrimaryDevice,
+                Environment.TickCount,
+                MouseButton.Left)
+            {
+                RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
+                Source = surface,
+            };
+            surface.RaiseEvent(press);
+            UiTestHost.Pump();
+
+            Assert.True(press.Handled, "主窗口标题栏没有接下这一次按下，窗口将拖不动");
+        });
+    }
+
     [Fact]
     public void EmbeddedMainAndToolHeadersShareTheMainWindowGesturePipeline()
     {
@@ -926,9 +966,9 @@ public sealed class ShellChromeContractTests
         RunShell(window =>
         {
             var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
-            Assert.Equal(Visibility.Visible, Assert.IsType<ComboBox>(console.FindName("LevelFilter")).Visibility);
-            Assert.Equal(Visibility.Visible, Assert.IsType<ComboBox>(console.FindName("DomainFilter")).Visibility);
-            var classFilter = Assert.IsType<ComboBox>(console.FindName("ClassFilter"));
+            Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("LevelFilter")).Visibility);
+            Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("DomainFilter")).Visibility);
+            var classFilter = Assert.IsType<AuroraOptionBox>(console.FindName("ClassFilter"));
             Assert.Equal(Visibility.Visible, classFilter.Visibility);
             Assert.False(classFilter.IsEnabled);
             Assert.Equal(Visibility.Collapsed, Assert.IsType<TextBox>(console.FindName("KeywordFilter")).Visibility);

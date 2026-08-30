@@ -42,11 +42,22 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
     private readonly LocalCommandCatalogSession _catalog;
     private readonly ConsoleView _console;
     private readonly Actions.ActionRegistry _actions;
+    private readonly Selection.SelectionChannels _channels;
+    private readonly Pages.PageDataRefresher _dataRefresher;
 
     private readonly Panels.PanelManager _panels;
 
     private readonly Pages.ModulePageLoader _pageLoader;
     private readonly Pages.ComponentRequestStore _componentRequests;
+
+    /// <summary>自持页面的渲染器。没有停靠层——注册走 TakeOverDescriptor（REQ-UI-052）。</summary>
+    private readonly Pages.PageRegistrar _hostedPages;
+
+    /// <summary>列序台账（REQ-UI-062）；自持页与模块页共用一本。</summary>
+    private readonly Table.ColumnOrderStore _columnOrder;
+
+    /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
+    private readonly bool _hostedModulesPage;
     private readonly Modules.ShellUiRegistrar _shellUi;
     private Modules.UiAnnotationClaimer? _annotationClaimer;
     private Action? _hostRegistryChanged;
@@ -79,6 +90,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
     // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
     private readonly DispatcherTimer _chromeUpkeep;
+    private readonly DispatcherTimer _discoverDebounce;
+    private readonly CoalescingAsyncWork _discover = new();
     private bool _reservePending;
     private bool _closing;
     private bool _allowClose;
@@ -163,21 +176,39 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             0.25,
             () => _console);
 
-        if (config.EnableModules || config.EnableRemoteManagementViews)
-        {
-            TakeOverDescriptor(StandardWindowIds.Modules, "模块管理", DockSide.Right, 0.32,
-                () => new Views.ModulesView(() => _bus));
-        }
-
-        // 命令集是中央主文档（DockingHost 按这个 id 认"主窗口"）；指令详情停在右侧与它联动。
-        TakeOverDescriptor(StandardWindowIds.Mcp, "命令集", DockSide.Center, 0.5,
-            () => new Views.CommandCatalogView(_catalog, _bus, log, _commandSelection));
-        TakeOverDescriptor(StandardWindowIds.CommandDetail, "指令详情", DockSide.Right, 0.28,
-            () => new Views.CommandDetailView(_catalog, _bus, _commandSelection));
-
         // 动作声明台账要早于面板:面板按钮绑的是动作 id,构建时就要能解析。
         // 首次拉取不在这里做——那时模块还没装载,问谁都是空。见 DiscoverModuleSurfacesAsync。
         _actions = new Actions.ActionRegistry(_bus, log);
+
+        // 选择通道台账与动作台账同期存在：表格往通道发布、面板按通道启停，
+        // 两侧都在建页时接线，晚一步就只能等下一轮重载才接得上。
+        _channels = new Selection.SelectionChannels();
+
+        // 取数刷新台账在这里就要建好：它在构造时订阅通道变化，
+        // 晚于第一次建页创建的话，那一批表格就永远不跟选中走。
+        _dataRefresher = new Pages.PageDataRefresher(_channels);
+
+        _componentRequests = new Pages.ComponentRequestStore(settings, log);
+
+        // 列序台账（REQ-UI-062）。落在设置里，因此跨重启还在；
+        // 自持页与模块页共用同一本账，两条通道不各记各的。
+        _columnOrder = new Table.ColumnOrderStore(settings);
+
+        // 自持页面（命令集 / 指令详情 / 模块管理 / 组件测试）由描述建出来，
+        // 与模块页共用渲染、包边与裁切（REQ-UI-051/052）。
+        //
+        // **这四条台账必须先于建页存在**，顺序反了不会报错，只会让页面安静地少一半功能：
+        // 动作台账晚了，按钮全判成「未声明的动作」；通道台账晚了，表格选中发不出去，
+        // 跟随框与按钮启停一起失效。这正是 1.8.9 真机上花了两轮才认出来的形态。
+        // 模块管理页只在开关打开时建。这是一条**装配决定**，不属于页面描述——
+        // 描述说的是「这一页长什么样」，不是「这台机器要不要这一页」。
+        _hostedModulesPage = config.EnableModules || config.EnableRemoteManagementViews;
+
+        DeclareHostedPageActions();
+        _hostedPages = new Pages.PageRegistrar(
+            _bus, log, docking: null, _actions, _catalog.CompleteAsync, _channels, _dataRefresher,
+            _columnOrder);
+        RegisterHostedPages();
 
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
         _panels = new Panels.PanelManager(
@@ -185,7 +216,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             config.Panels,
             _bus,
             log,
-            _actions);
+            _actions,
+            _channels);
         _panels.RegisterWindows(config.ToolWindows);
 
         _docking = new DockingHost(DockManager, config.ToolWindows, layoutStore, log, settings);
@@ -204,7 +236,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             _docking,
             _bus,
             _log,
-            (RoutedCommand)Resources["Aurora.Command.PageAction"]);
+            (RoutedCommand)Resources["Aurora.Command.PageAction"],
+            config.EnableMaximizeOnDoubleClick);
         // 按钮组占位与浮动窗口主题需要在「布局稳定之后」才算得准,但不能挂
         // LayoutUpdated:那个事件每帧都发,回调里任何写操作都会再触发一次布局,
         // 直接转成 100% CPU 的死循环(实测)。改为低频巡检 + 幂等写入。
@@ -221,6 +254,21 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             ApplyThemeToFloatingWindows();
         };
         Loaded += (_, _) => _chromeUpkeep.Start();
+
+        // 注册表每登记一条命令就 Changed 一次。立刻 BeginInvoke 发现的话，
+        // 默认 Normal 优先级会排在窗口 Show（ApplicationIdle）前面，
+        // 冷启动几十轮发现跑完之前窗口根本出不来。收成一次安静期后再拉。
+        _discoverDebounce = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(150),
+        };
+        _discoverDebounce.Tick += (_, _) =>
+        {
+            _discoverDebounce.Stop();
+            if (_closing)
+                return;
+            _ = DiscoverModuleSurfacesAsync();
+        };
         _shellUi = new Modules.ShellUiRegistrar(_docking, Dispatcher, log);
         _docking.WindowsChanged += (_, _) => Dispatcher.BeginInvoke(() =>
         {
@@ -246,9 +294,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
         // 页面注册协议 V1：拉取器要早于内置指令组构造，指令组才能拿到它。
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
-        _componentRequests = new Pages.ComponentRequestStore(settings, log);
         _pageLoader = new Pages.ModulePageLoader(
-            _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync);
+            _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync,
+            _channels, _dataRefresher, _columnOrder);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
@@ -262,8 +310,19 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             DataDirectory = dataDirectory,
             Panels = _panels,
             Actions = _actions,
+            Channels = _channels,
+            DataRefresher = _dataRefresher,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
+
+            // 命令目录会话（REQ-UI-057）。**漏掉这一行的代价是三页一起空白**：
+            // 1.9.0 把命令集、指令详情两页改成描述式，取数从视图里的私有状态换成了
+            // aurora.ui.data，而这一路的目录会话从来没接上来——处理器里
+            // `sources.Catalog?.Invoke()` 拿到 null，按当时的写法返回空表而不是失败，
+            // 于是页面画得好好的、表头齐全、一行数据也没有，日志里一个字都没有。
+            // 现在取数在会话缺席时改判失败（HostedPageData.CommandsAsync），
+            // 这一行再漏掉就会当场报出来。
+            Catalog = _catalog,
         });
 
         RegisterFrontendLifecycleCommands(registry);
@@ -333,13 +392,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // （DEC-022），Shell 不再自行注册 InputBinding；需要该手势时由 Mercury 注册并指向
         // aurora.log.focus，避免宿主与模块争夺同一组合键。
 
-        if (config.EnableMaximizeOnDoubleClick)
-        {
-            DockManager.AddHandler(
-                UIElement.PreviewMouseLeftButtonDownEvent,
-                new MouseButtonEventHandler(OnDockDoubleClick),
-                handledEventsToo: true);
-        }
         BuildMenus();
         UpdateLayoutIndicator();
         ApplyFocusChrome();
@@ -400,7 +452,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         _annotationClaimer = new Modules.UiAnnotationClaimer(hostBus, _docking, _log);
         _hostRegistryChanged = () =>
         {
-            Dispatcher.BeginInvoke(() => _ = DiscoverModuleSurfacesAsync());
+            if (Dispatcher.CheckAccess())
+                ScheduleDiscover();
+            else
+                Dispatcher.BeginInvoke(ScheduleDiscover);
         };
         hostBus.Registry.Changed += _hostRegistryChanged;
     }
@@ -414,8 +469,23 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         _annotationClaimer = null;
     }
 
+    /// <summary>
+    /// 把界面发现推迟到注册表安静下来。必须走 Background：默认 Normal
+    /// 会插在窗口 Show 前面，发现风暴结束之前主窗口一直不出现。
+    /// </summary>
+    internal void ScheduleDiscover()
+    {
+        if (_closing)
+            return;
+        _discoverDebounce.Stop();
+        _discoverDebounce.Start();
+    }
+
     /// <summary>拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。</summary>
-    internal async Task DiscoverModuleSurfacesAsync()
+    internal Task DiscoverModuleSurfacesAsync()
+        => _discover.RunAsync(DiscoverModuleSurfacesCoreAsync);
+
+    private async Task DiscoverModuleSurfacesCoreAsync()
     {
         try
         {
@@ -507,7 +577,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         DockSide fallbackSide,
         double fallbackRatio,
         Func<object> factory,
-        bool forcePlacement = false)
+        bool forcePlacement = false,
+        bool fallbackVisible = true,
+        bool fallbackSingleton = true)
     {
         var index = _config.ToolWindows.FindIndex(
             d => d.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
@@ -519,6 +591,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
                 Title = fallbackTitle,
                 DefaultSide = fallbackSide,
                 DefaultRatio = fallbackRatio,
+                // 自持页的描述里写得出 visible / singleton，这里就必须收下。
+                // 两个默认值恰好都是 true，因此漏传**今天**看不出差别——而那正是
+                // 「描述里写了、实现里没读」这类缺陷的标准形态（见 1.9.0 查出的
+                // view.filterable：声明了、解析了、全仓没有一处读它）。
+                DefaultVisible = fallbackVisible,
+                IsSingleton = fallbackSingleton,
                 ContentFactory = factory,
             });
             return;
@@ -573,9 +651,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             _log.Error("console", $"切换命令集异常: {ex.GetType().Name}");
         }
     }
-
-    private void OnDockDoubleClick(object sender, MouseButtonEventArgs e)
-        => _topBar.HandleDockTabMouseLeftButtonDown(e);
 
     // ---------------------------------------------------------------- 顶栏状态(UI-05)
 
@@ -639,6 +714,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
 
         _closing = true;
         _chromeUpkeep.Stop();
+        _discoverDebounce.Stop();
         SaveWindowBounds();
         _docking.SaveCurrentLayout();
 
