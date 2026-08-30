@@ -584,7 +584,7 @@ public sealed class ShellChromeContractTests
 
             // 判据是「这一下被标题栏收下了」。手势收下后会把事件标成已处理；
             // 判成「点在控件上」时会原样放行，Handled 保持 false。
-            // 不查 _pendingHostWindow：那一步还要 CaptureMouse，而测试里没有真实鼠标，
+            // 不查 _dragSession：那一步还要 CaptureMouse，而测试里没有真实鼠标，
             // 捕获失败会立刻反手清空手势，查它等于在查捕获而不是在查命中判定。
             var press = new MouseButtonEventArgs(
                 Mouse.PrimaryDevice,

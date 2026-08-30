@@ -242,13 +242,5 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         [DllImport("user32.dll")]
         internal static extern int GetSystemMetricsForDpi(int index, uint dpi);
-
-        /// <summary>
-        /// 放掉鼠标捕获。捕获还在时 DefWindowProc 的窗口移动循环不会启动，
-        /// <c>Window.DragMove()</c> 就成了一个什么都不做的调用。
-        /// </summary>
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool ReleaseCapture();
     }
 }

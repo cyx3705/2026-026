@@ -10,7 +10,11 @@ internal readonly record struct FloatingDragContext(
     string PageId,
     Size EmbeddedSize,
     Point AnchorOffset,
-    bool ContinueWithDrag);
+    bool ContinueWithDrag)
+{
+    public long SessionId { get; init; }
+    public Point PointerPixels { get; init; }
+}
 
 internal static class FloatingWindowGeometry
 {

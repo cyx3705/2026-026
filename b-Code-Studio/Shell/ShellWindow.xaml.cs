@@ -236,7 +236,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             _docking,
             _bus,
             _log,
-            (RoutedCommand)Resources["Aurora.Command.PageAction"]);
+            (RoutedCommand)Resources["Aurora.Command.PageAction"],
+            config.EnableMaximizeOnDoubleClick);
         // 按钮组占位与浮动窗口主题需要在「布局稳定之后」才算得准,但不能挂
         // LayoutUpdated:那个事件每帧都发,回调里任何写操作都会再触发一次布局,
         // 直接转成 100% CPU 的死循环(实测)。改为低频巡检 + 幂等写入。
@@ -391,13 +392,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // （DEC-022），Shell 不再自行注册 InputBinding；需要该手势时由 Mercury 注册并指向
         // aurora.log.focus，避免宿主与模块争夺同一组合键。
 
-        if (config.EnableMaximizeOnDoubleClick)
-        {
-            DockManager.AddHandler(
-                UIElement.PreviewMouseLeftButtonDownEvent,
-                new MouseButtonEventHandler(OnDockDoubleClick),
-                handledEventsToo: true);
-        }
         BuildMenus();
         UpdateLayoutIndicator();
         ApplyFocusChrome();
@@ -657,9 +651,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
             _log.Error("console", $"切换命令集异常: {ex.GetType().Name}");
         }
     }
-
-    private void OnDockDoubleClick(object sender, MouseButtonEventArgs e)
-        => _topBar.HandleDockTabMouseLeftButtonDown(e);
 
     // ---------------------------------------------------------------- 顶栏状态(UI-05)
 
