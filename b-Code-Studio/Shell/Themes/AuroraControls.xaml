@@ -1427,6 +1427,42 @@
         <Setter Property="Padding" Value="8,4" />
     </Style>
 
+    <!-- 极简布尔开关：开启使用 Aurora accent，关闭保持扁平中性色。 -->
+    <Style x:Key="Aurora.Panel.Switch" TargetType="ToggleButton" BasedOn="{StaticResource Aurora.Button.Base}">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Aurora.Brush.Accent}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.86" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.55" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!--
         Aurora.Panel.Divider 随 REQ-UI-060 一同删除。它是竖排面板拿来当子元素用的那条横线，
         而分隔线现在由 AuroraPanelBoard 在 OnRender 里按最终版面画——位置只有排完版才知道，

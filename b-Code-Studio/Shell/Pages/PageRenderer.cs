@@ -146,6 +146,8 @@ public static partial class PageRenderer
             "panel.rows", "panel.minwidth", "panel.flex",
             // REQ-UI-059：选择框的候选来自一条只读指令，可跟着通道重取（两级联动下拉）。
             "panel.optionssource",
+            // REQ-UI-065：极简开关、来源选择器及输入提交动作。
+            "panel.switch", "panel.sourcepicker", "panel.commitaction",
             // REQ-UI-044：取数参数可引用选中行，通道一变自动重取；也可被显式刷新。
             "table.datasource.selection", "swimlane.datasource.selection",
             // REQ-UI-045：控制面板的文本框/轮换选项框把当前值发布到选择通道。

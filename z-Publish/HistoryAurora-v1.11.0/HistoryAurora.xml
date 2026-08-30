@@ -2388,7 +2388,7 @@
         </member>
         <member name="T:HistoryAurora.Shell.Panels.PanelView">
              <summary>
-             面板组件（REQ-UI-008）。按声明构建三种小组件——文字、文本框、按钮——
+             面板组件（REQ-UI-008）。按声明构建文字、文本框、按钮、开关和来源选择器。
              外观全部由组件决定，声明侧只说「是什么」和「哪几个是一行」。
             
              按钮的落点是**动作 id**，不是指令：点击时向 <see cref="T:HistoryAurora.Shell.Actions.ActionRegistry"/> 现取声明，
@@ -2493,7 +2493,7 @@
             （面板刚建完），否则只碰这一个通道——别的通道没变，重刷会把用户正在改的名字冲掉。
             </summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Panels.PanelView.Fire(System.String)">
+        <member name="M:HistoryAurora.Shell.Panels.PanelView.Fire(System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
             <summary>
             点击时**现取**声明，而不是构建时把指令名固化进闭包：
             模块热重载后声明会变，固化下来的那份就是下一个「点了没反应」。

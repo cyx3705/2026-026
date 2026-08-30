@@ -132,12 +132,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         var source = e.OriginalSource as DependencyObject;
         var floating = FindAncestor<LayoutFloatingWindowControl>(source);
-        var floatingTab = ShouldAllowFloatingTabWindowDrag(
-            floating != null,
-            FindAncestor<DependencyObject>(source, item =>
-                item is LayoutAnchorableTabItem or LayoutDocumentTabItem) != null);
+        var sourceIsTab = FindAncestor<DependencyObject>(source, item =>
+            item is LayoutAnchorableTabItem or LayoutDocumentTabItem) != null;
         if (e.ChangedButton != MouseButton.Left ||
-            (IsInteractiveInPaneHeader(source) && !floatingTab) ||
             sender is not FrameworkElement pane ||
             !IsPaneHeaderSource(source) ||
             !TryResolvePageId(pane, out var id))
@@ -145,7 +142,14 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        if ((floating ?? FindFloatingWindow(id)) is { } floatingWindow)
+        var floatingWindow = floating ?? FindFloatingWindow(id);
+        if (IsInteractiveInPaneHeader(source) &&
+            !ShouldAllowFloatingTabWindowDrag(floatingWindow != null, sourceIsTab))
+        {
+            return;
+        }
+
+        if (floatingWindow is not null)
         {
             BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
             return;
