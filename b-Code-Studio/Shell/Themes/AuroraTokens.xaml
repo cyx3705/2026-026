@@ -71,6 +71,10 @@
     <!-- 页签行高 = 顶部控件条高:窗口按钮与页签必须同处一行(3.1 修订) -->
     <sys:Double x:Key="Aurora.Size.Tab">32</sys:Double>
 
+    <!-- AvalonDock 停靠覆盖按钮：保持可识别，但不要遮住整块工作区。 -->
+    <sys:Double x:Key="{x:Static reskeys:ResourceKeys.DockingButtonWidthKey}">28</sys:Double>
+    <sys:Double x:Key="{x:Static reskeys:ResourceKeys.DockingButtonHeightKey}">28</sys:Double>
+
     <sys:Double x:Key="Aurora.Font.Body">13</sys:Double>
     <sys:Double x:Key="Aurora.Font.Small">11</sys:Double>
     <sys:Double x:Key="Aurora.Font.Mono">12</sys:Double>

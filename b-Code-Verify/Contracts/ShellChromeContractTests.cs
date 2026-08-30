@@ -200,6 +200,13 @@ public sealed class ShellChromeContractTests
                 Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
                     $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
             }
+
+            var width = Assert.IsType<double>(FindResource(
+                dictionary!, ResourceKeys.DockingButtonWidthKey));
+            var height = Assert.IsType<double>(FindResource(
+                dictionary!, ResourceKeys.DockingButtonHeightKey));
+            Assert.InRange(width, 20, 32);
+            Assert.InRange(height, 20, 32);
         });
     }
 

@@ -59,6 +59,10 @@
     <sys:Double x:Key="Aurora.Size.WindowButton">44</sys:Double>
     <sys:Double x:Key="Aurora.Size.Tab">32</sys:Double>
 
+    <!-- 与浅色主题保持相同的停靠覆盖按钮尺寸。 -->
+    <sys:Double x:Key="{x:Static reskeys:ResourceKeys.DockingButtonWidthKey}">28</sys:Double>
+    <sys:Double x:Key="{x:Static reskeys:ResourceKeys.DockingButtonHeightKey}">28</sys:Double>
+
     <sys:Double x:Key="Aurora.Font.Body">13</sys:Double>
     <sys:Double x:Key="Aurora.Font.Small">11</sys:Double>
     <sys:Double x:Key="Aurora.Font.Mono">12</sys:Double>
