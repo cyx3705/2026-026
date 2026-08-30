@@ -350,8 +350,10 @@ internal sealed class DockingDragProbe : IDisposable
             try
             {
                 control.ApplyTemplate();
-                if (!_previewScaled)
-                    _previewScaled = DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
+                // AvalonDock may replace PART_PreviewBox while the target
+                // changes. Reapply the visual constraint on every sample so
+                // a template refresh cannot restore the full-screen fill.
+                _previewScaled = DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
             }
             catch (InvalidOperationException)
             {

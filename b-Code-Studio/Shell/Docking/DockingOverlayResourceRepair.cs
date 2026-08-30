@@ -14,7 +14,10 @@ namespace HistoryAurora.Shell.Docking;
 /// </summary>
 internal static class DockingOverlayResourceRepair
 {
-    private const double PreviewScale = 0.82;
+    // The preview path is drawn in a full-screen overlay window. Keep the
+    // visual hint compact; AvalonDock's hit-test rectangle remains unchanged.
+    private const double PreviewScale = 0.55;
+    private const double PreviewOpacity = 0.55;
 
     /// <summary>
     /// 只缩放覆盖层中的预览几何，不改变 AvalonDock 用来命中投放的矩形。
@@ -38,16 +41,15 @@ internal static class DockingOverlayResourceRepair
             if (bounds.Width <= 0 || bounds.Height <= 0)
                 return false;
 
-            if (preview.RenderTransform is ScaleTransform existing &&
-                Math.Abs(existing.ScaleX - PreviewScale) < 0.001 &&
-                Math.Abs(existing.ScaleY - PreviewScale) < 0.001)
-                return true;
-
             preview.RenderTransform = new ScaleTransform(
                 PreviewScale,
                 PreviewScale,
                 bounds.X + bounds.Width / 2,
                 bounds.Y + bounds.Height / 2);
+            // A target can legitimately be the whole document area. The
+            // overlay must still let neighbouring floating windows remain
+            // readable while the border and direction buttons show the target.
+            preview.Opacity = PreviewOpacity;
             return true;
         }
         catch (InvalidOperationException)
