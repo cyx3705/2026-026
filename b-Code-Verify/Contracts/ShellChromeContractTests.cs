@@ -144,7 +144,7 @@ public sealed class ShellChromeContractTests
     }
 
     [Fact]
-    public void DockingOverlayBrushesAreExplicitlyOpaque()
+    public void DockingOverlayBrushesKeepButtonsVisibleAndPreviewFillTransparent()
     {
         RunShell(window =>
         {
@@ -162,6 +162,8 @@ public sealed class ShellChromeContractTests
             foreach (var key in keys)
             {
                 var brush = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
+                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                    continue;
                 Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
                     $"停靠覆盖层画刷 {key} 不能是透明回退值");
             }
@@ -175,7 +177,7 @@ public sealed class ShellChromeContractTests
             Assert.Equal(0, starBackground.Color.A);
             var previewBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.PreviewBoxBackgroundBrushKey));
-            Assert.InRange(previewBackground.Color.A, 1, 0x40);
+            Assert.Equal(0, previewBackground.Color.A);
             var buttonBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
             Assert.Equal(0, buttonBackground.Color.A);
@@ -200,6 +202,11 @@ public sealed class ShellChromeContractTests
                      })
             {
                 var brush = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
+                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                {
+                    Assert.Equal(0, brush.Color.A);
+                    continue;
+                }
                 Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
                     $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
             }

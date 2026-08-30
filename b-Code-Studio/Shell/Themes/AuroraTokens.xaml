@@ -146,6 +146,8 @@
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBorderBrushKey}" Color="#8060A5FA" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBackgroundBrushKey}" Color="Transparent" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBorderBrushKey}" Color="#FF2563EB" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBackgroundBrushKey}" Color="#303B82F6" />
+    <!-- The target rectangle is intentionally outline-only; a filled preview
+         covers adjacent floating windows because OverlayWindow spans the host. -->
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBackgroundBrushKey}" Color="#003B82F6" />
 
 </ResourceDictionary>

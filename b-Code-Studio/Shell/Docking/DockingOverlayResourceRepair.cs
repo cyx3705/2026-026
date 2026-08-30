@@ -18,7 +18,6 @@ internal static class DockingOverlayResourceRepair
     // The preview path is drawn in a full-screen overlay window. Keep the
     // visual hint compact; AvalonDock's hit-test rectangle remains unchanged.
     private const double PreviewScale = 0.35;
-    private const double PreviewOpacity = 0.55;
 
     /// <summary>
     /// 只缩放覆盖层中的预览几何，不改变 AvalonDock 用来命中投放的矩形。
@@ -47,10 +46,13 @@ internal static class DockingOverlayResourceRepair
             // leaves the full-size blue rectangle visible.
             preview.RenderTransformOrigin = new Point(0.5, 0.5);
             preview.RenderTransform = new ScaleTransform(PreviewScale, PreviewScale);
-            // A target can legitimately be the whole document area. The
-            // overlay must still let neighbouring floating windows remain
-            // readable while the border and direction buttons show the target.
-            preview.Opacity = PreviewOpacity;
+            // A target can legitimately be the whole document area. A filled
+            // preview path therefore occludes every window underneath it;
+            // keep the target outline while making the fill unconditionally
+            // transparent. The direction buttons remain the active visual
+            // affordance and AvalonDock still uses its original hit geometry.
+            preview.Fill = Brushes.Transparent;
+            preview.Opacity = 1.0;
             return true;
         }
         catch (InvalidOperationException)
@@ -104,7 +106,7 @@ internal static class DockingOverlayResourceRepair
             PutIfTransparent(theme, key, fallback, name, changed);
 
         PutAlways(theme, ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            Brushes.Transparent,
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
 
         foreach (var merged in theme.MergedDictionaries)
@@ -139,10 +141,10 @@ internal static class DockingOverlayResourceRepair
             new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)),
             nameof(ResourceKeys.PreviewBoxBorderBrushKey), changed);
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            Brushes.Transparent,
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
         PutAlways(overlay.Resources, ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            Brushes.Transparent,
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
 
         return new DockingOverlayResourceRepairResult(dark, changed);
@@ -157,7 +159,7 @@ internal static class DockingOverlayResourceRepair
             PutIfTransparent(dictionary, key, fallback, name, changed);
 
         PutAlways(dictionary, ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            Brushes.Transparent,
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
 
         foreach (var merged in dictionary.MergedDictionaries)
