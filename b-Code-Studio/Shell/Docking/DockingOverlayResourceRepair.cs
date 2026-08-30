@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using AvalonDock.Themes.VS2013.Themes;
 
 namespace HistoryAurora.Shell.Docking;
@@ -12,6 +14,50 @@ namespace HistoryAurora.Shell.Docking;
 /// </summary>
 internal static class DockingOverlayResourceRepair
 {
+    private const double PreviewScale = 0.82;
+
+    /// <summary>
+    /// 只缩放覆盖层中的预览几何，不改变 AvalonDock 用来命中投放的矩形。
+    /// PART_PreviewBox 是一个占满 OverlayWindow 的 Path，几何本身才是目标页
+    /// 的边界；缩放几何可避免它把相邻浮窗视觉上整块盖住，同时保留完整停靠命中。
+    /// </summary>
+    internal static bool EnsurePreviewScale(FrameworkElement overlay)
+    {
+        ArgumentNullException.ThrowIfNull(overlay);
+        if (overlay is not Control control)
+            return false;
+
+        try
+        {
+            control.ApplyTemplate();
+            if (control.Template?.FindName("PART_PreviewBox", control) is not Path preview ||
+                preview.Data is not Geometry geometry)
+                return false;
+
+            var bounds = geometry.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+                return false;
+
+            if (preview.RenderTransform is ScaleTransform existing &&
+                Math.Abs(existing.ScaleX - PreviewScale) < 0.001 &&
+                Math.Abs(existing.ScaleY - PreviewScale) < 0.001)
+                return true;
+
+            preview.RenderTransform = new ScaleTransform(
+                PreviewScale,
+                PreviewScale,
+                bounds.X + bounds.Width / 2,
+                bounds.Y + bounds.Height / 2);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // AvalonDock may be rebuilding the overlay template during a move.
+            // The next probe sample retries; no docking state is touched here.
+            return false;
+        }
+    }
+
     /// <summary>
     /// 固化当前 Aurora 实例的停靠画刷字典。
     ///

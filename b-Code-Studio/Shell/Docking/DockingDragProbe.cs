@@ -107,6 +107,7 @@ internal sealed class DockingDragProbe : IDisposable
     private bool _overlayVisibleSampled;
     private bool _dragEnterSampled;
     private bool _repairSampled;
+    private bool _previewScaled;
     private string _repairState = "未执行";
     private string _templateParts = "未测";
     private string _resourceState = "未测";
@@ -349,6 +350,8 @@ internal sealed class DockingDragProbe : IDisposable
             try
             {
                 control.ApplyTemplate();
+                if (!_previewScaled)
+                    _previewScaled = DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
             }
             catch (InvalidOperationException)
             {
