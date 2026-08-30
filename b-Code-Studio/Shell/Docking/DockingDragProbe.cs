@@ -108,8 +108,10 @@ internal sealed class DockingDragProbe : IDisposable
     private bool _dragEnterSampled;
     private bool _repairSampled;
     private bool _previewScaled;
+    private bool _indicatorVisualsGuarded;
     private string _repairState = "未执行";
     private string _templateParts = "未测";
+    private string _indicatorState = "未测";
     private string _resourceState = "未测";
     private string _pathState = "未测";
     private string _contentState = "未测";
@@ -191,7 +193,8 @@ internal sealed class DockingDragProbe : IDisposable
         _log.Info(
             _source,
             $"停靠探针：资源={_resourceState} 修复={_repairState} 模板部件={_templateParts} " +
-            $"路径={_pathState} 内容控件={_contentState}");
+            $"路径={_pathState} 内容控件={_contentState} 指示器={_indicatorState} " +
+            $"视觉约束={(_indicatorVisualsGuarded ? "已安装" : "未安装")}");
         if (_stageSummaries.Count > 0)
             _log.Info(_source, "停靠探针阶段：" + string.Join(" | ", _stageSummaries));
         _log.Info(
@@ -378,6 +381,8 @@ internal sealed class DockingDragProbe : IDisposable
                 // changes. Reapply the visual constraint on every sample so
                 // a template refresh cannot restore the full-screen fill.
                 _previewScaled = DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
+                _indicatorVisualsGuarded |=
+                    DockingOverlayResourceRepair.EnsureDockingIndicatorVisuals(overlay);
             }
             catch (InvalidOperationException)
             {
@@ -390,6 +395,7 @@ internal sealed class DockingDragProbe : IDisposable
         _templateParts = tree.TemplateParts;
         _pathState = tree.Paths;
         _contentState = tree.ContentControls;
+        _indicatorState = DockingOverlayResourceRepair.DescribeDockingIndicatorVisuals(overlay);
         RenderOverlay(overlay, stage);
         MeasureZOrder(overlay);
         _overlayState = $"模板={(tree.HasTemplate ? "有" : "无")} " +
