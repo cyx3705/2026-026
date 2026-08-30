@@ -20,15 +20,15 @@ internal static class DockingOverlayResourceRepair
                    (surface.R + surface.G + surface.B) < 288;
 
         PutIfTransparent(overlay, ResourceKeys.DockingButtonBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x30, 0, 0, 0) : Color.FromArgb(0x20, 0, 0, 0)));
+            Brushes.Transparent);
         PutIfTransparent(overlay, ResourceKeys.DockingButtonForegroundBrushKey,
             new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)));
         PutIfTransparent(overlay, ResourceKeys.DockingButtonForegroundArrowBrushKey,
             new SolidColorBrush(dark ? Color.FromRgb(0x93, 0xC5, 0xFD) : Color.FromRgb(0x1D, 0x4E, 0xD8)));
         PutIfTransparent(overlay, ResourceKeys.DockingButtonStarBorderBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0xA0, 0x60, 0xA5, 0xFA) : Color.FromArgb(0x80, 0x60, 0xA5, 0xFA)));
+            Brushes.Transparent);
         PutIfTransparent(overlay, ResourceKeys.DockingButtonStarBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x30, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x20, 0x3B, 0x82, 0xF6)));
+            Brushes.Transparent);
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBorderBrushKey,
             new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)));
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBackgroundBrushKey,
@@ -37,12 +37,37 @@ internal static class DockingOverlayResourceRepair
 
     private static void PutIfTransparent(FrameworkElement overlay, object key, Brush fallback)
     {
-        if (overlay.TryFindResource(key) is Brush brush && brush.Opacity > 0 &&
+        var actualKey = FindEquivalentComponentKey(overlay.Resources, key) ?? key;
+        if (overlay.TryFindResource(actualKey) is Brush brush && brush.Opacity > 0 &&
             (brush is not SolidColorBrush solid || solid.Color.A > 0))
         {
             return;
         }
 
-        overlay.Resources[key] = fallback;
+        overlay.Resources[actualKey] = fallback;
+    }
+
+    private static object? FindEquivalentComponentKey(ResourceDictionary dictionary, object requested)
+    {
+        if (requested is not ComponentResourceKey desired)
+            return null;
+
+        foreach (var candidate in dictionary.Keys)
+        {
+            if (candidate is ComponentResourceKey component &&
+                Equals(component.ResourceId, desired.ResourceId))
+            {
+                return candidate;
+            }
+        }
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            var found = FindEquivalentComponentKey(merged, requested);
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 }

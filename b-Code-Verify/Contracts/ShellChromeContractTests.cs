@@ -164,6 +164,13 @@ public sealed class ShellChromeContractTests
                 Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
                     $"停靠覆盖层画刷 {key} 不能是透明回退值");
             }
+
+            var starBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
+            Assert.Equal(0, starBackground.Color.A);
+            var buttonBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
+            Assert.Equal(0, buttonBackground.Color.A);
         });
     }
 
