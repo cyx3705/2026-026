@@ -33,12 +33,11 @@ internal static class DockingOverlayResourceRepair
         try
         {
             control.ApplyTemplate();
-            if (control.Template?.FindName("PART_PreviewBox", control) is not Path preview ||
-                preview.Data is not Geometry geometry)
-                return false;
-
-            var bounds = geometry.Bounds;
-            if (bounds.Width <= 0 || bounds.Height <= 0)
+            // OverlayWindow assigns Path.Data later, from
+            // IOverlayWindow.DragEnter(IDropTarget). The visual guard must be
+            // installed before that assignment; otherwise the first sample
+            // returns early and the full-size path remains untouched.
+            if (control.Template?.FindName("PART_PreviewBox", control) is not Path preview)
                 return false;
 
             // RenderTransformOrigin is expressed in the Path element's
