@@ -1,6 +1,7 @@
-
+﻿
 using System.IO;
 using System.Runtime.ExceptionServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -287,7 +288,11 @@ public sealed class DockingContractTests
                 window.Show();
                 UiTestHost.Pump();
                 var single = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
-                Assert.Single(single.Items);
+                // 1.9.0 起自持页在构造期就建好（REQ-UI-052），组件测试页与命令集一样
+                // 声明 side=center，因此中央区从一开始就是两页。此前它是在异步发现那一轮
+                // 才注册的，而本用例不泵发现，于是只看到一页——**那一页是时序的产物，
+                // 不是契约**。本条断言的始终是主文档区的几何与页签行为。
+                Assert.Equal(2, single.Items.Count);
                 Assert.True(single.ActualWidth > window.ActualWidth * 0.5,
                     $"main document width={single.ActualWidth}, window width={window.ActualWidth}");
                 Assert.Equal(
@@ -298,7 +303,9 @@ public sealed class DockingContractTests
                 window.Docking.Show("business");
                 UiTestHost.Pump();
                 var multiple = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
-                Assert.Equal(2, multiple.Items.Count);
+                // 命令集 + 组件测试 + 刚注册的 business。数的是「中央区能并排放页签」，
+                // 具体几页取决于自持页有几页声明 side=center，不是本条的契约。
+                Assert.Equal(3, multiple.Items.Count);
                 var centerPane = Assert.IsType<LayoutDocumentPane>(((ILayoutControl)multiple).Model);
                 var business = Assert.Single(
                     centerPane.Children.OfType<LayoutAnchorable>(),
@@ -706,6 +713,33 @@ public sealed class DockingContractTests
     }
 
     [Fact]
+    public void SaveCurrentLayoutStillPersistsPlacementsWhenLayoutWriteFails()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var settings = new MemorySettings();
+            var host = new DockingHost(
+                new DockingManager(),
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Right, 0.25),
+                ],
+                new FailingLayoutStore(),
+                new NullLog(),
+                settings);
+            host.Initialize();
+            host.Hide("business");
+
+            host.SaveCurrentLayout();
+
+            var json = settings.Get("layout.placements");
+            Assert.False(string.IsNullOrWhiteSpace(json));
+            using var document = JsonDocument.Parse(json!);
+            Assert.True(document.RootElement.GetProperty("business").GetProperty("Hidden").GetBoolean());
+        });
+    }
+
+    [Fact]
     public void NamedLayoutShowsDefaultVisibleCenterPageAddedAfterItWasSaved()
     {
         UiTestHost.RunSta(() =>
@@ -1059,6 +1093,16 @@ public sealed class DockingContractTests
         public string? ReadNamed(string name) => _named.GetValueOrDefault(name);
         public void WriteNamed(string name, string payload) => _named[name] = payload;
         public IReadOnlyList<string> ListNamed() => _named.Keys.ToList();
+    }
+
+    private sealed class FailingLayoutStore : ILayoutStore
+    {
+        public string? ReadCurrent() => null;
+        public void WriteCurrent(string payload) => throw new IOException("simulated layout write failure");
+        public void DeleteCurrent() { }
+        public string? ReadNamed(string name) => null;
+        public void WriteNamed(string name, string payload) => throw new IOException("simulated layout write failure");
+        public IReadOnlyList<string> ListNamed() => [];
     }
 
     private sealed class NullLog : IShellLog

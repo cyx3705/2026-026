@@ -211,15 +211,27 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>退出时调用:自动保存当前布局(W-07)。</summary>
     public void SaveCurrentLayout()
     {
+        // XML serialization is best-effort: in the module ALC AvalonDock's
+        // XmlSerializer can reject collectible types. Placement state is our
+        // durable fallback and must still be written when that happens.
         try
         {
-            _store.WriteCurrent(_layoutBeforeMaximize ?? SerializeLayout());
-            SavePlacements();
+            var payload = _layoutBeforeMaximize ?? SerializeLayout();
+            _store.WriteCurrent(payload);
             _log.Info(LayoutSource, "退出前已自动保存布局");
         }
         catch (Exception ex)
         {
             _log.Error(LayoutSource, $"保存布局失败: {ex.Message}");
+        }
+
+        try
+        {
+            SavePlacements();
+        }
+        catch (Exception ex)
+        {
+            _log.Error(LayoutSource, $"保存窗口位置失败: {ex.Message}");
         }
     }
 
