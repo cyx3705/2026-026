@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text.Json;
 using HistoryAurora.Shell.Views;
+using HistoryVulcan.Core.Commands;
+using HistoryVulcan.Services.Modules;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -78,6 +80,19 @@ public sealed class ModulesPageContractTests
 
         Assert.Contains("DomainCommandCount", source, StringComparison.Ordinal);
         Assert.Contains("ModuleDomainNaming.ToDomain", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCommandCountFallsBackToTheHostModuleSnapshot()
+    {
+        // The embedded Aurora UI has a separate registry. A module's commands are
+        // therefore invisible locally, but the host module snapshot still carries
+        // the finalized count from the registration pass.
+        var local = new CommandRegistry();
+        var module = new ModuleMeta(
+            "HistoryJanus", "", "", "5.4.8", false, "HistoryJanus.dll", 41);
+
+        Assert.Equal(41, HostedPageData.DomainCommandCount(local, module));
     }
 
     /// <summary>向上找到含 project.manifest.json 的目录，即仓库根。</summary>

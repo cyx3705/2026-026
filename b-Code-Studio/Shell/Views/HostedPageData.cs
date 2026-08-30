@@ -588,7 +588,7 @@ internal static class HostedPageData
             {
                 ["module"] = module.ModuleName,
                 ["version"] = module.Version,
-                ["commands"] = DomainCommandCount(bus.Registry, module.ModuleName)
+                ["commands"] = DomainCommandCount(bus.Registry, module)
                     .ToString(CultureInfo.InvariantCulture),
                 ["description"] = module.Description,
             })
@@ -600,18 +600,23 @@ internal static class HostedPageData
     /// <summary>
     /// 按域统计当前注册表里的指令条数；域名取自模块名（History 前缀剥离）。
     ///
-    /// 这是**该域当前注册的指令总数**，不是本模块经模块路径注册的条数。二者对四个业务
-    /// 模块相等，对 HistoryAurora 却差得很远：Aurora 是应用，它的 aurora.* 由应用进程
-    /// 自持并上报，经模块路径注册的是 0 条（DEC-007）。显示 0 会让人以为它坏了。
+    /// 这是**该域当前注册的指令总数**，不是本模块经模块路径注册的条数。Aurora 的
+    /// 自持命令仍从界面注册表统计；宿主模块命令不在这张表里时，回退到模块清单在
+    /// 注册完成后定稿的 CommandCount，避免把“不可见”误显示成 0。
     /// </summary>
-    private static int DomainCommandCount(CommandRegistry registry, string moduleName)
+    internal static int DomainCommandCount(CommandRegistry registry, HistoryVulcan.Services.Modules.ModuleMeta module)
     {
-        var domain = ModuleDomainNaming.ToDomain(moduleName);
+        var domain = ModuleDomainNaming.ToDomain(module.ModuleName);
         if (domain.Length == 0)
             return 0;
 
-        return registry.All().Count(descriptor =>
+        var localCount = registry.All().Count(descriptor =>
             string.Equals(DomainOf(descriptor), domain, StringComparison.OrdinalIgnoreCase));
+
+        // 在进程内 UI 模式下，宿主模块指令不在 Aurora 自己的注册表里。
+        // 本地计数为 0 不是模块没有指令，而是当前总线的可见范围不同；模块清单
+        // 的 CommandCount 是宿主完成注册后的权威快照，作为远端模块的兜底值。
+        return localCount > 0 ? localCount : module.CommandCount;
     }
 
     /// <summary>描述符未声明域时按指令名首段兜底，与注册表的归一化口径一致。</summary>
