@@ -22,8 +22,8 @@ namespace HistoryAurora.Shell.Panels;
 ///
 /// 版面全部交给 <see cref="AuroraPanelBoard"/>（REQ-UI-060）：本类只负责把一份声明
 /// 翻译成「哪几个元素、各自最窄多宽、哪个可变」，怎么排、怎么折行、分隔线画在哪里，
-/// 一行都不在这里。**标签与它的控件是两个元素**——面板里的控件不带边框，
-/// 中间那条渐隐竖线正是「这是标签、那是输入区」唯一的分界。
+/// 一行都不在这里。文本框和来源选择器保留独立标签；开关的描述文字由开关本体承载，
+/// 避免再占一个额外的文字单元格。
 /// </summary>
 public sealed partial class PanelView : UserControl
 {
@@ -198,9 +198,11 @@ public sealed partial class PanelView : UserControl
                 return;
 
             case PanelWidgetKind.Switch:
-                if (Label(widget) is { Length: > 0 } switchLabel)
-                    cells.Add(new BoardCell(BuildLabel(switchLabel), null, false));
-                cells.Add(new BoardCell(BuildSwitch(widget), widget.MinWidth ?? 48, widget.Flex));
+                var switchLabel = Label(widget);
+                cells.Add(new BoardCell(
+                    BuildSwitch(widget, switchLabel),
+                    widget.MinWidth ?? (string.IsNullOrWhiteSpace(switchLabel) ? 48 : null),
+                    widget.Flex));
                 return;
 
             case PanelWidgetKind.SourcePicker:
@@ -297,12 +299,12 @@ public sealed partial class PanelView : UserControl
         return box;
     }
 
-    private FrameworkElement BuildSwitch(PanelWidget widget)
+    private FrameworkElement BuildSwitch(PanelWidget widget, string label)
     {
         var toggle = new System.Windows.Controls.Primitives.ToggleButton
         {
-            // 标签由 BoardCell 单独渲染；控件本身只承担极简的亮/灭视觉，避免标签重复。
-            Content = null,
+            // 开关描述由控件本体承载；这样一个声明只对应一个排版单元格。
+            Content = string.IsNullOrWhiteSpace(label) ? null : label,
             IsChecked = ParseBoolean(widget.Value),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,

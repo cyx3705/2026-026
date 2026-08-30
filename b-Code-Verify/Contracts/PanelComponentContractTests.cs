@@ -2,6 +2,7 @@
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HistoryAurora.Shell.Widgets;
@@ -265,6 +266,39 @@ public sealed class PanelComponentContractTests
             var line = Assert.Single(Assert.Single(board.CellBounds));
             Assert.Equal(2, line.Count);
             Assert.True(line[0].Right < line[1].Left, "标签与输入区之间没有留出画分隔线的空档");
+        });
+    }
+
+    [Fact]
+    public void SwitchLabelIsRenderedInsideOneEvenlyDistributedControlCell()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            var view = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [{ "mode": "even", "widgets": [
+                    { "kind": "switch", "id": "recognize", "label": "识别特征与草图", "value": "false", "action": "demo.publish", "minWidth": 100 },
+                    { "kind": "switch", "id": "continue", "label": "失败继续", "value": "true", "action": "demo.publish", "minWidth": 100 },
+                    { "kind": "switch", "id": "mates", "label": "重建装配关系", "value": "false", "action": "demo.publish", "minWidth": 100 }
+                  ] }]
+                }
+                """), bus, log, actions);
+
+            var board = Board(view);
+            Assert.Equal(3, board.Children.Count);
+            var toggles = board.Children.OfType<ToggleButton>().ToList();
+            Assert.Equal(["识别特征与草图", "失败继续", "重建装配关系"],
+                toggles.Select(toggle => Assert.IsType<string>(toggle.Content)).ToArray());
+
+            board.Measure(new Size(624, double.PositiveInfinity));
+            board.Arrange(new Rect(0, 0, 624, board.DesiredSize.Height));
+            var line = Assert.Single(Assert.Single(board.CellBounds));
+            Assert.Equal(3, line.Count);
+            Assert.Equal(line[0].Width, line[1].Width, 0);
+            Assert.Equal(line[1].Width, line[2].Width, 0);
         });
     }
 
@@ -779,7 +813,7 @@ public sealed class PanelComponentContractTests
     private static AuroraPanelBoard Board(PanelView view)
         => Assert.IsType<AuroraPanelBoard>(Assert.IsType<Border>(view.Content).Child);
 
-    /// <summary>排版面上的全部元素（标签、控件、按钮各算一个）。</summary>
+    /// <summary>排版面上的全部组件元素（文本框标签仍是独立元素，开关描述已并入控件）。</summary>
     private static List<FrameworkElement> Elements(PanelView view)
         => Board(view).Children.OfType<FrameworkElement>().ToList();
 

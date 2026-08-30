@@ -125,6 +125,25 @@ public sealed class ShellTopBarGestureTests
                 isFloatingWindow,
                 sourceIsTabItem));
 
+    [Theory]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, false, false, true)]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, false, true)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, false, true, false)]
+    public void PaneHeaderControlsNeverBecomeDragGestures(
+        bool isFloatingWindow,
+        bool sourceIsTabItem,
+        bool sourceIsInteractiveControl,
+        bool expected)
+        => Assert.Equal(
+            expected,
+            ShellTopBarCoordinator.ShouldHandlePaneHeaderInput(
+                isFloatingWindow,
+                sourceIsTabItem,
+                sourceIsInteractiveControl));
+
     [Fact]
     public void FastDoubleClickAcceptsExactlyTwoHundredFiftyMilliseconds()
     {

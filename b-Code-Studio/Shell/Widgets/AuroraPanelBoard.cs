@@ -5,7 +5,7 @@ using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell.Widgets;
 
-/// <summary>排版面上的一个元素。标签与它的控件是**两个**元素，不是一个。</summary>
+/// <summary>排版面上的一个元素；组件自身负责呈现它的内容和描述。</summary>
 /// <param name="Element">要摆的控件。</param>
 /// <param name="MinWidth">声明的最窄宽度；为 null 时按内容量。</param>
 /// <param name="Flex">本元素是不是这一行的可变宽度元素（<see cref="PanelRowMode.Flex"/> 行才看）。</param>
@@ -45,9 +45,8 @@ internal sealed class BoardRow
 ///
 /// **分隔线是画出来的，不是子元素。** 它们的位置只有排完版才知道：做成子元素就得先
 /// 假设一个位置，于是折行处会冒出一条贴着行首的竖线。这里在 <see cref="OnRender"/> 里
-/// 按最终版面画：同一视觉行里相邻元素之间画竖线（**包括标签与它的控件之间**——
-/// 面板里的控件不带边框，没有那条线的话标签和输入框看上去是连在一起的一段文字），
-/// 声明行与声明行之间画横线，两端渐隐。
+/// 按最终版面画：同一视觉行里相邻元素之间画竖线，声明行与声明行之间画横线，
+/// 两端渐隐。组件内部的描述文字不再作为额外排版元素参与分隔线计算。
 /// </summary>
 internal sealed class AuroraPanelBoard : Panel
 {

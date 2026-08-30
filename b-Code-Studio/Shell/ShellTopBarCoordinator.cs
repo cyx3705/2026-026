@@ -136,7 +136,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         var floatingWindow = floating ?? FindFloatingWindow(id);
         var tab = FindAncestor<FrameworkElement>(source, IsRealPageTab);
         if (IsInteractiveInPaneHeader(source) &&
-            !ShouldAllowFloatingTabWindowDrag(floatingWindow != null, sourceIsTab))
+            !ShouldHandlePaneHeaderInput(
+                floatingWindow != null,
+                sourceIsTab,
+                IsInteractiveCommandControl(source)))
         {
             return;
         }
@@ -847,6 +850,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         bool isFloatingWindow,
         bool sourceIsTabItem)
         => isFloatingWindow && sourceIsTabItem;
+
+    internal static bool ShouldHandlePaneHeaderInput(
+        bool isFloatingWindow,
+        bool sourceIsTab,
+        bool sourceIsInteractiveControl)
+        => !sourceIsInteractiveControl && (isFloatingWindow || !sourceIsTab);
 
     private void CancelDragSession(string reason)
     {

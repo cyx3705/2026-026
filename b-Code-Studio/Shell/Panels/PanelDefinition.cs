@@ -132,7 +132,7 @@ public sealed class PanelWidget
     /// <summary>取值标识。文本框必须有，动作参数里的 <c>{id}</c> 就是指它。</summary>
     public string? Id { get; set; }
 
-    /// <summary>左侧标签。文本框用；为空时退回 <see cref="Id"/>。</summary>
+    /// <summary>描述文字：文本框和来源选择器显示在左侧；开关显示在控件本体内。为空时退回 <see cref="Id"/>。</summary>
     public string? Label { get; set; }
 
     /// <summary>text 的正文，或 button 的按钮文字（不写时用动作声明的标题）。</summary>
