@@ -31,9 +31,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private readonly HashSet<LayoutDocumentPaneControl> _documentPanes = [];
     private readonly List<(UIElement Target, CommandBinding Binding)> _pageActionBindings = [];
     private readonly FastDoubleClickGesture _doubleClick = new(TimeSpan.FromMilliseconds(250));
-    private readonly DelayedDragGesture _hostDrag = new(TimeSpan.FromMilliseconds(120));
     private readonly WindowDragDriver _windowDragDriver = new();
-    private readonly DispatcherTimer _hostDragTimer;
     private readonly bool _enableMaximizeOnDoubleClick;
 
     private long _dragSequence;
@@ -56,12 +54,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         _log = log;
         _pageActionCommand = pageActionCommand;
         _enableMaximizeOnDoubleClick = enableMaximizeOnDoubleClick;
-        _hostDragTimer = new DispatcherTimer(DispatcherPriority.Input, _window.Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(120),
-        };
-        _hostDragTimer.Tick += OnHostDragHoldElapsed;
-
         _manager.LayoutFloatingWindowControlCreated += OnFloatingWindowCreated;
         _manager.AddHandler(
             UIElement.PreviewMouseLeftButtonDownEvent,
@@ -85,7 +77,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
         CancelDragSession("coordinator disposed");
 
-        _hostDragTimer.Tick -= OnHostDragHoldElapsed;
         _manager.LayoutFloatingWindowControlCreated -= OnFloatingWindowCreated;
         _manager.RemoveHandler(
             UIElement.PreviewMouseLeftButtonDownEvent,
@@ -143,6 +134,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
 
         var floatingWindow = floating ?? FindFloatingWindow(id);
+        var tab = FindAncestor<FrameworkElement>(source, IsRealPageTab);
         if (IsInteractiveInPaneHeader(source) &&
             !ShouldAllowFloatingTabWindowDrag(floatingWindow != null, sourceIsTab))
         {
@@ -151,7 +143,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
         if (floatingWindow is not null)
         {
-            BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
+            if (sourceIsTab && tab != null && CountFloatingPages(floatingWindow) > 1)
+                StartFloatingTabSession(tab, id, floatingWindow, e);
+            else
+                BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
             return;
         }
 
@@ -193,9 +188,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public bool HandleDockTabMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
+        if (e.Handled)
+            return false;
         if (e.ChangedButton != MouseButton.Left ||
             IsInteractiveCommandControl(source) ||
-            FindAncestor<LayoutFloatingWindowControl>(source) != null ||
             !TryResolveTabPageId(source, out var id) ||
             FindAncestor<FrameworkElement>(source, IsRealPageTab) is not { } tab)
         {
@@ -204,15 +200,34 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return false;
         }
 
+        var floating = FindFloatingWindow(id);
+        if (floating != null)
+        {
+            if (_dragSession is { IsTab: true, PageId: { } currentId } active &&
+                ReferenceEquals(active.Surface, tab) &&
+                currentId.Equals(id, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (CountFloatingPages(floating) > 1)
+            {
+                StartFloatingTabSession(tab, id, floating, e);
+                return false;
+            }
+
+            return false;
+        }
+
         var target = $"tab:{id}";
-        var position = e.GetPosition(_manager);
+        var screenPoint = GetScreenPoint(tab, e);
         if (_enableMaximizeOnDoubleClick)
         {
             var range = GetSystemDoubleClickRange(_manager);
             if (_doubleClick.RegisterPress(
                     target,
                     Environment.TickCount64,
-                    _manager.PointToScreen(position),
+                    screenPoint,
                     range.Width,
                     range.Height))
             {
@@ -227,7 +242,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             }
         }
 
-        StartTabSession(tab, id, position, e.GetPosition(tab));
+        StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
         return false;
     }
 
@@ -390,6 +405,37 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         _log.Info(ChromeLogSource, $"拖动会话 {session.Id} 按下页面 {id}");
     }
 
+    private void StartFloatingTabSession(
+        FrameworkElement tab,
+        string id,
+        LayoutFloatingWindowControl floating,
+        MouseButtonEventArgs e)
+    {
+        if (_dragSession is { IsTab: true, PageId: { } currentId } active &&
+            ReferenceEquals(active.Surface, tab) &&
+            currentId.Equals(id, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        CancelDragSession("new floating tab press");
+        var session = new DockingDragSession(
+            ++_dragSequence,
+            DockingDragKind.Tab,
+            tab,
+            GetScreenPoint(tab, e),
+            e.GetPosition(tab),
+            id,
+            floating,
+            $"floating-tab:{id}",
+            false,
+            false)
+        {
+            IsFloatingTab = true,
+        };
+        _dragSession = session;
+        tab.CaptureMouse();
+        _log.Info(ChromeLogSource, $"拖动会话 {session.Id} 按下浮窗页面 {id}");
+    }
+
     private async Task RestoreAndFloatAsync(DockingDragSession session)
     {
         if (!session.IsTab || session.PageId == null || !ReferenceEquals(_dragSession, session))
@@ -401,6 +447,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             var restored = await _bus.ExecuteAsync("aurora.ui.restore", "UI").ConfigureAwait(true);
             if (!restored.Success)
             {
+                CompleteDragSession(session, "restore command failed", cancelled: true);
                 _log.Error(ChromeLogSource, $"恢复专注布局失败：{restored.Message}");
                 return;
             }
@@ -426,8 +473,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         var completion = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         session.Completion = completion;
-        var floated = await _bus.ExecuteAsync(
-            $"aurora.ui.float name={CommandParser.QuoteArg(id)}", "UI").ConfigureAwait(true);
+        var floated = session.IsFloatingTab
+            ? await DetachFloatingTabAsync(session).ConfigureAwait(true)
+            : await _bus.ExecuteAsync(
+                $"aurora.ui.float name={CommandParser.QuoteArg(id)}", "UI").ConfigureAwait(true);
         if (!floated.Success)
         {
             CompleteDragSession(session, "float command failed", cancelled: true);
@@ -483,6 +532,35 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             .OfType<LayoutFloatingWindowControl>()
             .FirstOrDefault(window => ModelContainsPage(window.Model, id));
 
+    private static int CountFloatingPages(LayoutFloatingWindowControl floating)
+        => floating.Model.Descendents().OfType<LayoutContent>().Count();
+
+    private Task<CommandResult> DetachFloatingTabAsync(DockingDragSession session)
+    {
+        if (session.PageId == null)
+            return Task.FromResult(CommandResult.Fail("浮窗页签缺少页面 ID"));
+
+        try
+        {
+            var content = FindLayoutContent(session.PageId);
+            if (content == null || content.Parent is not ILayoutContainer parent)
+                return Task.FromResult(CommandResult.Fail($"页面 {session.PageId} 不在可拆分的浮窗中"));
+
+            var size = NormalizeEmbeddedSize(ResolveEmbeddedPaneSize(session.PageId));
+            parent.RemoveChild(content);
+            content.IsSelected = true;
+            content.FloatingWidth = size.Width;
+            content.FloatingHeight = size.Height;
+            _manager.CreateFloatingWindow(content, content is LayoutDocument);
+            return Task.FromResult(CommandResult.Ok($"页面 {session.PageId} 已拆分为独立浮窗"));
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ChromeLogSource, $"拆分浮窗页签失败：{ex.Message}");
+            return Task.FromResult(CommandResult.Fail(ex.Message));
+        }
+    }
+
     private void QueueWindowDrag(LayoutFloatingWindowControl floating, DockingDragSession session)
         => _window.Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
@@ -534,7 +612,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
                 range.Width,
                 range.Height))
         {
-            _hostDrag.Cancel();
             if (ReferenceEquals(hostWindow, _window))
             {
                 _ = _bus.ExecuteAsync("aurora.app.window state=toggle", "UI");
@@ -553,24 +630,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             ++_dragSequence,
             DockingDragKind.Window,
             surface,
-            e.GetPosition(surface),
+            GetScreenPoint(surface, e),
             e.GetPosition(surface),
             null,
             hostWindow,
             target,
             hostWindow.WindowState == WindowState.Maximized,
-            ShouldDelayHostDrag(ReferenceEquals(hostWindow, _window), hostWindow.WindowState));
+            false);
         _dragSession = session;
-        var multiplier = session.WasMaximized ? 2d : 1d;
-        _hostDrag.Begin(
-            Environment.TickCount64,
-            session.Start,
-            SystemParameters.MinimumHorizontalDragDistance * multiplier,
-            SystemParameters.MinimumVerticalDragDistance * multiplier);
         surface.CaptureMouse();
-        _hostDragTimer.Stop();
-        if (session.RequiresHold)
-            _hostDragTimer.Start();
         e.Handled = true;
     }
 
@@ -589,11 +657,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        var current = e.GetPosition(session.Surface);
-        var shouldStart = _hostDrag.Update(Environment.TickCount64, current);
-        if (!session.RequiresHold && _hostDrag.HasReachedThreshold)
-            shouldStart = true;
-        if (_hostDrag.HasReachedThreshold)
+        var current = FloatingWindowGeometry.GetCursorPosition();
+        var multiplier = session.WasMaximized ? 2d : 1d;
+        var shouldStart = HasReachedDragThreshold(
+            session.Start,
+            current,
+            SystemParameters.MinimumHorizontalDragDistance,
+            SystemParameters.MinimumVerticalDragDistance,
+            multiplier);
+        if (shouldStart)
             _doubleClick.Cancel(session.Target);
         if (shouldStart)
         {
@@ -622,32 +694,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
     }
 
-    private void OnHostDragHoldElapsed(object? sender, EventArgs e)
-    {
-        _hostDragTimer.Stop();
-        if (_dragSession is not { Kind: DockingDragKind.Window } session ||
-            !session.IsLeftButtonDown)
-        {
-            if (_dragSession is { Kind: DockingDragKind.Window } expired)
-                CompleteDragSession(expired, "button released during hold", cancelled: true);
-            return;
-        }
-
-        var current = Mouse.GetPosition(session.Surface);
-        _hostDrag.Update(Environment.TickCount64, current);
-        if (_hostDrag.HasReachedThreshold)
-            _doubleClick.Cancel(session.Target);
-        if (_hostDrag.TryActivate(Environment.TickCount64))
-            StartPendingHostDrag(session, current);
-    }
-
-    private void StartPendingHostDrag(DockingDragSession session, Point current)
+    private void StartPendingHostDrag(DockingDragSession session, Point pointerPixels)
     {
         if (!ReferenceEquals(_dragSession, session) || session.HostWindow == null)
             return;
 
         var hostWindow = session.HostWindow;
-        var pointerPixels = session.Surface.PointToScreen(current);
         if (!session.TryTransition(DockingDragState.WindowMoving))
             return;
         session.LastScreenPoint = pointerPixels;
@@ -656,7 +708,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
         if (session.WasMaximized)
         {
-            RestoreHostWindowUnderPointer(hostWindow, session.Surface, current, pointerPixels);
+            RestoreHostWindowUnderPointer(hostWindow, session.Surface, session.Anchor, pointerPixels);
             return;
         }
 
@@ -676,7 +728,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        var current = e.GetPosition(session.Surface);
+        var current = FloatingWindowGeometry.GetCursorPosition();
         if (!HasReachedDragThreshold(
                 session.Start,
                 current,
@@ -809,8 +861,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         bool cancelled = false)
     {
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
-        _hostDragTimer.Stop();
-        _hostDrag.Cancel();
         session.TryTransition(cancelled ? DockingDragState.Cancelled : DockingDragState.Completed);
         session.Completion?.TrySetResult(!cancelled);
         session.Completion = null;

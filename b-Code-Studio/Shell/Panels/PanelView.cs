@@ -200,7 +200,7 @@ public sealed partial class PanelView : UserControl
             case PanelWidgetKind.Switch:
                 if (Label(widget) is { Length: > 0 } switchLabel)
                     cells.Add(new BoardCell(BuildLabel(switchLabel), null, false));
-                cells.Add(new BoardCell(BuildSwitch(widget), widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth, widget.Flex));
+                cells.Add(new BoardCell(BuildSwitch(widget), widget.MinWidth ?? 48, widget.Flex));
                 return;
 
             case PanelWidgetKind.SourcePicker:
@@ -301,7 +301,8 @@ public sealed partial class PanelView : UserControl
     {
         var toggle = new System.Windows.Controls.Primitives.ToggleButton
         {
-            Content = widget.Text ?? widget.Label ?? widget.Id,
+            // 标签由 BoardCell 单独渲染；控件本身只承担极简的亮/灭视觉，避免标签重复。
+            Content = null,
             IsChecked = ParseBoolean(widget.Value),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,

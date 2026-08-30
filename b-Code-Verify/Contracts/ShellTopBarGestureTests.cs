@@ -79,6 +79,37 @@ public sealed class ShellTopBarGestureTests
         Assert.Contains("ReleaseCapture(", driver, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TopBarUsesOneThresholdPathWithoutHoldTimerOrSecondTabRoute()
+    {
+        var root = FindSourceRoot();
+        var coordinator = File.ReadAllText(
+            Path.Combine(root, "b-Code-Studio", "Shell", "ShellTopBarCoordinator.cs"));
+
+        Assert.DoesNotContain("DispatcherTimer", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("_hostDrag", coordinator, StringComparison.Ordinal);
+        Assert.Contains("if (e.Handled)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("FloatingWindowGeometry.GetCursorPosition()", coordinator, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScreenThresholdDoesNotDependOnDockManagerOrTabOrigins()
+    {
+        var startScreen = new Point(1_000, 700);
+        var currentScreen = new Point(1_014, 700);
+
+        Assert.True(ShellTopBarCoordinator.HasReachedDragThreshold(
+            startScreen,
+            currentScreen,
+            horizontalThreshold: 4,
+            verticalThreshold: 4));
+        Assert.False(ShellTopBarCoordinator.HasReachedDragThreshold(
+            startScreen,
+            new Point(1_003.99, 700),
+            horizontalThreshold: 4,
+            verticalThreshold: 4));
+    }
+
     [Theory]
     [InlineData(true, true, true)]
     [InlineData(true, false, false)]

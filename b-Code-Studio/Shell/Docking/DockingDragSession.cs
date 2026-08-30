@@ -49,6 +49,8 @@ internal sealed class DockingDragSession(
 
     public bool IsTab => Kind == DockingDragKind.Tab;
 
+    public bool IsFloatingTab { get; init; }
+
     public bool TryTransition(DockingDragState next)
     {
         if (State is DockingDragState.Completed or DockingDragState.Cancelled)
