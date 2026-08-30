@@ -1,3 +1,4 @@
+using System.Windows.Threading;
 using HistoryAurora.Shell.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -15,6 +16,7 @@ namespace HistoryAurora.Module;
 public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
 {
     private IModuleContext? _context;
+    private SynchronizationContext? _previousHostUiContext;
     private bool _disposed;
 
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(20);
@@ -22,7 +24,15 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
     public void Attach(IModuleContext context)
     {
         _context = context;
+        _previousHostUiContext = context.Bus.UiContext;
         AuroraShellHost.EnsureStarted(context, ReadyTimeout);
+
+        // The host bus normally runs on the service loop. UI-annotated module
+        // commands (such as Minerva's pane factory) must create WPF objects on
+        // Aurora's STA dispatcher instead.
+        if (AuroraShellHost.Window is { } window)
+            context.Bus.UiContext = new DispatcherSynchronizationContext(window.Dispatcher);
+
         AuroraShellHost.ShowMainWindowIdle();
     }
 
@@ -37,7 +47,10 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
             return;
         _disposed = true;
         if (_context != null)
+        {
             _context.Bus.FrontendExecutor = null;
+            _context.Bus.UiContext = _previousHostUiContext;
+        }
         AuroraShellHost.Shutdown(log: null);
     }
 }
