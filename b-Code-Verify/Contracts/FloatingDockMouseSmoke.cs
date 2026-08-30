@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using AvalonDock;
@@ -28,22 +29,26 @@ namespace HistoryAurora.Verify;
 public sealed class FloatingDockMouseSmoke(ITestOutputHelper output)
 {
     private const string Switch = "AURORA_MOUSE_SMOKE";
+    private const string TraceFileSwitch = "AURORA_MOUSE_SMOKE_TRACE_FILE";
 
     [Fact]
     public void DragAFloatingToolWindowBackIntoTheMainWindow()
     {
         if (Environment.GetEnvironmentVariable(Switch) != "1")
         {
-            output.WriteLine($"跳过：这套冒烟会接管物理鼠标，需显式开启（set {Switch}=1）。");
+            output.WriteLine($"结果=输入未执行：这套冒烟会接管物理鼠标，需显式开启（set {Switch}=1）。");
             return;
         }
 
         var trace = new List<string>();
         var restore = MouseInput.Cursor();
+        string? inputBlockReason = null;
 
-        UiTestHost.RunSta(() =>
+        try
         {
-            using var shell = Shell();
+            UiTestHost.RunSta(() =>
+            {
+                using var shell = Shell();
             var window = shell.Window;
             var manager = Single<DockingManager>(window);
 
@@ -106,13 +111,41 @@ public sealed class FloatingDockMouseSmoke(ITestOutputHelper output)
 
             var floatingHandle = new System.Windows.Interop.WindowInteropHelper(floating).Handle;
             var mainHandle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            _ = SetForegroundWindow(floatingHandle);
+            _ = BringWindowToTop(floatingHandle);
+            UiTestHost.PumpFor(100);
             MouseInput.MoveTo(grab.X, grab.Y);
             Thread.Sleep(150);
             var underGrab = MouseInput.WindowAt(grab.X, grab.Y);
+            var foreground = GetForegroundWindow();
+            var floatingRect = GetWindowRect(floatingHandle);
             trace.Add($"抓取点下的窗口={(underGrab == IntPtr.Zero ? "无" : underGrab.ToString())}"
                       + $"（浮窗={floatingHandle}，主窗={mainHandle}，"
-                      + $"命中浮窗={IsSameOrChild(underGrab, floatingHandle)}）");
+                      + $"命中浮窗={IsSameOrChild(underGrab, floatingHandle)}，"
+                      + $"前台={foreground}，前台是浮窗={IsSameOrChild(foreground, floatingHandle)}，"
+                      + $"浮窗矩形={floatingRect}，抓取点在矩形内={floatingRect.Contains(grab.X, grab.Y)}）");
             trace.Add($"grab={grab} drop={drop} floatingCount={manager.FloatingWindows.Count()}");
+
+            if (!floatingRect.Contains(grab.X, grab.Y))
+            {
+                inputBlockReason = "输入未执行：浮窗抓取点落在可视屏幕之外，未进行物理拖动";
+                trace.Add("结果=输入未执行（抓取点在浮窗矩形外）");
+                return;
+            }
+
+            if (!IsSameOrChild(underGrab, floatingHandle))
+            {
+                inputBlockReason = "输入未执行：抓取点被其它窗口遮挡，未命中目标浮窗";
+                trace.Add("结果=输入未执行（抓取点遮挡）");
+                return;
+            }
+
+            if (!IsSameOrChild(foreground, floatingHandle))
+            {
+                inputBlockReason = "输入未执行：目标浮窗未成为前台窗口，系统不会把拖动消息交给它";
+                trace.Add("结果=输入未执行（前台窗口不匹配）");
+                return;
+            }
 
             var sawDragging = false;
             var sawOverlay = false;
@@ -167,11 +200,35 @@ public sealed class FloatingDockMouseSmoke(ITestOutputHelper output)
                          .Where(item => item.Category.StartsWith("shell", StringComparison.Ordinal)
                                         || item.Category is "dock" or "layout"))
                 trace.Add($"日志 [{entry.Category}] {entry.Message}");
-        });
+            });
+        }
+        finally
+        {
+            MouseInput.MoveTo(restore.X, restore.Y);
+        }
 
-        MouseInput.MoveTo(restore.X, restore.Y);
         foreach (var line in trace)
             output.WriteLine(line);
+
+        var traceFile = Environment.GetEnvironmentVariable(TraceFileSwitch);
+        if (!string.IsNullOrWhiteSpace(traceFile))
+        {
+            try
+            {
+                File.WriteAllLines(traceFile, trace);
+                output.WriteLine($"冒烟追踪已写入={traceFile}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                output.WriteLine($"冒烟追踪写入失败={ex.Message}");
+            }
+        }
+
+        if (inputBlockReason != null)
+        {
+            output.WriteLine($"结果={inputBlockReason}；本次未驱动鼠标，也未执行链路断言。");
+            return;
+        }
 
         // 这三条按"链路从哪一环断掉"的顺序排，第一条红的就是断点。
         Assert.Contains(trace, line => line.StartsWith("日志 [shell.chrome] 开始拖动窗口", StringComparison.Ordinal));
@@ -273,7 +330,10 @@ public sealed class FloatingDockMouseSmoke(ITestOutputHelper output)
             new MemorySettings(),
             dataDirectory)
         {
-            Width = 1100,
+            // Keep the main and floating windows on-screen at 125%/150% DPI;
+            // the old 1100-DIP fixture put the header's physical grab point
+            // beyond the right edge on the development machine.
+            Width = 820,
             Height = 760,
             Left = 60,
             Top = 60,
@@ -317,6 +377,32 @@ public sealed class FloatingDockMouseSmoke(ITestOutputHelper output)
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetParent(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
+
+    private static NativeRect GetWindowRect(IntPtr window)
+        => GetWindowRect(window, out var rect) ? rect : default;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly record struct NativeRect(int Left, int Top, int Right, int Bottom)
+    {
+        public bool Contains(int x, int y) => x >= Left && x < Right && y >= Top && y < Bottom;
+
+        public override string ToString() => $"({Left},{Top})-({Right},{Bottom})";
+    }
 
     private static IEnumerable<FrameworkElement> Ancestors(DependencyObject? source)
     {
