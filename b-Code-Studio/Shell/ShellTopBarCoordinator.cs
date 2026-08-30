@@ -604,6 +604,20 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         string target,
         MouseButtonEventArgs e)
     {
+        // The main chrome surface is nested in the pane template, so its
+        // direct handler and the pane EventSetter can observe one press.
+        // Keep the first window session and make the second route a no-op.
+        if (_dragSession is
+            {
+                Kind: DockingDragKind.Window,
+                State: DockingDragState.Pressed,
+                HostWindow: { } currentHost,
+            } && ReferenceEquals(currentHost, hostWindow))
+        {
+            e.Handled = true;
+            return;
+        }
+
         CancelDragSession("new window press");
         var range = GetSystemDoubleClickRange(surface);
         if (_enableMaximizeOnDoubleClick && _doubleClick.RegisterPress(
@@ -657,8 +671,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         // still-pressed WPF move solely because the async Win32 sample raced it.
         if (!session.IsLeftButtonDown && e.LeftButton != MouseButtonState.Pressed)
         {
-            session.MarkReleased(FloatingWindowGeometry.GetCursorPosition());
-            CompleteDragSession(session, "button released before window threshold", cancelled: true);
+            // A captured move can race the native key-state sample. Defer
+            // release cleanup to MouseUp/LostCapture so one stale sample does
+            // not cancel a real drag before it crosses the threshold.
             return;
         }
 
@@ -726,10 +741,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (_dragSession is not { IsTab: true, State: DockingDragState.Pressed } session)
             return;
 
-        if (!session.IsLeftButtonDown)
+        if (!session.IsLeftButtonDown && e.LeftButton != MouseButtonState.Pressed)
         {
-            session.MarkReleased(FloatingWindowGeometry.GetCursorPosition());
-            CompleteDragSession(session, "button released before threshold", cancelled: true);
+            // MouseUp/LostCapture is the authoritative release path. The
+            // asynchronous Win32 sample may briefly report an up state while
+            // WPF is still delivering the captured drag move.
             return;
         }
 
