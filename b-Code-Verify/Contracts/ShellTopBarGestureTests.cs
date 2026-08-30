@@ -88,7 +88,7 @@ public sealed class ShellTopBarGestureTests
 
         Assert.DoesNotContain("DispatcherTimer", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("_hostDrag", coordinator, StringComparison.Ordinal);
-        Assert.Contains("if (e.Handled)", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (e.Handled)\n            return false;", coordinator, StringComparison.Ordinal);
         Assert.Contains("FloatingWindowGeometry.GetCursorPosition()", coordinator, StringComparison.Ordinal);
     }
 

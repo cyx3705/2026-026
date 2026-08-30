@@ -191,8 +191,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public bool HandleDockTabMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
-        if (e.Handled)
-            return false;
         if (e.ChangedButton != MouseButton.Left ||
             IsInteractiveCommandControl(source) ||
             !TryResolveTabPageId(source, out var id) ||
@@ -653,7 +651,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        if (!session.IsLeftButtonDown)
+        // AvalonDock may mark the original button-down handled before this
+        // manager-level handler sees the first captured move. Keep the native
+        // key-state check authoritative when available, but do not cancel a
+        // still-pressed WPF move solely because the async Win32 sample raced it.
+        if (!session.IsLeftButtonDown && e.LeftButton != MouseButtonState.Pressed)
         {
             session.MarkReleased(FloatingWindowGeometry.GetCursorPosition());
             CompleteDragSession(session, "button released before window threshold", cancelled: true);
