@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using AvalonDock.Controls;
 using AvalonDock.Themes.VS2013.Themes;
 
 namespace HistoryAurora.Shell.Docking;
@@ -58,6 +59,31 @@ internal static class DockingOverlayResourceRepair
             // The next probe sample retries; no docking state is touched here.
             return false;
         }
+    }
+
+    /// <summary>
+    /// AvalonDock owns one reusable overlay per overlay host. A drag can
+    /// therefore have more than one OverlayWindow in Application.Windows
+    /// (the main manager plus floating hosts). Guard every live instance so a
+    /// stale host cannot leave an unscaled full-screen preview above the new
+    /// one. This is intentionally called from the drag probe, not a process-
+    /// lifetime event handler, so module hot reload does not retain this
+    /// assembly through WPF's global class-handler table.
+    /// </summary>
+    internal static int EnsureOpenOverlayVisuals()
+    {
+        var windows = Application.Current?.Windows;
+        if (windows is null)
+            return 0;
+
+        var guarded = 0;
+        foreach (Window window in windows)
+        {
+            if (window is OverlayWindow overlay && EnsurePreviewScale(overlay))
+                guarded++;
+        }
+
+        return guarded;
     }
 
     /// <summary>

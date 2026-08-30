@@ -255,6 +255,22 @@ internal sealed class DockingDragProbe : IDisposable
     private void Observe(string stage)
     {
         TrackCursor();
+        // A floating drag may cross several AvalonDock overlay hosts. Guard
+        // all live OverlayWindow instances before inspecting the manager's
+        // one, otherwise a stale host can remain as the visible full-screen
+        // blue layer even when the current host has been scaled.
+        try
+        {
+            var guarded = DockingOverlayResourceRepair.EnsureOpenOverlayVisuals();
+            if (guarded > 0)
+                _previewScaled = true;
+        }
+        catch (InvalidOperationException)
+        {
+            // A WindowCollection can change while an overlay is being reused;
+            // the current manager overlay is retried below on the next sample.
+        }
+
         if (_drag == null && ReadField(_floating, "_dragService") is { } drag)
         {
             _drag = drag;
@@ -292,6 +308,14 @@ internal sealed class DockingDragProbe : IDisposable
         }
 
         _overlayEverNonNull = true;
+        try
+        {
+            _previewScaled |= DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
+        }
+        catch (InvalidOperationException)
+        {
+            // AvalonDock may be rebuilding the template during a move.
+        }
         if (!_overlayCreatedSampled)
         {
             _overlayCreatedSampled = true;
