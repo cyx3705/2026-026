@@ -16,7 +16,7 @@ internal static class DockingOverlayResourceRepair
 {
     // The preview path is drawn in a full-screen overlay window. Keep the
     // visual hint compact; AvalonDock's hit-test rectangle remains unchanged.
-    private const double PreviewScale = 0.55;
+    private const double PreviewScale = 0.35;
     private const double PreviewOpacity = 0.55;
 
     /// <summary>
@@ -41,11 +41,12 @@ internal static class DockingOverlayResourceRepair
             if (bounds.Width <= 0 || bounds.Height <= 0)
                 return false;
 
-            preview.RenderTransform = new ScaleTransform(
-                PreviewScale,
-                PreviewScale,
-                bounds.X + bounds.Width / 2,
-                bounds.Y + bounds.Height / 2);
+            // RenderTransformOrigin is expressed in the Path element's
+            // arranged bounds. Using Geometry.Bounds as the transform center
+            // is unreliable when AvalonDock stretches the template path, and
+            // leaves the full-size blue rectangle visible.
+            preview.RenderTransformOrigin = new Point(0.5, 0.5);
+            preview.RenderTransform = new ScaleTransform(PreviewScale, PreviewScale);
             // A target can legitimately be the whole document area. The
             // overlay must still let neighbouring floating windows remain
             // readable while the border and direction buttons show the target.
