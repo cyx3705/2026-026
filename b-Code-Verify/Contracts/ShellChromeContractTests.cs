@@ -173,6 +173,9 @@ public sealed class ShellChromeContractTests
             var starBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
             Assert.Equal(0, starBackground.Color.A);
+            var previewBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.PreviewBoxBackgroundBrushKey));
+            Assert.InRange(previewBackground.Color.A, 1, 0x40);
             var buttonBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
             Assert.Equal(0, buttonBackground.Color.A);

@@ -59,7 +59,7 @@ internal static class DockingOverlayResourceRepair
             new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)),
             nameof(ResourceKeys.PreviewBoxBorderBrushKey), changed);
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark ? Color.FromArgb(0x70, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x60, 0x3B, 0x82, 0xF6)),
+            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
 
         return new DockingOverlayResourceRepairResult(dark, changed);
