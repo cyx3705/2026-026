@@ -399,11 +399,13 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             id,
             null,
             $"tab:{id}",
-            false,
-            false);
+        false,
+        false);
         _dragSession = session;
-        tab.CaptureMouse();
-        _log.Info(ChromeLogSource, $"拖动会话 {session.Id} 按下页面 {id}");
+        var captured = tab.CaptureMouse();
+        _log.Info(
+            ChromeLogSource,
+            $"拖动会话 {session.Id} 按下页面 {id} capture={captured} start=({Math.Round(start.X)},{Math.Round(start.Y)})");
     }
 
     private void StartFloatingTabSession(
@@ -433,8 +435,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             IsFloatingTab = true,
         };
         _dragSession = session;
-        tab.CaptureMouse();
-        _log.Info(ChromeLogSource, $"拖动会话 {session.Id} 按下浮窗页面 {id}");
+        var captured = tab.CaptureMouse();
+        _log.Info(
+            ChromeLogSource,
+            $"拖动会话 {session.Id} 按下浮窗页面 {id} capture={captured} start=({Math.Round(session.Start.X)},{Math.Round(session.Start.Y)})");
     }
 
     private async Task RestoreAndFloatAsync(DockingDragSession session)
@@ -653,7 +657,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             hostWindow.WindowState == WindowState.Maximized,
             false);
         _dragSession = session;
-        surface.CaptureMouse();
+        var captured = surface.CaptureMouse();
+        _log.Info(
+            ChromeLogSource,
+            $"拖动会话 {session.Id} 按下窗口 {target} capture={captured} start=({Math.Round(session.Start.X)},{Math.Round(session.Start.Y)})");
         e.Handled = true;
     }
 
@@ -669,14 +676,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         // manager-level handler sees the first captured move. Keep the native
         // key-state check authoritative when available, but do not cancel a
         // still-pressed WPF move solely because the async Win32 sample raced it.
-        if (!session.IsLeftButtonDown && e.LeftButton != MouseButtonState.Pressed)
-        {
-            // A captured move can race the native key-state sample. Defer
-            // release cleanup to MouseUp/LostCapture so one stale sample does
-            // not cancel a real drag before it crosses the threshold.
-            return;
-        }
-
         var current = FloatingWindowGeometry.GetCursorPosition();
         var multiplier = session.WasMaximized ? 2d : 1d;
         var shouldStart = HasReachedDragThreshold(
@@ -689,6 +688,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             _doubleClick.Cancel(session.Target);
         if (shouldStart)
         {
+            _log.Info(
+                ChromeLogSource,
+                $"拖动会话 {session.Id} 窗口越过阈值 current=({Math.Round(current.X)},{Math.Round(current.Y)})");
             StartPendingHostDrag(session, current);
             e.Handled = true;
         }
@@ -741,14 +743,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (_dragSession is not { IsTab: true, State: DockingDragState.Pressed } session)
             return;
 
-        if (!session.IsLeftButtonDown && e.LeftButton != MouseButtonState.Pressed)
-        {
-            // MouseUp/LostCapture is the authoritative release path. The
-            // asynchronous Win32 sample may briefly report an up state while
-            // WPF is still delivering the captured drag move.
-            return;
-        }
-
         var current = FloatingWindowGeometry.GetCursorPosition();
         if (!HasReachedDragThreshold(
                 session.Start,
@@ -772,6 +766,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (!session.TryTransition(DockingDragState.ThresholdReached))
             return;
         session.LastScreenPoint = context.PointerPixels;
+        _log.Info(
+            ChromeLogSource,
+            $"拖动会话 {session.Id} 页面越过阈值 current=({Math.Round(current.X)},{Math.Round(current.Y)})");
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
         // Do not rely on AvalonDock's tab template to start its internal drag
         // service. The Aurora tab template is intentionally replaced, so the
