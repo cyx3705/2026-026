@@ -327,7 +327,7 @@ internal sealed class DockingDragProbe : IDisposable
         _overlayDicts = overlay.Resources.MergedDictionaries.Count;
         _overlayKeys = overlay.Resources.Count;
         var repair = "未执行";
-        if (!_repairSampled && overlay.IsVisible)
+        if (!_repairSampled)
         {
             var before = DescribeResources(overlay);
             var result = DockingOverlayResourceRepair.Ensure(overlay);

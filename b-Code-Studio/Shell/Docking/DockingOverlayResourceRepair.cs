@@ -70,11 +70,17 @@ internal static class DockingOverlayResourceRepair
         ArgumentNullException.ThrowIfNull(theme);
 
         var changed = new List<string>();
-        foreach (var (name, key, fallback) in Fallbacks(false))
+        var dark = (FindResource(theme, "Aurora.Brush.Surface") as SolidColorBrush)?.Color is { } surface &&
+                   (surface.R + surface.G + surface.B) < 288;
+        foreach (var (name, key, fallback) in Fallbacks(dark))
             PutIfTransparent(theme, key, fallback, name, changed);
 
+        PutAlways(theme, ResourceKeys.PreviewBoxBackgroundBrushKey,
+            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
+
         foreach (var merged in theme.MergedDictionaries)
-            EnsureThemeDictionary(merged, changed);
+            EnsureThemeDictionary(merged, changed, dark);
 
         return changed;
     }
@@ -107,17 +113,27 @@ internal static class DockingOverlayResourceRepair
         PutIfTransparent(overlay, ResourceKeys.PreviewBoxBackgroundBrushKey,
             new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
             nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
+        PutAlways(overlay.Resources, ResourceKeys.PreviewBoxBackgroundBrushKey,
+            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
 
         return new DockingOverlayResourceRepairResult(dark, changed);
     }
 
-    private static void EnsureThemeDictionary(ResourceDictionary dictionary, ICollection<string> changed)
+    private static void EnsureThemeDictionary(
+        ResourceDictionary dictionary,
+        ICollection<string> changed,
+        bool dark)
     {
-        foreach (var (name, key, fallback) in Fallbacks(false))
+        foreach (var (name, key, fallback) in Fallbacks(dark))
             PutIfTransparent(dictionary, key, fallback, name, changed);
 
+        PutAlways(dictionary, ResourceKeys.PreviewBoxBackgroundBrushKey,
+            new SolidColorBrush(dark ? Color.FromArgb(0x38, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x30, 0x3B, 0x82, 0xF6)),
+            nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), changed);
+
         foreach (var merged in dictionary.MergedDictionaries)
-            EnsureThemeDictionary(merged, changed);
+            EnsureThemeDictionary(merged, changed, dark);
     }
 
     private static IEnumerable<(string Name, object Key, Brush Fallback)> Fallbacks(bool dark)
@@ -159,6 +175,19 @@ internal static class DockingOverlayResourceRepair
 
         overlay.Resources[actualKey] = fallback;
         changed.Add(name);
+    }
+
+    private static void PutAlways(
+        ResourceDictionary dictionary,
+        object key,
+        Brush value,
+        string name,
+        ICollection<string> changed)
+    {
+        var actualKey = FindEquivalentComponentKey(dictionary, key) ?? key;
+        dictionary[actualKey] = value;
+        if (!changed.Contains(name))
+            changed.Add(name);
     }
 
     private static void PutIfTransparent(
