@@ -208,6 +208,13 @@ internal sealed class DockingDragProbe : IDisposable
             if (!overlay.IsVisible)
                 return;
 
+            // The overlay is a separate Window. Repair its local component
+            // resources before sampling or rendering so a transparent palette
+            // fallback cannot hide the indicators in the real drag path.
+            DockingOverlayResourceRepair.Ensure(overlay);
+            overlay.ApplyTemplate();
+            overlay.UpdateLayout();
+
             // 覆盖窗可见之后还要接着看：投放按钮是随光标移动才逐个亮起来的，
             // 只看第一帧会把"还没亮"当成"亮不了"。走 5 次封顶，别拖累拖动本身。
             if (_overlayEverVisible)

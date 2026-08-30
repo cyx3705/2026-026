@@ -828,6 +828,14 @@
         <member name="M:HistoryAurora.Shell.Docking.DockingHost.RatioOfSubtree(AvalonDock.Layout.ILayoutPanelElement)">
             <summary>分区内第一个已注册窗口的目标比例(分区尺寸由其代表)。</summary>
         </member>
+        <member name="T:HistoryAurora.Shell.Docking.DockingOverlayResourceRepair">
+            <summary>
+            Supplies the docking overlay's component-resource brushes in the overlay
+            window itself. AvalonDock normally inherits these from its theme dictionary,
+            but a module loaded into a collectible context can leave DynamicResource
+            references bound to a transparent palette fallback.
+            </summary>
+        </member>
         <member name="T:HistoryAurora.Shell.Docking.FileLayoutStore">
             <summary>当前布局为 layout/current.layout.xml，命名方案为 layout/&lt;名称&gt;.layout.xml。</summary>
         </member>
