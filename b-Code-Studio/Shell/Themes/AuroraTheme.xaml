@@ -8,6 +8,7 @@
           1 VS2013 浅色  —— AvalonDock 结构性样式的基底(S-04:浅色为默认)
           2 ShellTokens  —— 颜色、圆角、投影、字号的唯一定义处
           3 ShellDocking —— 主题画刷键覆盖 + 窗格卡片/专注模板
+          4 AuroraOverlay —— OverlayWindow 命中矩形与方向视觉的固定模板
 
         本字典经 DockingManager.Theme 下发,浮动窗口(独立 Window,拿不到
         ShellWindow.Resources)因此同样能取到令牌,不可依赖主窗体资源。
@@ -18,6 +19,7 @@
         <ResourceDictionary Source="/AvalonDock.Themes.VS2013;component/LightTheme.xaml" />
         <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraTokens.xaml" />
         <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraDocking.xaml" />
+        <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraOverlay.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

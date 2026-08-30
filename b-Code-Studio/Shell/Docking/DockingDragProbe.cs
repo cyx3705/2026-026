@@ -106,12 +106,7 @@ internal sealed class DockingDragProbe : IDisposable
     private bool _overlayCreatedSampled;
     private bool _overlayVisibleSampled;
     private bool _dragEnterSampled;
-    private bool _repairSampled;
-    private bool _previewScaled;
-    private bool _indicatorVisualsGuarded;
-    private string _repairState = "未执行";
     private string _templateParts = "未测";
-    private string _indicatorState = "未测";
     private string _resourceState = "未测";
     private string _pathState = "未测";
     private string _contentState = "未测";
@@ -192,9 +187,9 @@ internal sealed class DockingDragProbe : IDisposable
             $"覆盖窗字典={_overlayDicts} 自有键={_overlayKeys} {_overlayPaint}");
         _log.Info(
             _source,
-            $"停靠探针：资源={_resourceState} 修复={_repairState} 模板部件={_templateParts} " +
-            $"路径={_pathState} 内容控件={_contentState} 指示器={_indicatorState} " +
-            $"视觉约束={(_indicatorVisualsGuarded ? "已安装" : "未安装")}");
+            $"停靠探针：资源={_resourceState} 模板部件={_templateParts} " +
+            $"路径={_pathState} 内容控件={_contentState} " +
+            "视觉约束=由AuroraOverlay模板静态提供");
         if (_stageSummaries.Count > 0)
             _log.Info(_source, "停靠探针阶段：" + string.Join(" | ", _stageSummaries));
         _log.Info(
@@ -258,21 +253,6 @@ internal sealed class DockingDragProbe : IDisposable
     private void Observe(string stage)
     {
         TrackCursor();
-        // A floating drag may cross several AvalonDock overlay hosts. Guard
-        // all live OverlayWindow instances before inspecting the manager's
-        // one, otherwise a stale host can remain as the visible full-screen
-        // blue layer even when the current host has been scaled.
-        try
-        {
-            var guarded = DockingOverlayResourceRepair.EnsureOpenOverlayVisuals();
-            if (guarded > 0)
-                _previewScaled = true;
-        }
-        catch (InvalidOperationException)
-        {
-            // A WindowCollection can change while an overlay is being reused;
-            // the current manager overlay is retried below on the next sample.
-        }
 
         if (_drag == null && ReadField(_floating, "_dragService") is { } drag)
         {
@@ -311,14 +291,6 @@ internal sealed class DockingDragProbe : IDisposable
         }
 
         _overlayEverNonNull = true;
-        try
-        {
-            _previewScaled |= DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
-        }
-        catch (InvalidOperationException)
-        {
-            // AvalonDock may be rebuilding the template during a move.
-        }
         if (!_overlayCreatedSampled)
         {
             _overlayCreatedSampled = true;
@@ -353,49 +325,18 @@ internal sealed class DockingDragProbe : IDisposable
 
         _overlayDicts = overlay.Resources.MergedDictionaries.Count;
         _overlayKeys = overlay.Resources.Count;
-        var repair = "未执行";
-        if (!_repairSampled)
-        {
-            var before = DescribeResources(overlay);
-            var result = DockingOverlayResourceRepair.Ensure(overlay);
-            var after = DescribeResources(overlay);
-            _repairSampled = true;
-            repair = $"深色={result.DarkTheme} 改键={(result.ChangedKeys.Count == 0 ? "无" : string.Join(",", result.ChangedKeys))}";
-            _repairState = $"{repair} 前[{before}] 后[{after}]";
-        }
-
         var resourceState = DescribeResources(overlay);
         _resourceState = resourceState;
         var details = DescribeOverlay(overlay, stage);
-        AddStage(sourceStage + "/" + stage, details + $" 资源={resourceState} 修复={repair}");
+        AddStage(sourceStage + "/" + stage, details + $" 资源={resourceState}");
 
         if (!overlay.IsVisible)
             return;
-
-        if (overlay is Control control)
-        {
-            try
-            {
-                control.ApplyTemplate();
-                // AvalonDock may replace PART_PreviewBox while the target
-                // changes. Reapply the visual constraint on every sample so
-                // a template refresh cannot restore the full-screen fill.
-                _previewScaled = DockingOverlayResourceRepair.EnsurePreviewScale(overlay);
-                _indicatorVisualsGuarded |=
-                    DockingOverlayResourceRepair.EnsureDockingIndicatorVisuals(overlay);
-            }
-            catch (InvalidOperationException)
-            {
-                // Template may be in the middle of a theme/layout swap. The
-                // next WM_MOVING sample will retry without touching the drag.
-            }
-        }
 
         var tree = WalkOverlay(overlay);
         _templateParts = tree.TemplateParts;
         _pathState = tree.Paths;
         _contentState = tree.ContentControls;
-        _indicatorState = DockingOverlayResourceRepair.DescribeDockingIndicatorVisuals(overlay);
         RenderOverlay(overlay, stage);
         MeasureZOrder(overlay);
         _overlayState = $"模板={(tree.HasTemplate ? "有" : "无")} " +
@@ -777,7 +718,7 @@ internal sealed class DockingDragProbe : IDisposable
                 }
                 catch (InvalidOperationException)
                 {
-                    // A template can be replaced between ApplyTemplate and
+                    // A template can be replaced between layout passes and
                     // FindName. Keep the failed part explicit in the trace.
                 }
 
