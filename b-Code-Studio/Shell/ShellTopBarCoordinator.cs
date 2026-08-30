@@ -696,10 +696,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             _pendingDockTabId,
             ResolveEmbeddedPaneSize(_pendingDockTab),
             _pendingDockTabAnchor,
-            ContinueWithDrag: false);
-        ApplyFloatingModelGeometry(context, _pendingDockTab);
-        SetPendingFloatingContext(context);
+            ContinueWithDrag: true);
         ClearPendingDockTab();
+        // Do not rely on AvalonDock's tab template to start its internal drag
+        // service. The Aurora tab template is intentionally replaced, so the
+        // threshold crossing owns the transition to a floating host. That
+        // gives the host a real DragMove loop, which is what creates the blue
+        // docking overlay and makes drop/merge deterministic.
+        _ = RestoreAndFloatAsync(context);
+        e.Handled = true;
     }
 
     private void OnDockPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

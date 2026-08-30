@@ -1,6 +1,7 @@
 ﻿
 using System.IO;
 using System.Runtime.ExceptionServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -712,6 +713,33 @@ public sealed class DockingContractTests
     }
 
     [Fact]
+    public void SaveCurrentLayoutStillPersistsPlacementsWhenLayoutWriteFails()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var settings = new MemorySettings();
+            var host = new DockingHost(
+                new DockingManager(),
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Right, 0.25),
+                ],
+                new FailingLayoutStore(),
+                new NullLog(),
+                settings);
+            host.Initialize();
+            host.Hide("business");
+
+            host.SaveCurrentLayout();
+
+            var json = settings.Get("layout.placements");
+            Assert.False(string.IsNullOrWhiteSpace(json));
+            using var document = JsonDocument.Parse(json!);
+            Assert.True(document.RootElement.GetProperty("business").GetProperty("Hidden").GetBoolean());
+        });
+    }
+
+    [Fact]
     public void NamedLayoutShowsDefaultVisibleCenterPageAddedAfterItWasSaved()
     {
         UiTestHost.RunSta(() =>
@@ -1065,6 +1093,16 @@ public sealed class DockingContractTests
         public string? ReadNamed(string name) => _named.GetValueOrDefault(name);
         public void WriteNamed(string name, string payload) => _named[name] = payload;
         public IReadOnlyList<string> ListNamed() => _named.Keys.ToList();
+    }
+
+    private sealed class FailingLayoutStore : ILayoutStore
+    {
+        public string? ReadCurrent() => null;
+        public void WriteCurrent(string payload) => throw new IOException("simulated layout write failure");
+        public void DeleteCurrent() { }
+        public string? ReadNamed(string name) => null;
+        public void WriteNamed(string name, string payload) => throw new IOException("simulated layout write failure");
+        public IReadOnlyList<string> ListNamed() => [];
     }
 
     private sealed class NullLog : IShellLog
