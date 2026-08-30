@@ -20,6 +20,7 @@ using HistoryAurora.Shell.Console;
 using HistoryAurora.Shell.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
+using AvalonDock.Themes;
 using AvalonDock.Themes.VS2013.Themes;
 using Xunit;
 
@@ -143,7 +144,7 @@ public sealed class ShellChromeContractTests
     }
 
     [Fact]
-    public void DockingOverlayBrushesAreExplicitlyOpaque()
+    public void DockingOverlayBrushesKeepButtonsVisibleAndPreviewFillTransparent()
     {
         RunShell(window =>
         {
@@ -161,6 +162,8 @@ public sealed class ShellChromeContractTests
             foreach (var key in keys)
             {
                 var brush = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
+                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                    continue;
                 Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
                     $"停靠覆盖层画刷 {key} 不能是透明回退值");
             }
@@ -172,10 +175,64 @@ public sealed class ShellChromeContractTests
             var starBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
             Assert.Equal(0, starBackground.Color.A);
+            var previewBackground = Assert.IsType<SolidColorBrush>(
+                manager.TryFindResource(ResourceKeys.PreviewBoxBackgroundBrushKey));
+            Assert.Equal(0, previewBackground.Color.A);
             var buttonBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
             Assert.Equal(0, buttonBackground.Color.A);
         });
+    }
+
+    [Fact]
+    public void DockingThemeResourceDictionaryIsPrewarmedBeforeDrag()
+    {
+        RunShell(window =>
+        {
+            var theme = Assert.IsAssignableFrom<DictionaryTheme>(window.DockManager.Theme);
+            var dictionary = theme.ThemeResourceDictionary;
+            Assert.NotNull(dictionary);
+
+            foreach (var key in new[]
+                     {
+                         ResourceKeys.DockingButtonForegroundBrushKey,
+                         ResourceKeys.DockingButtonForegroundArrowBrushKey,
+                         ResourceKeys.PreviewBoxBorderBrushKey,
+                         ResourceKeys.PreviewBoxBackgroundBrushKey,
+                     })
+            {
+                var brush = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
+                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                {
+                    Assert.Equal(0, brush.Color.A);
+                    continue;
+                }
+                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
+                    $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
+            }
+
+            var width = Assert.IsType<double>(FindResource(
+                dictionary!, ResourceKeys.DockingButtonWidthKey));
+            var height = Assert.IsType<double>(FindResource(
+                dictionary!, ResourceKeys.DockingButtonHeightKey));
+            Assert.InRange(width, 20, 32);
+            Assert.InRange(height, 20, 32);
+        });
+    }
+
+    private static object? FindResource(ResourceDictionary dictionary, object key)
+    {
+        if (dictionary.Contains(key))
+            return dictionary[key];
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            var found = FindResource(merged, key);
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 
     [Fact]
