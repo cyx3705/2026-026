@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using System.Windows.Media.Imaging;
 using AvalonDock;
 using AvalonDock.Controls;
+using AvalonDock.Themes.VS2013.Themes;
 using HistoryVulcan.Core.Logging;
 
 namespace HistoryAurora.Shell.Docking;
@@ -34,6 +35,28 @@ internal sealed class DockingDragProbe : IDisposable
     private const int WmMoving = 0x0216;
     private const int WmEnterSizeMove = 0x0231;
     private const int WmExitSizeMove = 0x0232;
+    private const int WmLButtonUp = 0x0202;
+
+    private static readonly (string Name, object Key)[] OverlayResourceKeys =
+    [
+        (nameof(ResourceKeys.DockingButtonBackgroundBrushKey), ResourceKeys.DockingButtonBackgroundBrushKey),
+        (nameof(ResourceKeys.DockingButtonForegroundBrushKey), ResourceKeys.DockingButtonForegroundBrushKey),
+        (nameof(ResourceKeys.DockingButtonForegroundArrowBrushKey), ResourceKeys.DockingButtonForegroundArrowBrushKey),
+        (nameof(ResourceKeys.DockingButtonStarBorderBrushKey), ResourceKeys.DockingButtonStarBorderBrushKey),
+        (nameof(ResourceKeys.DockingButtonStarBackgroundBrushKey), ResourceKeys.DockingButtonStarBackgroundBrushKey),
+        (nameof(ResourceKeys.PreviewBoxBorderBrushKey), ResourceKeys.PreviewBoxBorderBrushKey),
+        (nameof(ResourceKeys.PreviewBoxBackgroundBrushKey), ResourceKeys.PreviewBoxBackgroundBrushKey),
+    ];
+
+    private static readonly string[] TemplatePartNames =
+    [
+        "PART_DropTargetsContainer",
+        "PART_PreviewBox",
+        "PART_DockingManagerDropTargets",
+        "PART_AnchorablePaneDropTargets",
+        "PART_DocumentPaneDropTargets",
+        "PART_DocumentPaneFullDropTargets",
+    ];
 
     private readonly LayoutFloatingWindowControl _floating;
     private readonly DockingManager _manager;
@@ -78,6 +101,22 @@ internal sealed class DockingDragProbe : IDisposable
     private string _overlayState = "未观测";
     private string _hostsState = "未观测";
     private string _nullDiagnostic = string.Empty;
+    private readonly HashSet<string> _sampledStages = new(StringComparer.Ordinal);
+    private readonly List<string> _stageSummaries = [];
+    private bool _overlayCreatedSampled;
+    private bool _overlayVisibleSampled;
+    private bool _dragEnterSampled;
+    private bool _repairSampled;
+    private string _repairState = "未执行";
+    private string _templateParts = "未测";
+    private string _resourceState = "未测";
+    private string _pathState = "未测";
+    private string _contentState = "未测";
+    private int _bluePixels;
+    private string _pixelBounds = "空";
+    private string _transparentRatio = "未测";
+    private int _pixelSamples;
+    private bool _probeErrorLogged;
     private bool _disposed;
 
     public DockingDragProbe(
@@ -116,6 +155,12 @@ internal sealed class DockingDragProbe : IDisposable
     {
         if (_disposed)
             return;
+
+        // DragMove has returned, so this is the last read-only sample after the
+        // system move loop. Keep it before removing the hook and before marking
+        // the probe disposed; a late overlay must still be reported, never acted
+        // on.
+        SafeObserve("WM_EXITSIZEMOVE.after");
         _disposed = true;
 
         _hwnd?.RemoveHook(OnMessage);
@@ -138,8 +183,16 @@ internal sealed class DockingDragProbe : IDisposable
         _log.Info(
             _source,
             $"停靠探针：覆盖窗实绘像素={_drawnPixels}/{_totalPixels} 主色={_dominant} " +
+            $"蓝色像素={_bluePixels} 边界={_pixelBounds} 透明比例={_transparentRatio} " +
+            $"位图样本={_pixelSamples} " +
             $"Z序 覆盖窗={_overlayZ} 主窗体={_mainZ} " +
             $"覆盖窗字典={_overlayDicts} 自有键={_overlayKeys} {_overlayPaint}");
+        _log.Info(
+            _source,
+            $"停靠探针：资源={_resourceState} 修复={_repairState} 模板部件={_templateParts} " +
+            $"路径={_pathState} 内容控件={_contentState}");
+        if (_stageSummaries.Count > 0)
+            _log.Info(_source, "停靠探针阶段：" + string.Join(" | ", _stageSummaries));
         _log.Info(
             _source,
             $"停靠探针：光标进过停靠区={(_trueCursorInside ? "是" : "否")} " +
@@ -154,90 +207,224 @@ internal sealed class DockingDragProbe : IDisposable
         {
             case WmEnterSizeMove:
                 _enterSizeMove++;
+                SafeObserve("WM_ENTERSIZEMOVE");
                 break;
             case WmExitSizeMove:
                 _exitSizeMove++;
+                SafeObserve("WM_EXITSIZEMOVE.before");
                 // 移动循环结束时左键还按着 = 系统替你"松了手"，也就是提前投放。
                 // 用户反馈"靠近主窗口就直接嵌入而不是合并"，若属实会在这里露出来。
                 if (Mouse.LeftButton == MouseButtonState.Pressed)
                     _exitWithButtonDown = "（左键仍按下——移动循环被提前结束）";
+                break;
+            case WmLButtonUp:
+                SafeObserve("WM_LBUTTONUP");
                 break;
             case WmMoving:
                 _moving++;
                 // 全程观测，不做点采样。覆盖窗 Show() 之后 IsVisible 与尺寸要等一轮
                 // 布局才更新，只看某一条 WM_MOVING 会把"还没显示"误报成"显示不了"——
                 // 这跟早先 IsDragging 轮询踩的是同一个坑，那次也是采样点的问题。
-                if (_moving >= 2)
-                    Observe();
+                if (_moving == 1 || _moving == 2 || _moving % 10 == 0)
+                    SafeObserve($"WM_MOVING#{_moving}");
                 break;
         }
 
         return IntPtr.Zero;
     }
 
-    private void Observe()
+    private void SafeObserve(string stage)
     {
+        if (_disposed)
+            return;
+
         try
         {
-            TrackCursor();
-            if (_drag == null && ReadField(_floating, "_dragService") is { } drag)
-            {
-                _drag = drag;
-                _sawDragService = true;
-                _hostsState = ReadField(drag, "_overlayWindowHosts") is System.Collections.ICollection hosts
-                    ? hosts.Count.ToString()
-                    : "读不到";
-            }
-
-            if (_drag is { } service)
-            {
-                if (ReadField(service, "_currentWindowAreas") is System.Collections.ICollection areas)
-                    _maxAreas = Math.Max(_maxAreas, areas.Count);
-                if (ReadField(service, "_currentDropTarget") is { } target)
-                    _dropTarget = target.GetType().Name;
-            }
-
-            if (ReadField(_manager, "_overlayWindow") is not Window overlay)
-            {
-                if (_sawDragService && _nullDiagnostic.Length == 0)
-                    _nullDiagnostic = $"管理器屏幕矩形={DescribeManagerRect()}，光标={DescribeCursor()}";
-                return;
-            }
-
-            _overlayEverNonNull = true;
-            if (!overlay.IsVisible)
-                return;
-
-            // 覆盖窗可见之后还要接着看：投放按钮是随光标移动才逐个亮起来的，
-            // 只看第一帧会把"还没亮"当成"亮不了"。走 5 次封顶，别拖累拖动本身。
-            if (_overlayEverVisible)
-            {
-                if (_treeWalks < 5 && _moving % 40 == 0)
-                {
-                    WalkOverlay(overlay);
-                    RenderOverlay(overlay);
-                    MeasureZOrder(overlay);
-                }
-                return;
-            }
-
-            // 第一次真正可见时定格：这是"指示到底画没画出来"的唯一可信证据。
-            _overlayEverVisible = true;
-            _overlayDicts = overlay.Resources.MergedDictionaries.Count;
-            _overlayKeys = overlay.Resources.Count;
-
-            var template = overlay is Control { Template: not null } ? "有" : "无";
-            WalkOverlay(overlay);
-            RenderOverlay(overlay);
-            MeasureZOrder(overlay);
-            _overlayState = $"模板={template} " +
-                            $"位置=({Math.Round(overlay.Left)},{Math.Round(overlay.Top)}) " +
-                            $"尺寸={Math.Round(overlay.ActualWidth)}x{Math.Round(overlay.ActualHeight)}";
+            Observe(stage);
         }
-        catch (Exception ex) when (ex is TargetInvocationException or MemberAccessException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or TargetInvocationException or MemberAccessException)
         {
-            _log.Warn(_source, $"停靠探针取样失败：{ex.Message}");
+            if (_probeErrorLogged)
+                return;
+            _probeErrorLogged = true;
+            _log.Warn(_source, $"停靠探针取样失败（{stage}）：{ex.Message}");
         }
+    }
+
+    private void Observe(string stage)
+    {
+        TrackCursor();
+        if (_drag == null && ReadField(_floating, "_dragService") is { } drag)
+        {
+            _drag = drag;
+            _sawDragService = true;
+            _hostsState = ReadField(drag, "_overlayWindowHosts") is System.Collections.ICollection hosts
+                ? hosts.Count.ToString()
+                : "读不到";
+            AddStage(stage, $"DragService=已建 hosts={_hostsState}");
+        }
+
+        if (_drag is { } service)
+        {
+            if (ReadField(service, "_currentWindowAreas") is System.Collections.ICollection areas)
+                _maxAreas = Math.Max(_maxAreas, areas.Count);
+            if (ReadField(service, "_currentDropTarget") is { } target)
+            {
+                var nextDropTarget = target.GetType().Name;
+                if (!string.Equals(nextDropTarget, _dropTarget, StringComparison.Ordinal))
+                    AddStage("DragEnter", $"目标={nextDropTarget}");
+                _dropTarget = nextDropTarget;
+                if (!_dragEnterSampled && ReadField(_manager, "_overlayWindow") is Window)
+                {
+                    _dragEnterSampled = true;
+                    SampleOverlay(stage, "DragEnter");
+                }
+            }
+        }
+
+        if (ReadField(_manager, "_overlayWindow") is not Window overlay)
+        {
+            if (_sawDragService && _nullDiagnostic.Length == 0)
+                _nullDiagnostic = $"管理器屏幕矩形={DescribeManagerRect()}，光标={DescribeCursor()}";
+            AddStage(stage, "OverlayWindow=null");
+            return;
+        }
+
+        _overlayEverNonNull = true;
+        if (!_overlayCreatedSampled)
+        {
+            _overlayCreatedSampled = true;
+            SampleOverlay(stage, "创建");
+        }
+
+        if (!overlay.IsVisible)
+        {
+            AddStage(stage, DescribeOverlay(overlay, "不可见"));
+            return;
+        }
+
+        _overlayEverVisible = true;
+        if (!_overlayVisibleSampled)
+        {
+            _overlayVisibleSampled = true;
+            SampleOverlay(stage, "可见");
+        }
+        else if (_moving % 40 == 0 || stage.Contains("EXITSIZEMOVE", StringComparison.Ordinal))
+        {
+            SampleOverlay(stage, "移动中");
+        }
+    }
+
+    private void SampleOverlay(string sourceStage, string stage)
+    {
+        if (ReadField(_manager, "_overlayWindow") is not Window overlay)
+        {
+            AddStage(sourceStage + "/" + stage, "OverlayWindow=null");
+            return;
+        }
+
+        _overlayDicts = overlay.Resources.MergedDictionaries.Count;
+        _overlayKeys = overlay.Resources.Count;
+        var repair = "未执行";
+        if (!_repairSampled && overlay.IsVisible)
+        {
+            var before = DescribeResources(overlay);
+            var result = DockingOverlayResourceRepair.Ensure(overlay);
+            var after = DescribeResources(overlay);
+            _repairSampled = true;
+            repair = $"深色={result.DarkTheme} 改键={(result.ChangedKeys.Count == 0 ? "无" : string.Join(",", result.ChangedKeys))}";
+            _repairState = $"{repair} 前[{before}] 后[{after}]";
+        }
+
+        var resourceState = DescribeResources(overlay);
+        _resourceState = resourceState;
+        var details = DescribeOverlay(overlay, stage);
+        AddStage(sourceStage + "/" + stage, details + $" 资源={resourceState} 修复={repair}");
+
+        if (!overlay.IsVisible)
+            return;
+
+        if (overlay is Control control)
+        {
+            try
+            {
+                control.ApplyTemplate();
+            }
+            catch (InvalidOperationException)
+            {
+                // Template may be in the middle of a theme/layout swap. The
+                // next WM_MOVING sample will retry without touching the drag.
+            }
+        }
+
+        var tree = WalkOverlay(overlay);
+        _templateParts = tree.TemplateParts;
+        _pathState = tree.Paths;
+        _contentState = tree.ContentControls;
+        RenderOverlay(overlay, stage);
+        MeasureZOrder(overlay);
+        _overlayState = $"模板={(tree.HasTemplate ? "有" : "无")} " +
+                        $"位置=({Math.Round(overlay.Left)},{Math.Round(overlay.Top)}) " +
+                        $"尺寸={Math.Round(overlay.ActualWidth)}x{Math.Round(overlay.ActualHeight)}";
+    }
+
+    private void AddStage(string stage, string details)
+    {
+        // Keep the diagnostic bounded. A long drag can generate hundreds of
+        // WM_MOVING messages; the first sample for each phase plus the explicit
+        // moving checkpoints is enough to identify the broken ring.
+        var key = stage.IndexOf('/') < 0 && stage.StartsWith("WM_MOVING", StringComparison.Ordinal)
+            ? "WM_MOVING"
+            : stage;
+        if (!_sampledStages.Add(key) && !stage.Contains("EXITSIZEMOVE", StringComparison.Ordinal))
+            return;
+
+        var compact = details.Replace('\r', ' ').Replace('\n', ' ');
+        if (compact.Length > 1200)
+            compact = compact[..1200] + "...";
+        _stageSummaries.Add($"{stage}=>{compact}");
+        _log.Info(_source, $"停靠探针阶段 {stage}：{compact}");
+    }
+
+    private static string DescribeOverlay(Window overlay, string visibility)
+    {
+        var handle = new WindowInteropHelper(overlay).Handle;
+        var template = overlay is Control control && control.Template != null ? "有" : "无";
+        return $"句柄={handle} 可见={visibility} IsVisible={overlay.IsVisible} " +
+               $"尺寸={Math.Round(overlay.ActualWidth)}x{Math.Round(overlay.ActualHeight)} " +
+               $"布局尺寸={Math.Round(overlay.Width)}x{Math.Round(overlay.Height)} " +
+               $"Opacity={overlay.Opacity:F2} AllowsTransparency={overlay.AllowsTransparency} 模板={template}";
+    }
+
+    private static string DescribeResources(FrameworkElement overlay)
+    {
+        var values = new List<string>(OverlayResourceKeys.Length);
+        foreach (var (name, key) in OverlayResourceKeys)
+        {
+            object? value = null;
+            try
+            {
+                value = overlay.TryFindResource(key);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+            {
+                values.Add($"{name}=读取异常:{ex.GetType().Name}");
+                continue;
+            }
+
+            values.Add($"{name}={DescribeBrush(value)}");
+        }
+
+        return string.Join(";", values);
+    }
+
+    private static string DescribeBrush(object? value)
+    {
+        if (value is not Brush brush)
+            return value == null ? "null" : value.GetType().Name;
+        if (brush is SolidColorBrush solid)
+            return $"{solid.Color} alpha={solid.Color.A} opacity={brush.Opacity:F2}";
+        return $"{brush.GetType().Name} opacity={brush.Opacity:F2}";
     }
 
     /// <summary>某个元素是否真的拿到了能画出东西的画刷。</summary>
@@ -272,11 +459,11 @@ internal sealed class DockingDragProbe : IDisposable
     /// 却什么都没有。按 Image 数过一轮，门禁里覆盖窗图像=0，说明指示压根不是图片画的。
     /// 与其继续猜是 Path 还是 Rectangle、哪个画刷被主题改没了，不如直接问："画了几个像素"。
     ///
-    /// 按 1/4 缩放渲染，够数像素又不至于在拖动中途分配 4MB。最多渲染两次。
+    /// 按 1/4 缩放渲染，够数像素又不至于在拖动中途分配大块位图。最多取几个阶段样本。
     /// </summary>
-    private void RenderOverlay(Window overlay)
+    private void RenderOverlay(Window overlay, string stage)
     {
-        if (_renders >= 2)
+        if (_renders >= 6)
             return;
 
         try
@@ -299,15 +486,38 @@ internal sealed class DockingDragProbe : IDisposable
             bitmap.CopyPixels(buffer, stride, 0);
 
             var drawn = 0;
+            var blue = 0;
+            var minX = width;
+            var minY = height;
+            var maxX = -1;
+            var maxY = -1;
             var counts = new Dictionary<uint, int>();
-            for (var i = 0; i + 3 < buffer.Length; i += 4)
+            for (var offset = 0; offset + 3 < buffer.Length; offset += 4)
             {
-                if (buffer[i + 3] == 0)
+                var alpha = buffer[offset + 3];
+                if (alpha == 0)
                     continue;
 
                 drawn++;
-                var key = ((uint)buffer[i + 3] << 24) | ((uint)buffer[i + 2] << 16) |
-                          ((uint)buffer[i + 1] << 8) | buffer[i];
+                var pixel = offset / 4;
+                var x = pixel % width;
+                var y = pixel / width;
+                minX = Math.Min(minX, x);
+                minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x);
+                maxY = Math.Max(maxY, y);
+
+                // Pbgra32 stores premultiplied BGRA. Comparing channels is
+                // sufficient for a blue-vs-background diagnostic and avoids
+                // falsely classifying a transparent blue brush as visible.
+                var blueChannel = buffer[offset];
+                var green = buffer[offset + 1];
+                var red = buffer[offset + 2];
+                if (alpha >= 16 && blueChannel > 32 && blueChannel > red * 1.15 && blueChannel > green * 1.05)
+                    blue++;
+
+                var key = ((uint)alpha << 24) | ((uint)red << 16) |
+                          ((uint)green << 8) | blueChannel;
                 counts.TryGetValue(key, out var seen);
                 counts[key] = seen + 1;
             }
@@ -315,15 +525,19 @@ internal sealed class DockingDragProbe : IDisposable
             // 总数无论如何都要记：画了 0 个像素时提前 return 会报出 "0/0"，
             // 分不清"渲染过但全透明"和"根本没渲染"。1.7.9 真机日志就是这么含糊的。
             _totalPixels = width * height;
-            if (drawn <= _drawnPixels)
-                return;
-
-            _drawnPixels = drawn;
+            _bluePixels = Math.Max(_bluePixels, blue);
+            _transparentRatio = $"{1d - (drawn / (double)Math.Max(1, _totalPixels)):P1}";
+            _pixelBounds = maxX < 0 ? "空" : $"({minX},{minY})-({maxX},{maxY})";
+            _pixelSamples = _renders;
+            if (drawn > _drawnPixels)
+                _drawnPixels = drawn;
             if (counts.Count > 0)
             {
                 var top = counts.OrderByDescending(pair => pair.Value).First();
                 _dominant = $"#{top.Key:X8}({top.Value})";
             }
+            AddStage("像素/" + stage,
+                $"实绘={drawn}/{_totalPixels} 蓝色={blue} 边界={_pixelBounds} 主色={_dominant}");
         }
         catch (Exception ex) when (ex is InvalidOperationException or OverflowException or OutOfMemoryException)
         {
@@ -439,7 +653,7 @@ internal sealed class DockingDragProbe : IDisposable
     /// 投放区的普通类，根本不在可视树里；树里那些按钮是 Image/Grid，只有 x:Name 带这个词。
     /// 首版就是按类型名数的，在能正常合并的链路上数出 0，白误报一次。
     /// </summary>
-    private void WalkOverlay(Visual root)
+    private OverlayTreeSnapshot WalkOverlay(Visual root)
     {
         _treeWalks++;
         var total = 0;
@@ -449,6 +663,9 @@ internal sealed class DockingDragProbe : IDisposable
         var imagesWithoutSource = 0;
         var brushed = 0;
         var names = new List<string>();
+        var paths = new List<string>();
+        var contentControls = new List<string>();
+        var templateParts = new List<string>();
         var stack = new Stack<DependencyObject>();
         stack.Push(root);
         while (stack.Count > 0)
@@ -480,6 +697,18 @@ internal sealed class DockingDragProbe : IDisposable
                     if (image.Source == null)
                         imagesWithoutSource++;
                 }
+
+                if (element is Path path && paths.Count < 10)
+                {
+                    paths.Add($"{DisplayName(element)} fill={DescribeBrush(path.Fill)} stroke={DescribeBrush(path.Stroke)} " +
+                              $"size={Math.Round(element.ActualWidth)}x{Math.Round(element.ActualHeight)}");
+                }
+
+                if (element is ContentControl content && contentControls.Count < 10)
+                {
+                    contentControls.Add($"{DisplayName(element)} content={content.Content?.GetType().Name ?? "null"} " +
+                                         $"size={Math.Round(element.ActualWidth)}x{Math.Round(element.ActualHeight)} visible={element.IsVisible}");
+                }
             }
 
             var count = VisualTreeHelper.GetChildrenCount(node);
@@ -499,7 +728,58 @@ internal sealed class DockingDragProbe : IDisposable
 
         _maxImages = Math.Max(_maxImages, images);
         _maxImagesWithoutSource = Math.Max(_maxImagesWithoutSource, imagesWithoutSource);
+
+        var hasTemplate = false;
+        if (root is Control control && control.Template != null)
+        {
+            hasTemplate = true;
+            foreach (var partName in TemplatePartNames)
+            {
+                object? part = null;
+                try
+                {
+                    part = control.Template.FindName(partName, control);
+                }
+                catch (InvalidOperationException)
+                {
+                    // A template can be replaced between ApplyTemplate and
+                    // FindName. Keep the failed part explicit in the trace.
+                }
+
+                templateParts.Add($"{partName}={(part is DependencyObject dependency ? DescribeElement(dependency) : "缺失")}");
+            }
+        }
+
+        return new OverlayTreeSnapshot(
+            hasTemplate,
+            string.Join(";", templateParts),
+            paths.Count == 0 ? "无" : string.Join(" | ", paths),
+            contentControls.Count == 0 ? "无" : string.Join(" | ", contentControls));
     }
+
+    private static string DisplayName(FrameworkElement element)
+        => string.IsNullOrWhiteSpace(element.Name) ? element.GetType().Name : element.Name;
+
+    private static string DescribeElement(DependencyObject element)
+    {
+        if (element is not FrameworkElement framework)
+            return element.GetType().Name;
+        var common = $"{element.GetType().Name} {framework.Visibility} {Math.Round(framework.ActualWidth)}x{Math.Round(framework.ActualHeight)}";
+        return element switch
+        {
+            Path path => common + $" fill={DescribeBrush(path.Fill)} stroke={DescribeBrush(path.Stroke)}",
+            ContentControl content => common + $" content={content.Content?.GetType().Name ?? "null"}",
+            Border border => common + $" bg={DescribeBrush(border.Background)} border={DescribeBrush(border.BorderBrush)}",
+            Control control => common + $" bg={DescribeBrush(control.Background)} border={DescribeBrush(control.BorderBrush)}",
+            _ => common,
+        };
+    }
+
+    private readonly record struct OverlayTreeSnapshot(
+        bool HasTemplate,
+        string TemplateParts,
+        string Paths,
+        string ContentControls);
 
     /// <summary>
     /// 覆盖窗为 null 时最可能的原因是命中测试没落在管理器上。AvalonDock 用
@@ -558,15 +838,20 @@ internal sealed class DockingDragProbe : IDisposable
             return "断在第 6 环——覆盖窗一个非透明像素都没画，且字典数为 0：主题字典没挂上去";
         if (_renders > 0 && _drawnPixels == 0 && _maxBrushed == 0)
             return $"断在第 6 环——字典有 {_overlayDicts} 份，但覆盖窗里没有任何一个元素拿到画刷：" +
-                   "按键查画刷这一步失败了（无画刷样本见上一行）";
+                   "按键查画刷这一步失败了（模板部件/资源键详情见阶段日志）";
+        if (_renders > 0 && _drawnPixels == 0 && _bluePixels == 0)
+            return "断在第 6 环——覆盖窗有非透明样本但没有蓝色像素：候选区可能只有底色/边框，" +
+                   "箭头或星形轮廓没有绘制";
         if (_renders > 0 && _drawnPixels == 0)
             return $"断在第 6 环——有 {_maxBrushed} 个元素拿到了画刷，渲染出来仍是 0 像素：" +
                    "画刷有了但没画上，看不透明度与透明窗设置";
         if (_drawnPixels > 0 && _overlayZ >= 0 && _mainZ >= 0 && _overlayZ > _mainZ)
             return $"断在第 6 环——覆盖窗画了 {_drawnPixels} 个像素，但 Z 序在主窗体之后" +
                    $"（{_overlayZ} > {_mainZ}），被主窗体压住了";
+        if (_drawnPixels > 0 && _bluePixels == 0)
+            return $"六环到达绘制阶段但颜色不对——覆盖窗画了 {_drawnPixels} 个像素，没有检测到蓝色候选控件";
         if (_drawnPixels > 0)
-            return $"六环齐全——覆盖窗确实画了 {_drawnPixels} 个像素且在主窗体之上";
+            return $"六环齐全——覆盖窗确实画了 {_drawnPixels} 个像素（蓝色 {_bluePixels}）且在主窗体之上";
         return "五环齐全但未取到渲染样本";
     }
 

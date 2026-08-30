@@ -63,6 +63,7 @@ internal sealed class DockingDragSession(
             (DockingDragState.Pressed, DockingDragState.ThresholdReached) => true,
             (DockingDragState.Pressed, DockingDragState.Cancelled) => true,
             (DockingDragState.ThresholdReached, DockingDragState.FloatRequested) => true,
+            (DockingDragState.ThresholdReached, DockingDragState.WindowMoving) => true,
             (DockingDragState.ThresholdReached, DockingDragState.Cancelled) => true,
             (DockingDragState.FloatRequested, DockingDragState.FloatingReady) => true,
             (DockingDragState.FloatRequested, DockingDragState.Cancelled) => true,

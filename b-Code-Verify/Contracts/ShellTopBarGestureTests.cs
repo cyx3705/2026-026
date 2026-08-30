@@ -63,6 +63,29 @@ public sealed class ShellTopBarGestureTests
     }
 
     [Fact]
+    public void WindowDragSessionReachesMovingOnlyAfterThreshold()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var session = new DockingDragSession(
+                3,
+                DockingDragKind.Window,
+                new Border(),
+                new Point(10, 10),
+                new Point(12, 8),
+                null,
+                new Window(),
+                "floating:modules",
+                false,
+                false);
+
+            Assert.True(session.TryTransition(DockingDragState.ThresholdReached));
+            Assert.True(session.TryTransition(DockingDragState.WindowMoving));
+            Assert.Equal(DockingDragState.WindowMoving, session.State);
+        });
+    }
+
+    [Fact]
     public void WindowDragOperationsHaveOneOwner()
     {
         var root = FindSourceRoot();

@@ -683,7 +683,7 @@
         <member name="M:HistoryAurora.Shell.Docking.DockingDragProbe.HasPaint(System.Windows.FrameworkElement)">
             <summary>某个元素是否真的拿到了能画出东西的画刷。</summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Docking.DockingDragProbe.RenderOverlay(System.Windows.Window)">
+        <member name="M:HistoryAurora.Shell.Docking.DockingDragProbe.RenderOverlay(System.Windows.Window,System.String)">
              <summary>
              把覆盖窗渲染成位图，数非透明像素。
             
@@ -692,7 +692,7 @@
              却什么都没有。按 Image 数过一轮，门禁里覆盖窗图像=0，说明指示压根不是图片画的。
              与其继续猜是 Path 还是 Rectangle、哪个画刷被主题改没了，不如直接问："画了几个像素"。
             
-             按 1/4 缩放渲染，够数像素又不至于在拖动中途分配 4MB。最多渲染两次。
+             按 1/4 缩放渲染，够数像素又不至于在拖动中途分配大块位图。最多取几个阶段样本。
              </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Docking.DockingDragProbe.MeasureZOrder(System.Windows.Window)">
@@ -827,6 +827,14 @@
         </member>
         <member name="M:HistoryAurora.Shell.Docking.DockingHost.RatioOfSubtree(AvalonDock.Layout.ILayoutPanelElement)">
             <summary>分区内第一个已注册窗口的目标比例(分区尺寸由其代表)。</summary>
+        </member>
+        <member name="T:HistoryAurora.Shell.Docking.DockingOverlayResourceRepair">
+            <summary>
+            Supplies the docking overlay's component-resource brushes in the overlay
+            window itself. AvalonDock normally inherits these from its theme dictionary,
+            but a module loaded into a collectible context can leave DynamicResource
+            references bound to a transparent palette fallback.
+            </summary>
         </member>
         <member name="T:HistoryAurora.Shell.Docking.FileLayoutStore">
             <summary>当前布局为 layout/current.layout.xml，命名方案为 layout/&lt;名称&gt;.layout.xml。</summary>
