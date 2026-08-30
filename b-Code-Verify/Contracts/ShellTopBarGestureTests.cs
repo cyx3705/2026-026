@@ -79,6 +79,21 @@ public sealed class ShellTopBarGestureTests
         Assert.Contains("ReleaseCapture(", driver, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public void FloatingTabHeaderCanStartWindowDragOnlyInsideAFloatingWindow(
+        bool isFloatingWindow,
+        bool sourceIsTabItem,
+        bool expected)
+        => Assert.Equal(
+            expected,
+            ShellTopBarCoordinator.ShouldAllowFloatingTabWindowDrag(
+                isFloatingWindow,
+                sourceIsTabItem));
+
     [Fact]
     public void FastDoubleClickAcceptsExactlyTwoHundredFiftyMilliseconds()
     {

@@ -12,7 +12,7 @@ using HistoryVulcan.Core.Logging;
 namespace HistoryAurora.Shell.Panels;
 
 /// <summary>
-/// 面板组件（REQ-UI-008）。按声明构建三种小组件——文字、文本框、按钮——
+/// 面板组件（REQ-UI-008）。按声明构建文字、文本框、按钮、开关和来源选择器。
 /// 外观全部由组件决定，声明侧只说「是什么」和「哪几个是一行」。
 ///
 /// 按钮的落点是**动作 id**，不是指令：点击时向 <see cref="ActionRegistry"/> 现取声明，
@@ -197,6 +197,18 @@ public sealed partial class PanelView : UserControl
                     widget.Flex));
                 return;
 
+            case PanelWidgetKind.Switch:
+                if (Label(widget) is { Length: > 0 } switchLabel)
+                    cells.Add(new BoardCell(BuildLabel(switchLabel), null, false));
+                cells.Add(new BoardCell(BuildSwitch(widget), widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth, widget.Flex));
+                return;
+
+            case PanelWidgetKind.SourcePicker:
+                if (Label(widget) is { Length: > 0 } sourceLabel)
+                    cells.Add(new BoardCell(BuildLabel(sourceLabel), null, false));
+                cells.Add(new BoardCell(BuildSourcePicker(widget), widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth, widget.Flex));
+                return;
+
             default:
                 // 校验器本该已经拦下；真漏到这里也要看得见，不静默跳过一格。
                 cells.Add(new BoardCell(Warning("无法识别的小组件: " + widget.Kind), null, false));
@@ -271,8 +283,76 @@ public sealed partial class PanelView : UserControl
         _setters[id] = value => box.Text = value;
         if (publish != null)
             box.TextChanged += (_, _) => PublishIfDeclared(publish, id);
+        if (!string.IsNullOrWhiteSpace(widget.CommitAction))
+        {
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key != System.Windows.Input.Key.Enter)
+                    return;
+                e.Handled = true;
+                Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = box.Text });
+            };
+            box.LostFocus += (_, _) => Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = box.Text });
+        }
         return box;
     }
+
+    private FrameworkElement BuildSwitch(PanelWidget widget)
+    {
+        var toggle = new System.Windows.Controls.Primitives.ToggleButton
+        {
+            Content = widget.Text ?? widget.Label ?? widget.Id,
+            IsChecked = ParseBoolean(widget.Value),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        toggle.SetResourceReference(StyleProperty, "Aurora.Panel.Switch");
+        _getters[widget.Id!] = () => (toggle.IsChecked == true).ToString().ToLowerInvariant();
+        _setters[widget.Id!] = value => toggle.IsChecked = ParseBoolean(value);
+        var action = widget.Action ?? widget.CommitAction;
+        if (!string.IsNullOrWhiteSpace(action))
+            toggle.Click += (_, _) => Fire(action, new Dictionary<string, string>
+            {
+                ["value"] = (toggle.IsChecked == true).ToString().ToLowerInvariant(),
+            });
+        return toggle;
+    }
+
+    private FrameworkElement BuildSourcePicker(PanelWidget widget)
+    {
+        var picker = new AuroraSourcePicker { Text = widget.Value ?? "" };
+        picker.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
+        _getters[widget.Id!] = () => picker.Text;
+        _setters[widget.Id!] = value => picker.Text = value;
+        picker.CommitAsync = value =>
+        {
+            Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = value });
+            return Task.CompletedTask;
+        };
+        picker.SelectAsync = async () =>
+        {
+            try
+            {
+                var result = await _bus.ExecuteAsync(widget.SelectCommand!, "UI").ConfigureAwait(true);
+                if (!result.Success)
+                    return null;
+                return result.Data as string;
+            }
+            catch (Exception ex)
+            {
+                _log.Log(ShellLogLevel.Warn, "panel", $"面板 {_definition.Id}: 来源选择失败 {ex.Message}");
+                return null;
+            }
+        };
+        return picker;
+    }
+
+    private static bool ParseBoolean(string? value)
+        => value is not null && (value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("on", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("开启", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("开", StringComparison.OrdinalIgnoreCase));
 
     private FrameworkElement BuildButton(PanelWidget widget)
     {
@@ -425,7 +505,7 @@ public sealed partial class PanelView : UserControl
     /// 点击时**现取**声明，而不是构建时把指令名固化进闭包：
     /// 模块热重载后声明会变，固化下来的那份就是下一个「点了没反应」。
     /// </summary>
-    private void Fire(string actionId)
+    private void Fire(string actionId, IReadOnlyDictionary<string, string>? overrides = null)
     {
         var binding = _actions.Resolve(actionId);
         if (!binding.Ok)
@@ -438,7 +518,9 @@ public sealed partial class PanelView : UserControl
             binding.Action!,
             SelectionChannels.Chain(
                 _channels,
-                control => _getters.TryGetValue(control, out var getter) ? getter() : null),
+                control => overrides != null && overrides.TryGetValue(control, out var value)
+                    ? value
+                    : _getters.TryGetValue(control, out var getter) ? getter() : null),
             out var error);
         if (text == null)
         {

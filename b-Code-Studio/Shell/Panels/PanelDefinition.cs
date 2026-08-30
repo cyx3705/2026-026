@@ -81,7 +81,7 @@ public sealed class PanelRow
     };
 }
 
-/// <summary>面板小组件的种类。这三种就是全部，不再有第四种。</summary>
+/// <summary>面板小组件的种类。</summary>
 public enum PanelWidgetKind
 {
     /// <summary>一段说明文字，不参与取值。</summary>
@@ -92,6 +92,12 @@ public enum PanelWidgetKind
 
     /// <summary>按钮：绑一个由模块声明的动作。</summary>
     Button,
+
+    /// <summary>立即生效的布尔开关。</summary>
+    Switch,
+
+    /// <summary>可编辑、可双击打开文件或目录选择器的来源输入框。</summary>
+    SourcePicker,
 }
 
 /// <summary>文本框的两种形态。</summary>
@@ -148,6 +154,12 @@ public sealed class PanelWidget
 
     /// <summary>初值。select 时若不在候选内则退回第一项。</summary>
     public string? Value { get; set; }
+
+    /// <summary>textbox / switch / sourcePicker 专用：值提交时绑定的动作 id。</summary>
+    public string? CommitAction { get; set; }
+
+    /// <summary>sourcePicker 专用：双击时执行的选择指令名。</summary>
+    public string? SelectCommand { get; set; }
 
     /// <summary>
     /// 本元素的**最窄宽度**（像素，REQ-UI-060）。
@@ -208,6 +220,8 @@ public sealed class PanelWidget
         "text" => PanelWidgetKind.Text,
         "textbox" => PanelWidgetKind.TextBox,
         "button" => PanelWidgetKind.Button,
+        "switch" => PanelWidgetKind.Switch,
+        "sourcepicker" or "source-picker" or "source" => PanelWidgetKind.SourcePicker,
         _ => null,
     };
 
@@ -280,7 +294,7 @@ public static class PanelDefinitionValidator
     {
         if (widget.ResolvedKind is not { } kind)
             return PanelDefinitionParse.Fail(
-                $"面板 {definition.Id} 含无法识别的小组件 {widget.Kind}；只支持 text / textbox / button");
+                $"面板 {definition.Id} 含无法识别的小组件 {widget.Kind}；只支持 text / textbox / button / switch / sourcePicker");
 
         // 最窄宽度是像素，负数与 0 都排不出东西来；这类值写错的症状是「那一格没了」。
         if (widget.MinWidth is { } min && (double.IsNaN(min) || min <= 0))
@@ -326,6 +340,34 @@ public static class PanelDefinitionValidator
                 if (widget.EnabledWhen != null)
                     return PanelDefinitionParse.Fail(
                         $"面板 {definition.Id} 的文本框 {widget.Id} 不支持 enabledWhen；它只属于按钮");
+                if (widget.SelectCommand != null)
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的文本框 {widget.Id} 不支持 selectCommand；它只属于 sourcePicker");
+                break;
+
+            case PanelWidgetKind.Switch:
+                if (string.IsNullOrWhiteSpace(widget.Id))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的开关缺少 id");
+                if (!ids.Add(widget.Id!))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的控件 id 重复: {widget.Id}");
+                if (widget.Options != null || widget.OptionsSource != null || widget.Follows != null
+                    || widget.Channel != null || widget.EnabledWhen != null || widget.SelectCommand != null)
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的开关 {widget.Id} 只支持 value / action / commitAction");
+                if (string.IsNullOrWhiteSpace(widget.Action) && string.IsNullOrWhiteSpace(widget.CommitAction))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的开关 {widget.Id} 缺少 action");
+                break;
+
+            case PanelWidgetKind.SourcePicker:
+                if (string.IsNullOrWhiteSpace(widget.Id))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器缺少 id");
+                if (!ids.Add(widget.Id!))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的控件 id 重复: {widget.Id}");
+                if (string.IsNullOrWhiteSpace(widget.SelectCommand))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 缺少 selectCommand");
+                if (string.IsNullOrWhiteSpace(widget.CommitAction))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 缺少 commitAction");
+                if (widget.Options != null || widget.OptionsSource != null || widget.Follows != null
+                    || widget.Channel != null || widget.Action != null || widget.EnabledWhen != null)
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 只支持 value / selectCommand / commitAction");
                 break;
 
             case PanelWidgetKind.Button:

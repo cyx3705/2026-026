@@ -130,18 +130,24 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     public void HandlePaneMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
     {
+        var source = e.OriginalSource as DependencyObject;
+        var floating = FindAncestor<LayoutFloatingWindowControl>(source);
+        var floatingTab = ShouldAllowFloatingTabWindowDrag(
+            floating != null,
+            FindAncestor<DependencyObject>(source, item =>
+                item is LayoutAnchorableTabItem or LayoutDocumentTabItem) != null);
         if (e.ChangedButton != MouseButton.Left ||
-            IsInteractiveInPaneHeader(e.OriginalSource as DependencyObject) ||
+            (IsInteractiveInPaneHeader(source) && !floatingTab) ||
             sender is not FrameworkElement pane ||
-            !IsPaneHeaderSource(e.OriginalSource as DependencyObject) ||
+            !IsPaneHeaderSource(source) ||
             !TryResolvePageId(pane, out var id))
         {
             return;
         }
 
-        if (FindFloatingWindow(id) is { } floating)
+        if ((floating ?? FindFloatingWindow(id)) is { } floatingWindow)
         {
-            BeginHostWindowGesture(floating, pane, $"floating:{id}", e);
+            BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
             return;
         }
 
@@ -780,6 +786,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     internal static bool ShouldDelayHostDrag(bool isMainWindow, WindowState state)
         => !isMainWindow || state == WindowState.Maximized;
+
+    internal static bool ShouldAllowFloatingTabWindowDrag(
+        bool isFloatingWindow,
+        bool sourceIsTabItem)
+        => isFloatingWindow && sourceIsTabItem;
 
     private void CancelDragSession(string reason)
     {
