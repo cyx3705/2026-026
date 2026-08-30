@@ -125,8 +125,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost
         // 覆盖窗(拖动浮窗时那组蓝色方位指示)是独立 Window,它构造时会照着
         // Theme.GetResourceUri() 再解析一遍字典;那条路在宿主里不成立,失败又不抛,
         // 于是覆盖窗带着 0 份字典活下来、一个像素都不画。DictionaryTheme 直接传实例。
-        DockManager.Theme = new AuroraTheme(
-            (ResourceDictionary)Resources["AuroraDockTheme"]);
+        var dockTheme = (ResourceDictionary)Resources["AuroraDockTheme"];
+        // 覆盖窗会在拖动开始时从这份字典建立独立 Window。先在当前
+        // Aurora 装载上下文中固化停靠画刷，避免热重载后第一帧沿用
+        // AvalonDock 的透明回退值；拖动途中只读，不再改模板资源。
+        DockingOverlayResourceRepair.EnsureThemeDictionary(dockTheme);
+        DockManager.Theme = new AuroraTheme(dockTheme);
 
         // UI-08:上次选择的主题先于任何界面成型生效,避免启动瞬间闪一下浅色
         ApplyTheme(settings.Get(ThemeSettingsKey) ?? ThemeLight, persist: false);

@@ -12,6 +12,27 @@ namespace HistoryAurora.Shell.Docking;
 /// </summary>
 internal static class DockingOverlayResourceRepair
 {
+    /// <summary>
+    /// 固化当前 Aurora 实例的停靠画刷字典。
+    ///
+    /// AvalonDock 会在拖动开始时从 ThemeResourceDictionary 建独立的覆盖窗。
+    /// 这里必须在 DockingManager.Theme 赋值前完成；拖动途中再改字典会让
+    /// AvalonDock 正在遍历的投放树失效，而且热重载后的第一帧已经太迟。
+    /// </summary>
+    internal static IReadOnlyList<string> EnsureThemeDictionary(ResourceDictionary theme)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+
+        var changed = new List<string>();
+        foreach (var (name, key, fallback) in Fallbacks(false))
+            PutIfTransparent(theme, key, fallback, name, changed);
+
+        foreach (var merged in theme.MergedDictionaries)
+            EnsureThemeDictionary(merged, changed);
+
+        return changed;
+    }
+
     internal static DockingOverlayResourceRepairResult Ensure(FrameworkElement overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -44,6 +65,38 @@ internal static class DockingOverlayResourceRepair
         return new DockingOverlayResourceRepairResult(dark, changed);
     }
 
+    private static void EnsureThemeDictionary(ResourceDictionary dictionary, ICollection<string> changed)
+    {
+        foreach (var (name, key, fallback) in Fallbacks(false))
+            PutIfTransparent(dictionary, key, fallback, name, changed);
+
+        foreach (var merged in dictionary.MergedDictionaries)
+            EnsureThemeDictionary(merged, changed);
+    }
+
+    private static IEnumerable<(string Name, object Key, Brush Fallback)> Fallbacks(bool dark)
+    {
+        yield return (nameof(ResourceKeys.DockingButtonBackgroundBrushKey),
+            ResourceKeys.DockingButtonBackgroundBrushKey, Brushes.Transparent);
+        yield return (nameof(ResourceKeys.DockingButtonForegroundBrushKey),
+            ResourceKeys.DockingButtonForegroundBrushKey,
+            new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)));
+        yield return (nameof(ResourceKeys.DockingButtonForegroundArrowBrushKey),
+            ResourceKeys.DockingButtonForegroundArrowBrushKey,
+            new SolidColorBrush(dark ? Color.FromRgb(0x93, 0xC5, 0xFD) : Color.FromRgb(0x1D, 0x4E, 0xD8)));
+        yield return (nameof(ResourceKeys.DockingButtonStarBorderBrushKey),
+            ResourceKeys.DockingButtonStarBorderBrushKey,
+            new SolidColorBrush(dark ? Color.FromArgb(0xA0, 0x60, 0xA5, 0xFA) : Color.FromArgb(0x80, 0x60, 0xA5, 0xFA)));
+        yield return (nameof(ResourceKeys.DockingButtonStarBackgroundBrushKey),
+            ResourceKeys.DockingButtonStarBackgroundBrushKey, Brushes.Transparent);
+        yield return (nameof(ResourceKeys.PreviewBoxBorderBrushKey),
+            ResourceKeys.PreviewBoxBorderBrushKey,
+            new SolidColorBrush(dark ? Color.FromRgb(0x60, 0xA5, 0xFA) : Color.FromRgb(0x25, 0x63, 0xEB)));
+        yield return (nameof(ResourceKeys.PreviewBoxBackgroundBrushKey),
+            ResourceKeys.PreviewBoxBackgroundBrushKey,
+            new SolidColorBrush(dark ? Color.FromArgb(0x70, 0x3B, 0x82, 0xF6) : Color.FromArgb(0x60, 0x3B, 0x82, 0xF6)));
+    }
+
     private static void PutIfTransparent(
         FrameworkElement overlay,
         object key,
@@ -60,6 +113,40 @@ internal static class DockingOverlayResourceRepair
 
         overlay.Resources[actualKey] = fallback;
         changed.Add(name);
+    }
+
+    private static void PutIfTransparent(
+        ResourceDictionary dictionary,
+        object key,
+        Brush fallback,
+        string name,
+        ICollection<string> changed)
+    {
+        var actualKey = FindEquivalentComponentKey(dictionary, key) ?? key;
+        var value = FindResource(dictionary, actualKey);
+        if (value is Brush brush && brush.Opacity > 0 &&
+            (brush is not SolidColorBrush solid || solid.Color.A > 0))
+        {
+            return;
+        }
+
+        dictionary[actualKey] = fallback;
+        changed.Add(name);
+    }
+
+    private static object? FindResource(ResourceDictionary dictionary, object key)
+    {
+        if (dictionary.Contains(key))
+            return dictionary[key];
+
+        foreach (var merged in dictionary.MergedDictionaries)
+        {
+            var found = FindResource(merged, key);
+            if (found != null)
+                return found;
+        }
+
+        return null;
     }
 
     private static object? FindEquivalentComponentKey(ResourceDictionary dictionary, object requested)
