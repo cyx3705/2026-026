@@ -3,11 +3,11 @@ using HistoryVulcan.Services;
 
 namespace HistoryAurora.Shell.Docking;
 
-/// <summary>当前布局为 layout/current.layout.xml，命名方案为 layout/&lt;名称&gt;.layout.xml。</summary>
+/// <summary>当前布局为 layout/layout.v1.json，命名方案为 layout/&lt;名称&gt;.layout.v1.json。</summary>
 internal sealed class FileLayoutStore : ILayoutStore
 {
-    private const string Extension = ".layout.xml";
-    private const string CurrentName = "current";
+    private const string Extension = ".layout.v1.json";
+    private const string CurrentName = "layout";
 
     private readonly string _dir;
 
@@ -37,7 +37,36 @@ internal sealed class FileLayoutStore : ILayoutStore
     }
 
     public void WriteNamed(string name, string payload)
-        => File.WriteAllText(PathOf(name), payload);
+    {
+        var path = PathOf(name);
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(
+                       temporary,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 16 * 1024,
+                       FileOptions.WriteThrough))
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+            {
+                writer.Write(payload);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(path))
+                File.Replace(temporary, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            else
+                File.Move(temporary, path);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
+    }
 
     public IReadOnlyList<string> ListNamed()
         => Directory.EnumerateFiles(_dir, "*" + Extension)
@@ -52,6 +81,10 @@ internal sealed class FileLayoutStore : ILayoutStore
             throw new ArgumentException($"非法布局名: {name}", nameof(name));
 
         Directory.CreateDirectory(_dir);
-        return Path.Combine(_dir, name + Extension);
+        return Path.Combine(
+            _dir,
+            string.Equals(name, CurrentName, StringComparison.OrdinalIgnoreCase)
+                ? "layout.v1.json"
+                : name + Extension);
     }
 }

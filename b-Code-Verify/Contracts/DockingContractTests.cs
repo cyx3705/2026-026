@@ -14,7 +14,6 @@ using HistoryAurora.Shell;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
-using AvalonDock.Layout.Serialization;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -145,37 +144,12 @@ public sealed class DockingContractTests
     }
 
     [Fact]
-    public void RestoreMovesLegacyCommandCatalogIntoEmptyCenter()
+    public void InvalidLegacyXmlFallsBackToTheCurrentDefaultLayout()
     {
         UiTestHost.RunSta(() =>
         {
             var store = new MemoryLayoutStore();
-            var oldManager = new DockingManager();
-            var emptyBackground = new LayoutDocumentPane
-            {
-                DockWidth = new GridLength(0.01, GridUnitType.Pixel),
-            };
-            var oldCommandCatalog = new LayoutAnchorable
-            {
-                ContentId = StandardWindowIds.Mcp,
-                Title = "命令集",
-                Content = new Border(),
-                CanClose = false,
-                CanDockAsTabbedDocument = false,
-            };
-            var oldCenterPane = new LayoutAnchorablePane(oldCommandCatalog) { DockWidth = new GridLength(1, GridUnitType.Star) };
-            var oldCenterRegion = new LayoutPanel(emptyBackground) { Orientation = Orientation.Horizontal };
-            oldCenterRegion.Children.Add(oldCenterPane);
-            var oldCenterColumn = new LayoutPanel(oldCenterRegion) { Orientation = Orientation.Vertical };
-            oldManager.Layout = new LayoutRoot
-            {
-                RootPanel = new LayoutPanel(oldCenterColumn) { Orientation = Orientation.Horizontal },
-            };
-            using (var writer = new StringWriter())
-            {
-                new XmlLayoutSerializer(oldManager).Serialize(writer);
-                store.WriteCurrent(writer.ToString());
-            }
+            store.WriteCurrent("<LayoutRoot />");
 
             var manager = new DockingManager();
             var host = new DockingHost(
@@ -197,7 +171,7 @@ public sealed class DockingContractTests
     }
 
     [Fact]
-    public void RestoreNestedLegacyLayoutMovesOnlyCommandCatalog()
+    public void RestoreSkipsRemovedPageAndAddsTheCurrentCommandCatalog()
     {
         UiTestHost.RunSta(() =>
         {
@@ -213,7 +187,7 @@ public sealed class DockingContractTests
             {
                 UiTestHost.Pump();
                 legacyHost.SaveCurrentLayout();
-                store.ReplaceCurrent("legacy-command-catalog", StandardWindowIds.Mcp);
+                store.ReplaceCurrent("legacy-command-catalog", "removed-command-catalog");
             }
             finally
             {
@@ -544,6 +518,420 @@ public sealed class DockingContractTests
                 mainPane.Children.OfType<LayoutDocument>(),
                 item => item.ContentId == StandardWindowIds.Mcp);
         });
+    }
+
+    [Fact]
+    public void JsonSnapshotPreservesNestedSplitsTabsSelectionAndMultipleFloatingWindows()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("left.top", DockSide.Left, 0.2),
+                Tool("left.bottom", DockSide.Left, 0.2),
+                Tool("right.one", DockSide.Right, 0.25),
+                Tool("right.two", DockSide.Right, 0.25),
+                Tool("float.one", DockSide.Right, 0.25),
+                Tool("float.two", DockSide.Right, 0.25),
+            };
+            double savedFloatTwoWidth = 0;
+            double savedFloatTwoHeight = 0;
+            double savedLeftTopHeight = 0;
+            GridUnitType savedLeftTopHeightUnit = GridUnitType.Auto;
+            var first = ShowHost(descriptors, store, out var firstHost);
+            try
+            {
+                var manager = (DockingManager)first.Content;
+                var command = manager.Layout.Descendents().OfType<LayoutDocument>()
+                    .Single(item => item.ContentId == StandardWindowIds.Mcp);
+                var anchorables = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .ToDictionary(item => item.ContentId!);
+                foreach (var item in anchorables.Values.Cast<LayoutContent>().Append(command))
+                    ((ILayoutContainer)item.Parent!).RemoveChild(item);
+
+                var leftTop = new LayoutAnchorablePane(anchorables["left.top"])
+                {
+                    DockHeight = new GridLength(0.35, GridUnitType.Star),
+                };
+                var leftBottom = new LayoutAnchorablePane(anchorables["left.bottom"])
+                {
+                    DockHeight = new GridLength(0.65, GridUnitType.Star),
+                };
+                var leftColumn = new LayoutPanel(leftTop)
+                {
+                    Orientation = Orientation.Vertical,
+                    DockWidth = new GridLength(0.22, GridUnitType.Star),
+                };
+                leftColumn.Children.Add(leftBottom);
+
+                var centerPane = new LayoutDocumentPane(command);
+                var centerColumn = new LayoutPanel(centerPane)
+                {
+                    Orientation = Orientation.Vertical,
+                    DockWidth = new GridLength(0.53, GridUnitType.Star),
+                };
+                var rightPane = new LayoutAnchorablePane(anchorables["right.one"])
+                {
+                    DockWidth = new GridLength(0.25, GridUnitType.Star),
+                };
+                rightPane.Children.Add(anchorables["right.two"]);
+                rightPane.SelectedContentIndex = 1;
+
+                var rootPanel = new LayoutPanel(leftColumn) { Orientation = Orientation.Horizontal };
+                rootPanel.Children.Add(centerColumn);
+                rootPanel.Children.Add(rightPane);
+                var root = new LayoutRoot { RootPanel = rootPanel, ActiveContent = anchorables["right.two"] };
+                AddFloating(root, anchorables["float.one"], 1_000_000, 1_000_000, 720, 510);
+                AddFloating(root, anchorables["float.two"], 120, 90, 540, 360);
+                manager.Layout = root;
+                manager.UpdateLayout();
+                UiTestHost.Pump();
+                savedFloatTwoWidth = anchorables["float.two"].FloatingWidth;
+                savedFloatTwoHeight = anchorables["float.two"].FloatingHeight;
+                savedLeftTopHeight = leftTop.DockHeight.Value;
+                savedLeftTopHeightUnit = leftTop.DockHeight.GridUnitType;
+
+                firstHost.SaveCurrentLayout();
+                var payload = Assert.IsType<string>(store.ReadCurrent());
+                Assert.StartsWith("{", payload, StringComparison.Ordinal);
+                Assert.Contains("\"schemaVersion\": 1", payload, StringComparison.Ordinal);
+                Assert.DoesNotContain("AvalonDock", payload, StringComparison.Ordinal);
+                Assert.DoesNotContain("$type", payload, StringComparison.Ordinal);
+            }
+            finally
+            {
+                first.Close();
+            }
+
+            var restored = ShowHost(descriptors, store, out _);
+            try
+            {
+                UiTestHost.Pump();
+                var manager = (DockingManager)restored.Content;
+                var leftTop = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Single(item => item.ContentId == "left.top");
+                var leftBottom = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Single(item => item.ContentId == "left.bottom");
+                Assert.NotSame(leftTop.Parent, leftBottom.Parent);
+                Assert.Same(leftTop.Parent!.Parent, leftBottom.Parent!.Parent);
+                Assert.Equal(
+                    Orientation.Vertical,
+                    Assert.IsType<LayoutPanel>(leftTop.Parent.Parent).Orientation);
+                var restoredLeftTopPane = Assert.IsType<LayoutAnchorablePane>(leftTop.Parent);
+                Assert.Equal(savedLeftTopHeightUnit, restoredLeftTopPane.DockHeight.GridUnitType);
+                Assert.InRange(Math.Abs(restoredLeftTopPane.DockHeight.Value - savedLeftTopHeight), 0, 0.01);
+
+                var right = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Where(item => item.ContentId is "right.one" or "right.two")
+                    .ToArray();
+                Assert.Equal(["right.one", "right.two"], right.Select(item => item.ContentId));
+                var rightPane = Assert.IsType<LayoutAnchorablePane>(right[0].Parent);
+                Assert.Same(rightPane, right[1].Parent);
+                Assert.Equal("right.two", rightPane.SelectedContent?.ContentId);
+
+                Assert.Equal(2, manager.Layout.FloatingWindows.Count);
+                var floating = manager.Layout.FloatingWindows
+                    .SelectMany(window => window.Descendents().OfType<LayoutAnchorable>())
+                    .ToDictionary(item => item.ContentId!);
+                Assert.Equal(2, floating.Count);
+                Assert.InRange(
+                    floating["float.one"].FloatingLeft,
+                    SystemParameters.VirtualScreenLeft,
+                    SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth);
+                Assert.InRange(
+                    Math.Abs(floating["float.two"].FloatingWidth - savedFloatTwoWidth), 0, 1);
+                Assert.InRange(
+                    Math.Abs(floating["float.two"].FloatingHeight - savedFloatTwoHeight), 0, 1);
+            }
+            finally
+            {
+                restored.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void SnapshotPlacementWaitsForALateRegisteredPage()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var savedDescriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("right.leader", DockSide.Right, 0.3),
+                Tool("module.late", DockSide.Right, 0.3),
+            };
+            var first = new DockingHost(
+                new DockingManager(), savedDescriptors, store, new NullLog());
+            first.Initialize();
+            first.Dock("module.late", DockSide.Tab, targetId: "right.leader");
+            first.SaveCurrentLayout();
+
+            var manager = new DockingManager();
+            var restored = new DockingHost(
+                manager,
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("right.leader", DockSide.Right, 0.3),
+                ],
+                store,
+                new NullLog());
+            restored.Initialize();
+            restored.RegisterWindow(Tool("module.late", DockSide.Left, 0.1), "module:test");
+
+            var leader = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.leader");
+            var late = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "module.late");
+            Assert.Same(leader.Parent, late.Parent);
+            Assert.Equal(DockSide.Right, restored.ListWindows().Single(item => item.Id == "module.late").Side);
+        });
+    }
+
+    [Fact]
+    public void MissingPageIsCollapsedAndCanClaimItsSavedPlacementLater()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var source = new DockingHost(
+                new DockingManager(),
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("module.late", DockSide.Left, 0.2),
+                ],
+                store,
+                new NullLog());
+            source.Initialize();
+            source.SaveCurrentLayout();
+
+            var manager = new DockingManager();
+            var restored = new DockingHost(
+                manager,
+                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
+                store,
+                new NullLog());
+            restored.Initialize();
+
+            Assert.Empty(manager.Layout.RootPanel.Descendents().OfType<LayoutAnchorablePane>());
+            restored.RegisterWindow(Tool("module.late", DockSide.Right, 0.4), "module:test");
+            Assert.Equal(
+                DockSide.Left,
+                restored.ListWindows().Single(item => item.Id == "module.late").Side);
+        });
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{not-json")]
+    public void MissingOrCorruptSnapshotFallsBackToPlacementsWithoutDeletingIt(string? payload)
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var settings = new MemorySettings();
+            settings.Set(
+                "layout.placements",
+                "{\"right.leader\":{\"Side\":1,\"Ratio\":0.31,\"Hidden\":false,\"TabTarget\":null}," +
+                "\"right.follower\":{\"Side\":4,\"Ratio\":0.31,\"Hidden\":false,\"TabTarget\":\"right.leader\"}," +
+                "\"right.hidden\":{\"Side\":4,\"Ratio\":0.31,\"Hidden\":true,\"TabTarget\":\"right.leader\"}}");
+            var store = new MemoryLayoutStore();
+            if (payload != null)
+                store.WriteCurrent(payload);
+            var manager = new DockingManager();
+            var host = new DockingHost(
+                manager,
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("right.leader", DockSide.Left, 0.2),
+                    Tool("right.follower", DockSide.Left, 0.2),
+                    Tool("right.hidden", DockSide.Left, 0.2),
+                ],
+                store,
+                new NullLog(),
+                settings);
+
+            host.Initialize();
+
+            var leader = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.leader");
+            var follower = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.follower");
+            Assert.Equal(DockSide.Right, host.ListWindows().Single(item => item.Id == "right.leader").Side);
+            Assert.Same(leader.Parent, follower.Parent);
+            Assert.False(host.ListWindows().Single(item => item.Id == "right.hidden").IsVisible);
+
+            host.Show("right.hidden");
+            var hidden = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.hidden");
+            Assert.Same(leader.Parent, hidden.Parent);
+            Assert.Equal(payload, store.ReadCurrent());
+        });
+    }
+
+    [Fact]
+    public void AutoHiddenGroupsRoundTripWithoutXmlSerialization()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("details", DockSide.Right, 0.3),
+            };
+            var first = ShowHost(descriptors, store, out var firstHost);
+            try
+            {
+                firstHost.ToggleAutoHide("details");
+                UiTestHost.Pump();
+                var manager = (DockingManager)first.Content;
+                Assert.True(manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Single(item => item.ContentId == "details").IsAutoHidden);
+                firstHost.SaveCurrentLayout();
+            }
+            finally
+            {
+                first.Close();
+            }
+
+            var restored = ShowHost(descriptors, store, out _);
+            try
+            {
+                UiTestHost.Pump();
+                var manager = (DockingManager)restored.Content;
+                Assert.True(manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Single(item => item.ContentId == "details").IsAutoHidden);
+            }
+            finally
+            {
+                restored.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void HiddenPageKeepsItsLastTabGroupWithoutASettingsService()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("right.leader", DockSide.Right, 0.3),
+                Tool("right.hidden", DockSide.Left, 0.1),
+            };
+            var first = new DockingHost(new DockingManager(), descriptors, store, new NullLog());
+            first.Initialize();
+            first.Dock("right.hidden", DockSide.Tab, targetId: "right.leader");
+            first.Hide("right.hidden");
+            first.SaveCurrentLayout();
+
+            var manager = new DockingManager();
+            var restored = new DockingHost(manager, descriptors, store, new NullLog());
+            restored.Initialize();
+            Assert.False(restored.ListWindows().Single(item => item.Id == "right.hidden").IsVisible);
+
+            restored.Show("right.hidden");
+            var leader = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.leader");
+            var hidden = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "right.hidden");
+            Assert.Same(leader.Parent, hidden.Parent);
+        });
+    }
+
+    [Fact]
+    public void SavingWhileMaximizedPersistsTheStablePreFocusLayout()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("details", DockSide.Right, 0.3),
+            };
+            var first = new DockingHost(new DockingManager(), descriptors, store, new NullLog());
+            first.Initialize();
+            first.MaximizeWindow(StandardWindowIds.Mcp);
+            first.SaveCurrentLayout();
+
+            var restored = new DockingHost(
+                new DockingManager(), descriptors, store, new NullLog());
+            restored.Initialize();
+            var states = restored.ListWindows().ToDictionary(item => item.Id);
+            Assert.Equal(DockSide.Center, states[StandardWindowIds.Mcp].Side);
+            Assert.Equal(DockSide.Right, states["details"].Side);
+            Assert.Null(restored.MaximizedId);
+        });
+    }
+
+    [Fact]
+    public void UnsupportedOrDuplicateSnapshotFallsBackToDefaultLayout()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("right.one", DockSide.Right, 0.25),
+                Tool("right.two", DockSide.Right, 0.25),
+            };
+
+            var unsupported = new MemoryLayoutStore();
+            var source = new DockingHost(new DockingManager(), descriptors, unsupported, new NullLog());
+            source.Initialize();
+            source.SaveCurrentLayout();
+            unsupported.ReplaceCurrent("\"schemaVersion\": 1", "\"schemaVersion\": 99");
+            var recovered = new DockingHost(
+                new DockingManager(), descriptors, unsupported, new NullLog());
+            recovered.Initialize();
+            Assert.All(recovered.ListWindows(), item => Assert.True(item.IsVisible));
+            Assert.Contains("\"schemaVersion\": 99", unsupported.ReadCurrent(), StringComparison.Ordinal);
+
+            var duplicate = new MemoryLayoutStore();
+            source = new DockingHost(new DockingManager(), descriptors, duplicate, new NullLog());
+            source.Initialize();
+            source.SaveCurrentLayout();
+            duplicate.ReplaceCurrent("\"id\": \"right.two\"", "\"id\": \"right.one\"");
+            var duplicateManager = new DockingManager();
+            recovered = new DockingHost(duplicateManager, descriptors, duplicate, new NullLog());
+            recovered.Initialize();
+            var right = duplicateManager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Where(item => item.ContentId is "right.one" or "right.two")
+                .ToArray();
+            Assert.Equal(2, right.Length);
+            Assert.Same(right[0].Parent, right[1].Parent);
+            Assert.NotNull(duplicate.ReadCurrent());
+        });
+    }
+
+    [Fact]
+    public void FileLayoutStoreUsesVersionedJsonAndKeepsTheOldFileWhenReplaceFails()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"aurora-layout-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new FileLayoutStore(directory);
+            store.WriteCurrent("old");
+            var path = Path.Combine(directory, "layout.v1.json");
+            Assert.True(File.Exists(path));
+
+            using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                Assert.ThrowsAny<IOException>(() => store.WriteCurrent("new"));
+
+            Assert.Equal("old", File.ReadAllText(path));
+            Assert.Empty(Directory.EnumerateFiles(directory, "*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -973,7 +1361,7 @@ public sealed class DockingContractTests
     }
 
     [Fact]
-    public void RestoredDuplicatePanesOnTheSameSideBecomeOneTabGroup()
+    public void RestoredSeparatePanesOnTheSameSideRemainSeparate()
     {
         UiTestHost.RunSta(() =>
         {
@@ -1015,7 +1403,7 @@ public sealed class DockingContractTests
                     .ToArray();
 
                 Assert.Equal(2, right.Length);
-                Assert.Same(right[0].Parent, right[1].Parent);
+                Assert.NotSame(right[0].Parent, right[1].Parent);
             }
             finally
             {
@@ -1065,6 +1453,25 @@ public sealed class DockingContractTests
         DefaultRatio = ratio,
         ContentFactory = () => new Border(),
     };
+
+    private static void AddFloating(
+        LayoutRoot root,
+        LayoutAnchorable content,
+        double left,
+        double top,
+        double width,
+        double height)
+    {
+        content.FloatingLeft = left;
+        content.FloatingTop = top;
+        content.FloatingWidth = width;
+        content.FloatingHeight = height;
+        var pane = new LayoutAnchorablePane(content);
+        root.FloatingWindows.Add(new LayoutAnchorableFloatingWindow
+        {
+            RootPanel = new LayoutAnchorablePaneGroup(pane),
+        });
+    }
 
     private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent)
         where T : DependencyObject

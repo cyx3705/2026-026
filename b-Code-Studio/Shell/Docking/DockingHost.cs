@@ -5,14 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Xml.Linq;
 using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
-using AvalonDock.Layout.Serialization;
 
 namespace HistoryAurora.Shell.Docking;
 
@@ -28,7 +26,6 @@ internal sealed partial class DockingHost : IDockingService
     private const string LayoutSource = "layout";
     private const double RatioEpsilon = 0.02;
     private const string PlacementSettingsKey = "layout.placements";
-    private const string HiddenCenterMetadataPrefix = "HistoryVulcan.HiddenCenter.v1:";
 
     private readonly DockingManager _manager;
     private readonly ILayoutStore _store;
@@ -41,7 +38,8 @@ internal sealed partial class DockingHost : IDockingService
     private readonly Dictionary<string, string> _pendingTabTargets = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LayoutDocument> _centerDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _hiddenCenterIds = new(StringComparer.OrdinalIgnoreCase);
-    private Dictionary<string, OrphanPlacement> _orphanPlacements = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, DockPlacementSnapshot> _orphanPlacements = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DockPlacementSnapshot> _lastVisiblePlacements = new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherTimer _debounce;
 
     private Dictionary<string, WinState> _baseline = new(StringComparer.OrdinalIgnoreCase);
@@ -51,20 +49,13 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>
     /// 聚焦（最大化某一页）之前的布局树本身。
     ///
-    /// 这里**不能**存 XML。`XmlLayoutSerializer` 走 `XmlSerializer`，而 Aurora 是
-    /// `pinned:false` 的模块，AvalonDock 随包装进可回收 AssemblyLoadContext；
-    /// 序列化时运行时要为这些类型生成代码，直接报
-    /// `NotSupportedException: A non-collectible assembly may not reference a collectible assembly.`
-    /// ——这正是真机上双击页面标题栏报 `aurora.ui.max 执行异常(NotSupportedException)` 的原因，
-    /// 也是 `%AppData%\HistoryVulcan\layout` 一直是空目录（退出前自动保存布局每次都失败）的原因。
-    /// 门禁里复现不出来：测试进程把 AvalonDock 装在默认上下文里，不是可回收的。
-    ///
-    /// 聚焦与还原本来就不需要跨进程持久化——留住这棵树的引用，还原时装回去即可。
+    /// 聚焦与还原不经序列化：留住这棵树的引用，还原时装回去。聚焦期间若要关闭或
+    /// 保存命名布局，另用纯数据 JSON 快照记录聚焦前状态；两条职责不要合并。
     /// </summary>
     private LayoutRoot? _rootBeforeMaximize;
 
-    /// <summary>同一时刻的 XML，仅供"保存布局"用；序列化不可用时为 null。</summary>
-    private string? _layoutBeforeMaximize;
+    /// <summary>聚焦前的纯数据快照，供聚焦期间关闭或保存命名布局时使用。</summary>
+    private string? _snapshotBeforeMaximize;
     private bool _centerRepairPending;
     private bool _presentationRefreshPending;
 
@@ -162,12 +153,14 @@ internal sealed partial class DockingHost : IDockingService
     public void Initialize()
     {
         LoadOrphanPlacements();
+        var placementFallback = new Dictionary<string, DockPlacementSnapshot>(
+            _orphanPlacements, StringComparer.OrdinalIgnoreCase);
         using (Suppress())
         {
-            string? xml = null;
+            string? payload = null;
             try
             {
-                xml = _store.ReadCurrent();
+                payload = _store.ReadCurrent();
             }
             catch (Exception ex)
             {
@@ -175,29 +168,35 @@ internal sealed partial class DockingHost : IDockingService
             }
 
             var restored = false;
-            if (xml != null)
+            if (payload != null)
             {
                 try
                 {
-                    ApplyLayoutXml(xml);
+                    ApplyLayoutSnapshot(payload);
                     if (!LayoutHasMainDocumentPane())
                         throw new InvalidOperationException("布局中缺少中央主文档区");
                     EnsureRegisteredWindows();
-                    ConsolidateSidePanes();
                     restored = true;
                     _seedRatiosFromLayout = true; // 以文件里的尺寸为准,反向采集比例
                     _log.Info(LayoutSource, "已恢复上次退出时的布局");
                 }
                 catch (Exception ex)
                 {
-                    // N-06:布局文件损坏 → 回退默认布局 + 告警,不阻断启动
-                    _log.Warn(LayoutSource, $"布局文件损坏,已回退默认布局(原因: {ex.Message})");
-                    try { _store.DeleteCurrent(); } catch { /* 清理失败可忽略 */ }
+                    // N-06:坏快照留在磁盘供诊断；恢复独立台账，不让快照里的半成品位置污染兜底。
+                    _orphanPlacements = new Dictionary<string, DockPlacementSnapshot>(
+                        placementFallback, StringComparer.OrdinalIgnoreCase);
+                    _lastVisiblePlacements.Clear();
+                    foreach (var (id, placement) in _orphanPlacements)
+                        _lastVisiblePlacements[id] = placement;
+                    _log.Warn(LayoutSource, $"布局文件损坏,已回退窗口位置台账/默认布局(原因: {ex.Message})");
                 }
             }
 
             if (!restored)
+            {
                 BuildDefaultLayout();
+                ApplyPlacementFallback();
+            }
 
             ApplyStoredCenterVisibility();
             EnsureCentralWorkspace();
@@ -211,12 +210,10 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>退出时调用:自动保存当前布局(W-07)。</summary>
     public void SaveCurrentLayout()
     {
-        // XML serialization is best-effort: in the module ALC AvalonDock's
-        // XmlSerializer can reject collectible types. Placement state is our
-        // durable fallback and must still be written when that happens.
+        // 完整快照与位置台账独立保存：任一写入失败都不能阻断另一项。
         try
         {
-            var payload = _layoutBeforeMaximize ?? SerializeLayout();
+            var payload = _snapshotBeforeMaximize ?? SerializeLayout();
             _store.WriteCurrent(payload);
             _log.Info(LayoutSource, "退出前已自动保存布局");
         }
@@ -278,6 +275,7 @@ internal sealed partial class DockingHost : IDockingService
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
+        RememberCurrentPlacement(id);
         using (Suppress())
         {
             var document = FindCenterDocument(id);
@@ -471,7 +469,7 @@ internal sealed partial class DockingHost : IDockingService
 
     public void SaveLayout(string name)
     {
-        _store.WriteNamed(name, _layoutBeforeMaximize ?? SerializeLayout());
+        _store.WriteNamed(name, _snapshotBeforeMaximize ?? SerializeLayout());
         CurrentLayoutName = name;
         _log.Info(LayoutSource, $"布局方案已保存: {name}");
     }
@@ -479,10 +477,10 @@ internal sealed partial class DockingHost : IDockingService
     public bool LoadLayout(string name)
     {
         RestoreLayoutFromMaximized();
-        string? xml;
+        string? payload;
         try
         {
-            xml = _store.ReadNamed(name);
+            payload = _store.ReadNamed(name);
         }
         catch (Exception ex)
         {
@@ -490,7 +488,7 @@ internal sealed partial class DockingHost : IDockingService
             return false;
         }
 
-        if (xml == null)
+        if (payload == null)
         {
             _log.Warn(LayoutSource, $"布局方案不存在: {name}");
             return false;
@@ -500,7 +498,7 @@ internal sealed partial class DockingHost : IDockingService
         {
             using (Suppress())
             {
-                ApplyLayoutXml(xml);
+                ApplyLayoutSnapshot(payload);
                 if (!LayoutHasMainDocumentPane())
                     throw new InvalidOperationException("布局中缺少中央主文档区");
                 EnsureRegisteredWindows();
@@ -667,13 +665,13 @@ internal sealed partial class DockingHost : IDockingService
         {
             // 中途抛出时必须把暂存的布局丢掉：_maximizedId 还是 null，
             // RestoreLayoutFromMaximized 会直接返回，而保存布局与关闭窗口那两条路径
-            // 写的是 `_layoutBeforeMaximize ?? SerializeLayout()`——
+            // 写的是 `_snapshotBeforeMaximize ?? SerializeLayout()`——
             // 留着它就等于把一份**过期的**布局当成当前布局写回磁盘。
             try
             {
                 _rootBeforeMaximize = _manager.Layout;
                 // 布局持久化是另一件事，失败不该拖垮"聚焦这一页"。
-                _layoutBeforeMaximize = TrySerializeLayout();
+                _snapshotBeforeMaximize = SerializeLayout();
                 BuildMaximizedLayout(id);
                 AttachLayout();
                 _maximizedId = id;
@@ -681,7 +679,7 @@ internal sealed partial class DockingHost : IDockingService
             catch
             {
                 _rootBeforeMaximize = null;
-                _layoutBeforeMaximize = null;
+                _snapshotBeforeMaximize = null;
                 throw;
             }
         }
@@ -692,19 +690,16 @@ internal sealed partial class DockingHost : IDockingService
 
     public void RestoreLayoutFromMaximized()
     {
-        if (_maximizedId == null || (_layoutBeforeMaximize == null && _rootBeforeMaximize == null))
+        if (_maximizedId == null || _rootBeforeMaximize == null)
             return;
 
         using (Suppress())
         {
-            // 有 XML 就用 XML：它是聚焦**之前**那一刻的完整快照，浮窗也在里面。
-            // 拿不到 XML（宿主里的可回收 ALC，见 _rootBeforeMaximize 的说明）时，
-            // 退回装回那棵树本身——代价是聚焦期间已经拖出去的浮窗不会被重建，
-            // 但那远好过整条路径抛异常、连聚焦都做不成。
-            if (_layoutBeforeMaximize is { } xml)
-                ApplyLayoutXml(xml);
-            else
-                _manager.Layout = _rootBeforeMaximize!;
+            // 聚焦只替换 LayoutRoot；还原时仍装回原树。AvalonDock 在卸下旧根时会让
+            // 浮窗模型失效，因此只从纯数据快照重建浮窗节点，不重建主布局树。
+            if (_snapshotBeforeMaximize != null)
+                RestoreFloatingWindowsAfterMaximize(_rootBeforeMaximize, _snapshotBeforeMaximize);
+            _manager.Layout = _rootBeforeMaximize;
 
             if (!LayoutHasMainDocumentPane())
                 throw new InvalidOperationException("布局中缺少中央主文档区");
@@ -714,7 +709,7 @@ internal sealed partial class DockingHost : IDockingService
             AttachLayout();
             _maximizedId = null;
             _rootBeforeMaximize = null;
-            _layoutBeforeMaximize = null;
+            _snapshotBeforeMaximize = null;
             _seedRatiosFromLayout = true;
         }
 

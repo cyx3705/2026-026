@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.Loader;
 using System.Text.Json;
 using HistoryAurora.Module;
 using Xunit;
@@ -47,5 +49,66 @@ public sealed class ModuleLoadTests
     public void DisposeWithoutAttachDoesNotThrow()
     {
         new AuroraBusinessComposition().Dispose();
+    }
+
+    [Fact]
+    public void LayoutSnapshotCodecRunsInsideACollectibleModuleContext()
+    {
+        var modulePath = Path.Combine(AppContext.BaseDirectory, "HistoryAurora.dll");
+        Assert.True(File.Exists(modulePath), $"HistoryAurora.dll 不存在: {modulePath}");
+
+        RunCollectibleLayoutProbe(modulePath);
+    }
+
+    private static void RunCollectibleLayoutProbe(string modulePath)
+    {
+        var context = new ModuleProbeLoadContext(modulePath);
+        var assembly = context.LoadFromAssemblyPath(modulePath);
+        var avalonDock = context.LoadFromAssemblyName(new AssemblyName("AvalonDock"));
+        Assert.True(assembly.IsCollectible);
+        Assert.True(avalonDock.IsCollectible);
+        Assert.True(context.IsCollectible);
+
+        var snapshotType = assembly.GetType(
+            "HistoryAurora.Shell.Docking.DockLayoutSnapshot", throwOnError: true)!;
+        var nodeType = assembly.GetType(
+            "HistoryAurora.Shell.Docking.DockLayoutNodeSnapshot", throwOnError: true)!;
+        var kindType = assembly.GetType(
+            "HistoryAurora.Shell.Docking.DockLayoutNodeKind", throwOnError: true)!;
+        var codecType = assembly.GetType(
+            "HistoryAurora.Shell.Docking.DockLayoutSnapshotCodec", throwOnError: true)!;
+
+        var snapshot = Activator.CreateInstance(snapshotType)!;
+        var root = Activator.CreateInstance(nodeType)!;
+        nodeType.GetProperty("Kind")!.SetValue(root, Enum.Parse(kindType, "Panel"));
+        snapshotType.GetProperty("Root")!.SetValue(snapshot, root);
+        var serialize = codecType.GetMethod(
+            "Serialize", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var deserialize = codecType.GetMethod(
+            "Deserialize", BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var payload = Assert.IsType<string>(serialize.Invoke(null, [snapshot]));
+        Assert.Contains("\"schemaVersion\": 1", payload, StringComparison.Ordinal);
+        Assert.NotNull(deserialize.Invoke(null, [payload]));
+
+        context.Unload();
+    }
+
+    private sealed class ModuleProbeLoadContext(string modulePath)
+        : AssemblyLoadContext(isCollectible: true)
+    {
+        private readonly string _directory = Path.GetDirectoryName(modulePath)!;
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (assemblyName.Name?.StartsWith("HistoryVulcan.", StringComparison.Ordinal) == true)
+            {
+                return Default.Assemblies.FirstOrDefault(item =>
+                    AssemblyName.ReferenceMatchesDefinition(item.GetName(), assemblyName));
+            }
+
+            var candidate = Path.Combine(_directory, assemblyName.Name + ".dll");
+            return File.Exists(candidate) ? LoadFromAssemblyPath(candidate) : null;
+        }
     }
 }
