@@ -54,6 +54,13 @@ public sealed class AuroraTable : UserControl
     /// <summary>小于半像素的列宽变化只是布局取整，不能再触发一轮布局。</summary>
     private const double WidthEpsilon = 0.5;
 
+    /// <summary>
+    /// 文件对话框关闭、滚动条显隐、列宽回写都会让 ListView 宽半像素到几像素地抖。
+    /// 把这种抖当成「外部宽度变了」会把分摊轮数清零，列宽在两档之间永远跳，整窗卡住。
+    /// 只有明显的外部分配变化才重来。
+    /// </summary>
+    private const double ExternalResizeEpsilon = 8;
+
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
@@ -72,6 +79,7 @@ public sealed class AuroraTable : UserControl
     private bool _widthPassQueued;
     private int _widthPasses;
     private GridViewColumn? _actionColumn;
+    private int _applyingWidths;
 
     /// <summary>占满剩余宽度的那一列；它钉在数据列的最右，拖不动（REQ-UI-062）。</summary>
     private GridViewColumn? _starColumn;
@@ -713,12 +721,29 @@ public sealed class AuroraTable : UserControl
 
     private void OnListSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。只有列表本身的宽度变了
-        // 才是新的一次外部布局；否则重置收敛状态会让右侧列在两种宽度间来回跳。
+        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。自己正在分摊时再清零轮数，
+        // 会在两种宽度间来回跳，选完文件后整窗像死了一样。
+        if (_applyingWidths > 0 || _widthPassQueued)
+            return;
         if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < WidthEpsilon)
+            return;
+        if (_widthPasses > 0 && Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < ExternalResizeEpsilon)
             return;
 
         RestartWidthLayout();
+    }
+
+    private void ApplyColumnWidths()
+    {
+        _applyingWidths++;
+        try
+        {
+            ApplyColumnWidthsCore();
+        }
+        finally
+        {
+            _applyingWidths--;
+        }
     }
 
     /// <summary>
@@ -733,7 +758,7 @@ public sealed class AuroraTable : UserControl
     ///   <item>行操作列不参与缩放，先扣掉。</item>
     /// </list>
     /// </summary>
-    private void ApplyColumnWidths()
+    private void ApplyColumnWidthsCore()
     {
         // **按可视顺序取列，不按声明顺序**（REQ-UI-062）：下面「最后一列吃余数」
         // 那一条说的是屏幕上最右边那一列。列可以被拖着换位置之后，

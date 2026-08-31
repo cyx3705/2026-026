@@ -29,6 +29,33 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class PanelComponentContractTests
 {
+    [Fact]
+    public void SourcePicker_DoesNotCommitEmptyOrDuplicateValues()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var commits = new List<string>();
+            var picker = new AuroraSourcePicker
+            {
+                CommitAsync = value =>
+                {
+                    commits.Add(value);
+                    return Task.CompletedTask;
+                },
+            };
+
+            picker.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
+            Assert.Empty(commits);
+
+            picker.Text = @"C:\parts\valve.par";
+            picker.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
+            Assert.Equal([@"C:\parts\valve.par"], commits);
+
+            picker.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
+            Assert.Single(commits);
+        });
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,

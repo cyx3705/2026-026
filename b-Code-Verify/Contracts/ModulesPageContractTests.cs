@@ -95,6 +95,17 @@ public sealed class ModulesPageContractTests
         Assert.Equal(41, HostedPageData.DomainCommandCount(local, module));
     }
 
+    [Fact]
+    public void FileAndDirectoryPickersRestoreTheProcessWorkingDirectory()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "b-Code-Studio", "Shell", "BuiltinCommands.Panel.cs"));
+
+        Assert.Contains("new Microsoft.Win32.OpenFileDialog { RestoreDirectory = true }", source, StringComparison.Ordinal);
+        Assert.Contains("new Microsoft.Win32.OpenFolderDialog()", source, StringComparison.Ordinal);
+        Assert.Contains("Environment.CurrentDirectory = cwd", source, StringComparison.Ordinal);
+    }
+
     /// <summary>向上找到含 project.manifest.json 的目录，即仓库根。</summary>
     private static string RepositoryRoot()
     {
