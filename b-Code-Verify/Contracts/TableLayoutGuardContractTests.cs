@@ -5,7 +5,7 @@ using Xunit;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 选完文件后主进程 CPU 打满：滚动条显隐约 17px，旧门槛 8px 会把列宽轮数清零死循环。
+/// 打开 Minerva 整窗假死：列宽回写会让 ListView 宽幅振荡，像素门槛挡不住。
 /// </summary>
 public sealed class TableLayoutGuardContractTests
 {
@@ -73,7 +73,25 @@ public sealed class TableLayoutGuardContractTests
     }
 
     [Fact]
-    public void SourceCommitAndPageRefreshWaitUntilIdle()
+    public void LargeAmplitudeOscillationStopsInsideOneBurst()
+    {
+        var burst = 0;
+        var restarts = 0;
+        for (var i = 0; i < 10_000; i++)
+        {
+            var delta = i % 2 == 0 ? 400d : -400d;
+            if (!AuroraTableLayoutGuard.ShouldRestartWidthLayout(
+                    delta, widthPasses: 0, restartsInBurst: burst))
+                continue;
+            restarts++;
+            burst++;
+        }
+
+        Assert.Equal(AuroraTableLayoutGuard.MaxRestartsPerBurst, restarts);
+    }
+
+    [Fact]
+    public void WidthLayoutIgnoresListViewSizeChanged()
     {
         var picker = File.ReadAllText(Path.Combine(
             RepositoryRoot(), "b-Code-Studio", "Shell", "Widgets", "AuroraSourcePicker.cs"));
@@ -90,14 +108,9 @@ public sealed class TableLayoutGuardContractTests
             "DispatcherPriority.ApplicationIdle",
             panel,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "AuroraTableLayoutGuard.ShouldRestartWidthLayout",
-            table,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "const double ExternalResizeEpsilon = 8",
-            table,
-            StringComparison.Ordinal);
+        Assert.Contains("SizeChanged += OnHostSizeChanged", table, StringComparison.Ordinal);
+        Assert.DoesNotContain("_list.SizeChanged", table, StringComparison.Ordinal);
+        Assert.Contains("_burstRestarts", table, StringComparison.Ordinal);
     }
 
     private static string RepositoryRoot()

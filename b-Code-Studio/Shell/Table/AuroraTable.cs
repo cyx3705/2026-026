@@ -65,6 +65,8 @@ public sealed class AuroraTable : UserControl
     private bool _widthPassQueued;
     private int _widthPasses;
     private int _sizeChangeRestarts;
+    private int _burstRestarts;
+    private long _burstStartMs;
     private GridViewColumn? _actionColumn;
     private int _applyingWidths;
 
@@ -105,9 +107,9 @@ public sealed class AuroraTable : UserControl
         _list.SetResourceReference(StyleProperty, "Aurora.Table.ListView");
         _list.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "Aurora.Table.Row");
         _list.SelectionChanged += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
-        _list.SizeChanged += OnListSizeChanged;
         _list.PreviewMouseRightButtonDown += OnRowRightButtonDown;
         _list.ContextMenuOpening += OnRowContextMenuOpening;
+        SizeChanged += OnHostSizeChanged;
 
         _empty = new TextBlock
         {
@@ -706,17 +708,26 @@ public sealed class AuroraTable : UserControl
             }));
     }
 
-    private void OnListSizeChanged(object sender, SizeChangedEventArgs e)
+    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。门槛若小于滚动条宽度，
-        // 分摊一轮、条一闪、轮数清零，CPU 单核打满，选完文件后整窗像死了。
-        if (_applyingWidths > 0 || _widthPassQueued)
-            return;
-        var delta = e.NewSize.Width - e.PreviousSize.Width;
-        if (!AuroraTableLayoutGuard.ShouldRestartWidthLayout(
-                delta, _widthPasses, _sizeChangeRestarts))
+        // 只看外框宽度。ListView 的 SizeChanged 会把列宽回写算成外部分配，
+        // 打开带表的页面时振幅是整页宽度，24px 门槛挡不住。
+        if (!e.WidthChanged || _applyingWidths > 0 || _widthPassQueued)
             return;
 
+        var now = Environment.TickCount64;
+        if (now - _burstStartMs > 250)
+        {
+            _burstStartMs = now;
+            _burstRestarts = 0;
+        }
+
+        var delta = e.NewSize.Width - e.PreviousSize.Width;
+        if (!AuroraTableLayoutGuard.ShouldRestartWidthLayout(
+                delta, _widthPasses, _sizeChangeRestarts, _burstRestarts))
+            return;
+
+        _burstRestarts++;
         if (Math.Abs(delta) >= AuroraTableLayoutGuard.ExternalResizeEpsilon)
             _sizeChangeRestarts = 0;
         else
@@ -787,6 +798,11 @@ public sealed class AuroraTable : UserControl
             _widthPasses++;
             QueueWidthPass();
         }
+        else
+        {
+            _burstRestarts = 0;
+        }
+
         if (available <= 0)
             return;
 
