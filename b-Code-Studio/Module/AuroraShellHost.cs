@@ -143,7 +143,14 @@ internal static class AuroraShellHost
             HiddenReason = source.HiddenReason,
             AllowUnspecifiedParameters = source.AllowUnspecifiedParameters,
             Annotations = source.Annotations,
-            Handler = context => window.Dispatcher.Invoke(() => source.Handler(context)),
+            Handler = context =>
+            {
+                // 已经在界面线程上时不得 Dispatcher.Invoke：选文件的 ShowDialog
+                // 自己会开一层消息泵，外层再同步等同一条 Dispatcher 就会把整窗卡死。
+                if (window.Dispatcher.CheckAccess())
+                    return source.Handler(context);
+                return window.Dispatcher.InvokeAsync(() => source.Handler(context)).Task.Unwrap();
+            },
         };
 
     private static void RunUi(IModuleContext context)

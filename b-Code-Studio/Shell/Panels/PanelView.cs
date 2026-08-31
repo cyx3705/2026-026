@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using HistoryAurora.Shell.Actions;
+using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Selection;
 using HistoryAurora.Shell.Themes;
 using HistoryAurora.Shell.Widgets;
@@ -31,6 +32,8 @@ public sealed partial class PanelView : UserControl
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
     private readonly SelectionChannels? _channels;
+    private readonly PageDataRefresher? _refresher;
+    private readonly string? _pageId;
     private readonly Dictionary<string, Func<string>> _getters = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Action<string>> _setters = new(StringComparer.OrdinalIgnoreCase);
 
@@ -63,12 +66,16 @@ public sealed partial class PanelView : UserControl
         IShellLog log,
         ActionRegistry actions,
         SelectionChannels? channels = null,
-        string? owner = null)
+        string? owner = null,
+        PageDataRefresher? refresher = null,
+        string? pageId = null)
     {
         _bus = bus;
         _log = log;
         _actions = actions;
         _channels = channels;
+        _refresher = refresher;
+        _pageId = pageId;
         _owner = string.IsNullOrWhiteSpace(owner) ? ShellOwner : owner;
         _definition = definition;
         // 底色由窗格卡片提供，面板自身不再画一块白（UI 风格规范 §1）。
@@ -531,6 +538,18 @@ public sealed partial class PanelView : UserControl
             return;
         }
 
-        _ = _bus.ExecuteAsync(text, "UI");
+        _ = RunAndRefreshAsync(text);
+    }
+
+    /// <summary>
+    /// 面板动作成功后必须把本页表格再取一遍。Minerva 选完来源文件后零件已经进了
+    /// 模块内存，但表只在 Loaded 取过一次空结果——不刷新就会一直空着，整页像死了。
+    /// </summary>
+    private async Task RunAndRefreshAsync(string text)
+    {
+        var result = await _bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
+        if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
+            return;
+        _refresher.Refresh(_pageId, null);
     }
 }

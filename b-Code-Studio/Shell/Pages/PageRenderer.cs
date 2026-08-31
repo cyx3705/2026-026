@@ -552,7 +552,7 @@ public static partial class PageRenderer
 
         var flyout = new AuroraFlyout(
             node.Text ?? "更多",
-            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner),
+            new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner, state.Refresher, state.PageId),
             string.Equals(node.Style, "accent", StringComparison.OrdinalIgnoreCase),
             context);
 
@@ -589,7 +589,7 @@ public static partial class PageRenderer
         if (!parsed.Ok)
             return Unbound(parsed.Error!, state);
 
-        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner);
+        return new PanelView(parsed.Value!, state.Bus, state.Log, state.Actions, state.Channels, state.Owner, state.Refresher, state.PageId);
     }
 
     /// <summary>泳道图：描述由取数命令给，布局与绘制归组件（REQ-UI-010）。</summary>
@@ -676,6 +676,10 @@ public static partial class PageRenderer
         public ActionRegistry? Actions => context.Actions;
 
         public SelectionChannels? Channels => context.Channels;
+
+        public PageDataRefresher? Refresher => context.Refresher;
+
+        public string PageId => pageId;
 
         /// <summary>提供方模块名。面板声明的通道按它登记，页面撤销时随 owner 一并撤掉。</summary>
         public string Owner => context.Owner;
