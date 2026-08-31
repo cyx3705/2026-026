@@ -1,4 +1,4 @@
-# HistoryAurora 0.1.0
+# HistoryAurora 1.12.20
 
 OneHistory 体系的 **宿主前端界面模块**。名字取自罗马黎明女神 Aurora——本模块是宿主对用户
 可见的那一面：窗口、布局、控制台与主题。

@@ -5,14 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Xml.Linq;
 using HistoryAurora.Shell.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
-using AvalonDock.Layout.Serialization;
 
 namespace HistoryAurora.Shell.Docking;
 
@@ -140,126 +138,8 @@ internal sealed partial class DockingHost
         root.CollectGarbage();
     }
 
-    /// <summary>
-    /// 尽力序列化当前布局；不可用时返回 null 并记一条，不抛。
-    ///
-    /// 在宿主里它**总是**不可用：AvalonDock 随模块包装进可回收 ALC，
-    /// `XmlSerializer` 为其中的类型生成代码时报
-    /// 「非可回收程序集不能引用可回收程序集」。布局持久化因此是坏的，
-    /// 但那件事不该连累"聚焦某一页"。
-    /// </summary>
-    private string? TrySerializeLayout()
-    {
-        try
-        {
-            return SerializeLayout();
-        }
-        catch (Exception ex)
-        {
-            _log.Warn(LayoutSource, $"布局序列化不可用（{ex.GetType().Name}），本次不保存布局快照");
-            return null;
-        }
-    }
-
     private string SerializeLayout()
-    {
-        // A close/save can race the 500 ms gesture debounce. Preserve any tool page that the
-        // user intentionally embedded in the central document pane.
-        if (NeedsCentralWorkspaceRepair())
-        {
-            using (Suppress())
-                EnsureCentralWorkspace();
-        }
-        if (!LayoutHasMainDocumentPane())
-            throw new InvalidOperationException("布局中必须且只能存在一个中央主文档区");
-
-        using var writer = new StringWriter();
-        new XmlLayoutSerializer(_manager).Serialize(writer);
-        var document = XDocument.Parse(writer.ToString(), LoadOptions.PreserveWhitespace);
-        var hiddenIds = _hiddenCenterIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var metadata = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(hiddenIds));
-        document.AddFirst(new XComment(HiddenCenterMetadataPrefix + metadata));
-        return document.ToString(SaveOptions.DisableFormatting);
-    }
-
-    private void ApplyLayoutXml(string xml)
-    {
-        _centerDocuments.Clear();
-        _hiddenCenterIds.Clear();
-        xml = ExtractHiddenCenterMetadata(xml);
-        var serializer = new XmlLayoutSerializer(_manager);
-        serializer.LayoutSerializationCallback += (_, e) =>
-        {
-            var contentId = e.Model.ContentId;
-            if (e.Model is LayoutDocument document &&
-                contentId != null && _byId.TryGetValue(contentId, out var documentDescriptor))
-            {
-                if (!UsesDocumentIdentity(documentDescriptor))
-                {
-                    e.Cancel = true;
-                    return;
-                }
-                document.CanClose = false;
-                document.CanFloat = !IsPrimaryCommandDocument(contentId);
-                document.Title = documentDescriptor.Title;
-                e.Content = GetOrCreateContent(documentDescriptor);
-                _centerDocuments[contentId] = document;
-            }
-            else if (e.Model is LayoutAnchorable anchorable &&
-                     contentId != null && _byId.TryGetValue(contentId, out var d))
-            {
-                // 3.0 早期候选把 Center 做成与空文档区并排的工具窗。取消该旧节点，
-                // EnsureRegisteredWindows 会把默认中央窗口迁入真正的文档主区。
-                if ((d.DefaultSide == DockSide.Center && !IsInsideFloatingWindow(anchorable)) ||
-                    IsPrimaryCommandDocument(contentId))
-                {
-                    e.Cancel = true;
-                    return;
-                }
-                // Side tool pages may be dragged into the central document pane and back out.
-                anchorable.CanDockAsTabbedDocument = true;
-                e.Content = GetOrCreateContent(d);
-            }
-            else
-            {
-                // 布局文件里有当前版本未注册的窗口 → 丢弃,不阻断加载
-                e.Cancel = true;
-            }
-        };
-
-        using var reader = new StringReader(xml);
-        serializer.Deserialize(reader);
-    }
-
-    private string ExtractHiddenCenterMetadata(string xml)
-    {
-        var document = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
-        var metadata = document.Nodes()
-            .OfType<XComment>()
-            .FirstOrDefault(comment => comment.Value.StartsWith(
-                HiddenCenterMetadataPrefix,
-                StringComparison.Ordinal));
-        if (metadata == null)
-            return xml;
-
-        metadata.Remove();
-        try
-        {
-            var encoded = metadata.Value[HiddenCenterMetadataPrefix.Length..];
-            var ids = JsonSerializer.Deserialize<string[]>(Convert.FromBase64String(encoded)) ?? [];
-            foreach (var id in ids.Where(id => !string.IsNullOrWhiteSpace(id)))
-                _hiddenCenterIds.Add(id);
-        }
-        catch (Exception ex) when (ex is FormatException or JsonException)
-        {
-            _log.Warn(LayoutSource, $"隐藏中央页元数据无效,已按默认可见性恢复: {ex.Message}");
-        }
-
-        return document.ToString(SaveOptions.DisableFormatting);
-    }
+        => DockLayoutSnapshotCodec.Serialize(CaptureLayoutSnapshot(_manager.Layout));
 
     /// <summary>布局加载后补齐缺失的已注册窗口(旧布局文件兼容)。</summary>
     private void EnsureRegisteredWindows()
@@ -273,6 +153,87 @@ internal sealed partial class DockingHost
             EnsureRegisteredWindow(descriptor);
         foreach (var descriptor in missing.Where(d => !UsesDocumentIdentity(d)))
             EnsureRegisteredWindow(descriptor);
+    }
+
+    private void ApplyPlacementFallback()
+    {
+        foreach (var descriptor in _descriptors)
+        {
+            if (!_orphanPlacements.TryGetValue(descriptor.Id, out var placement))
+                continue;
+            try
+            {
+                PlaceFromFallback(descriptor, placement);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn(LayoutSource, $"窗口 {descriptor.Id} 的位置台账无效,已保留默认位置: {ex.Message}");
+            }
+        }
+
+        // 先让所有标签目标完成落位，再隐藏页面；否则隐藏的目标会暂时失去所属窗格。
+        foreach (var descriptor in _descriptors)
+        {
+            if (!_orphanPlacements.TryGetValue(descriptor.Id, out var placement) ||
+                !placement.Hidden || IsPrimaryCommandDocument(descriptor.Id))
+            {
+                continue;
+            }
+
+            var document = FindCenterDocument(descriptor.Id);
+            if (document != null)
+            {
+                DetachDocument(document);
+                _hiddenCenterIds.Add(descriptor.Id);
+            }
+            else if (FindAnchorable(descriptor.Id) is { } anchorable)
+            {
+                var wasCenter = IsHostedInDocumentPane(anchorable);
+                anchorable.Hide();
+                if (wasCenter)
+                    _hiddenCenterIds.Add(descriptor.Id);
+            }
+        }
+
+        _manager.Layout.CollectGarbage();
+    }
+
+    private void PlaceFromFallback(
+        ToolWindowDescriptor descriptor,
+        DockPlacementSnapshot placement)
+    {
+        var side = Enum.IsDefined(placement.Side) ? placement.Side : descriptor.DefaultSide;
+        var target = placement.TabTarget;
+        if (side == DockSide.Tab && string.IsNullOrWhiteSpace(target))
+        {
+            side = descriptor.DefaultSide;
+            target = descriptor.DefaultTabTarget;
+        }
+
+        if (IsPrimaryCommandDocument(descriptor.Id) || side == DockSide.Center ||
+            side == DockSide.Tab && target != null && IsCenterTabTarget(target))
+        {
+            if (UsesDocumentIdentity(descriptor))
+            {
+                ShowCenterDocument(
+                    MoveToCenterDocument(descriptor),
+                    placement.CenterIndex,
+                    placement.Selected ?? false);
+            }
+            else
+            {
+                ShowAnchorableAsCenterPage(
+                    MoveToAnchorable(descriptor),
+                    placement.CenterIndex,
+                    placement.Selected ?? false);
+            }
+            return;
+        }
+
+        var anchorable = MoveToAnchorable(descriptor);
+        PlaceAtSide(anchorable, side, placement.Ratio, target);
+        if (placement.Selected == true)
+            anchorable.IsSelected = true;
     }
 
     private void EnsureRegisteredWindow(ToolWindowDescriptor d)
@@ -322,21 +283,24 @@ internal sealed partial class DockingHost
         }
         else
         {
+            var placement = _orphanPlacements.GetValueOrDefault(d.Id);
+            var side = placement?.Side ?? d.DefaultSide;
+            var target = placement?.TabTarget ?? d.DefaultTabTarget;
             var anchorable = CreateAnchorable(d);
-            var targetPending = d.DefaultSide == DockSide.Tab && d.DefaultTabTarget != null &&
-                                !IsCenterTabTarget(d.DefaultTabTarget) &&
-                                FindAnchorable(d.DefaultTabTarget)?.Parent is not LayoutAnchorablePane;
+            var targetPending = side == DockSide.Tab && target != null &&
+                                !IsCenterTabTarget(target) &&
+                                FindAnchorable(target)?.Parent is not LayoutAnchorablePane;
             if (targetPending)
             {
-                _pendingTabTargets[d.Id] = d.DefaultTabTarget!;
-                _log.Info(LayoutSource, $"窗口 {d.Id} 的标签组目标 {d.DefaultTabTarget} 尚未注册，暂时右侧停靠");
+                _pendingTabTargets[d.Id] = target!;
+                _log.Info(LayoutSource, $"窗口 {d.Id} 的标签组目标 {target} 尚未注册，暂时右侧停靠");
             }
             PlaceAtSide(
                 anchorable,
-                targetPending ? DockSide.Right : d.DefaultSide,
-                d.DefaultRatio,
-                targetPending ? null : d.DefaultTabTarget);
-            if (!d.DefaultVisible)
+                targetPending ? DockSide.Right : side,
+                placement?.Ratio ?? d.DefaultRatio,
+                targetPending ? null : target);
+            if (placement?.Hidden ?? !d.DefaultVisible)
                 anchorable.Hide();
         }
         _preserveDefaultRatioOnSeed.Add(d.Id);
@@ -613,10 +577,12 @@ internal sealed partial class DockingHost
             return;
         try
         {
-            _orphanPlacements = JsonSerializer.Deserialize<Dictionary<string, OrphanPlacement>>(json)
-                                ?? new Dictionary<string, OrphanPlacement>(StringComparer.OrdinalIgnoreCase);
-            _orphanPlacements = new Dictionary<string, OrphanPlacement>(
+            _orphanPlacements = JsonSerializer.Deserialize<Dictionary<string, DockPlacementSnapshot>>(json)
+                                ?? new Dictionary<string, DockPlacementSnapshot>(StringComparer.OrdinalIgnoreCase);
+            _orphanPlacements = new Dictionary<string, DockPlacementSnapshot>(
                 _orphanPlacements, StringComparer.OrdinalIgnoreCase);
+            foreach (var (id, placement) in _orphanPlacements)
+                _lastVisiblePlacements[id] = placement;
         }
         catch (Exception ex)
         {
@@ -625,11 +591,9 @@ internal sealed partial class DockingHost
         }
     }
 
-    private void SavePlacements()
+    private Dictionary<string, DockPlacementSnapshot> CapturePlacements()
     {
-        if (_settings == null)
-            return;
-        var placements = new Dictionary<string, OrphanPlacement>(StringComparer.OrdinalIgnoreCase);
+        var placements = new Dictionary<string, DockPlacementSnapshot>(StringComparer.OrdinalIgnoreCase);
         foreach (var descriptor in _descriptors)
         {
             var state = ComputeState(descriptor.Id);
@@ -638,18 +602,40 @@ internal sealed partial class DockingHost
                 ? anchorable
                 : null;
             var centerPane = centerContent?.Parent as LayoutDocumentPane;
-            placements[descriptor.Id] = new OrphanPlacement(
+            var current = new DockPlacementSnapshot(
                 state.Side ?? descriptor.DefaultSide,
                 state.Ratio > 0 ? state.Ratio : _ratios.GetValueOrDefault(descriptor.Id, descriptor.DefaultRatio),
                 !state.Visible,
                 state.TabTarget,
                 centerPane == null ? null : centerPane.Children.IndexOf(centerContent!),
                 centerPane == null ? null : ReferenceEquals(centerPane.SelectedContent, centerContent));
+            if (!state.Visible && _lastVisiblePlacements.TryGetValue(descriptor.Id, out var previous))
+                current = previous with { Hidden = true };
+            else if (state.Visible)
+                _lastVisiblePlacements[descriptor.Id] = current;
+            placements[descriptor.Id] = current;
         }
+        return placements;
+    }
+
+    private void RememberCurrentPlacement(string id)
+    {
+        if (!_byId.TryGetValue(id, out var descriptor))
+            return;
+        var placements = CapturePlacements();
+        if (placements.TryGetValue(descriptor.Id, out var placement) && !placement.Hidden)
+            _lastVisiblePlacements[id] = placement;
+    }
+
+    private void SavePlacements()
+    {
+        if (_settings == null)
+            return;
+        var placements = CapturePlacements();
         _settings.Set(PlacementSettingsKey, JsonSerializer.Serialize(placements));
     }
 
-    private OrphanPlacement? TakeOrphanPlacement(string id)
+    private DockPlacementSnapshot? TakeOrphanPlacement(string id)
     {
         if (!_orphanPlacements.Remove(id, out var placement))
             return null;
@@ -673,12 +659,4 @@ internal sealed partial class DockingHost
         }
     }
 
-    private sealed record OrphanPlacement(
-        DockSide Side,
-        double Ratio,
-        bool Hidden,
-        string? TabTarget,
-        int? CenterIndex = null,
-        bool? Selected = null);
 }
-
