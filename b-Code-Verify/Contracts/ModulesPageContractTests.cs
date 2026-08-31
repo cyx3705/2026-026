@@ -106,6 +106,20 @@ public sealed class ModulesPageContractTests
         Assert.Contains("Environment.CurrentDirectory = cwd", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void HostMarshalledUiCommandsDoNotSyncWaitOnTheUiDispatcher()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "b-Code-Studio", "Module", "AuroraShellHost.cs"));
+
+        Assert.Contains("window.Dispatcher.CheckAccess()", source, StringComparison.Ordinal);
+        Assert.Contains("window.Dispatcher.InvokeAsync(() => source.Handler(context))", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Handler = context => window.Dispatcher.Invoke(() => source.Handler(context))",
+            source,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>向上找到含 project.manifest.json 的目录，即仓库根。</summary>
     private static string RepositoryRoot()
     {

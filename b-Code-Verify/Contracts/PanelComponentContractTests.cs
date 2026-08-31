@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HistoryAurora.Shell.Widgets;
 using HistoryAurora.Shell.Actions;
+using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Panels;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -53,6 +54,66 @@ public sealed class PanelComponentContractTests
 
             picker.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
             Assert.Single(commits);
+        });
+    }
+
+    [Fact]
+    public void SourcePicker_CommitRefreshesTheOwningPage()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandRegistry();
+            var log = new MemoryLog();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.ui.source",
+                Domain = "demo",
+                CommandClass = "ui",
+                Summary = "设置来源",
+                AllowUnspecifiedParameters = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
+            });
+            var bus = new CommandBus(registry, log);
+            var actions = new ActionRegistry(bus, log);
+            actions.DeclareLocal("HistoryDemo",
+            [
+                new ActionDeclaration
+                {
+                    Id = "demo.source.set",
+                    Title = "设置来源",
+                    Command = "demo.ui.source",
+                    Args = new Dictionary<string, string> { ["path"] = "{value}" },
+                },
+            ]);
+
+            var refreshes = 0;
+            var refresher = new PageDataRefresher();
+            refresher.Register("HistoryDemo", "mapping", "parts", [], () =>
+            {
+                refreshes++;
+                return Task.CompletedTask;
+            });
+
+            var view = new PanelView(
+                Parse("""
+                    {
+                      "id": "mapping-controls", "title": "来源",
+                      "rows": [{ "widgets": [{
+                        "kind": "sourcePicker", "id": "source",
+                        "selectCommand": "aurora.ui.selectfile",
+                        "commitAction": "demo.source.set"
+                      }] }]
+                    }
+                    """),
+                bus, log, actions, refresher: refresher, pageId: "mapping");
+
+            var picker = Assert.IsType<AuroraSourcePicker>(
+                Assert.Single(Elements(view), element => element is AuroraSourcePicker));
+            picker.Text = @"C:\parts\valve.par";
+            picker.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
+            UiTestHost.PumpUntil(() => refreshes > 0);
+
+            Assert.Equal(1, refreshes);
         });
     }
 
