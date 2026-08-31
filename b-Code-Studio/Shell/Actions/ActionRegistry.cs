@@ -139,16 +139,7 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
 
         foreach (var pair in action.Args ?? new Dictionary<string, string>())
         {
-            var value = PlaceholderPattern().Replace(pair.Value ?? "", match =>
-            {
-                var control = match.Groups[1].Value;
-                var resolved = lookup(control);
-                if (resolved != null)
-                    return resolved;
-                unknown.Add(control);
-                return match.Value;
-            });
-
+            var value = ExpandPlaceholders(pair.Value ?? "", lookup, unknown);
             text += " " + pair.Key + "=" + CommandParser.QuoteArg(value);
         }
 
@@ -209,7 +200,30 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
     }
 
     /// <summary>
-    /// 占位符名接受除大括号与空白之外的任意字符。
+    /// 把 <c>{selection.通道.列}</c> 和控件 id 占位符换成当前值。
+    /// 来源选择器的 selectCommand 必须 <paramref name="quoteValues"/>，
+    /// 否则「属性整备（改名）」带空格，会拆成多段参数，对话框仍按默认零件文件夹开。
+    /// 按钮动作走 <see cref="BuildCommandText"/>，那边已经对每个 arg 加过引号，这里不要再套一层。
+    /// </summary>
+    public static string ExpandPlaceholders(
+        string text,
+        Func<string, string?> lookup,
+        ICollection<string>? unknown = null,
+        bool quoteValues = false)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+        return PlaceholderPattern().Replace(text ?? string.Empty, match =>
+        {
+            var control = match.Groups[1].Value;
+            var resolved = lookup(control);
+            if (resolved != null)
+                return quoteValues ? CommandParser.QuoteArg(resolved) : resolved;
+            unknown?.Add(control);
+            return match.Value;
+        });
+    }
+
+    /// <summary>
     ///
     /// **原先写的是 <c>\w+</c>，那是一处静默失效**：控件 id 里带连字符是常态
     /// （<c>project-name</c> / <c>commit-message</c> / <c>page-option</c>），
