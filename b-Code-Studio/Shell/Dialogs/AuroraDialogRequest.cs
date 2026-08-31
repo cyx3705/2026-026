@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace HistoryAurora.Shell;
 
 /// <summary>
@@ -6,6 +8,7 @@ namespace HistoryAurora.Shell;
 ///   <item><see cref="Message"/>：一段说明 + 关闭（关于）</item>
 ///   <item><see cref="Confirm"/>：确认/取消，可倒计时、可标危险</item>
 ///   <item><see cref="Prompt"/>：带输入的确认（如填写恢复提交说明）</item>
+///   <item><see cref="Choice"/>：从一组 label/value 候选中选择一项</item>
 ///   <item><see cref="Content"/>：大段只读等宽正文（如历史预览）</item>
 /// </list>
 /// 模块本轮不要自己 <c>new Window</c>；下一轮把现有对话框改走
@@ -16,7 +19,64 @@ public enum AuroraDialogKind
     Message,
     Confirm,
     Prompt,
+    Choice,
     Content,
+}
+
+/// <summary>选择弹窗中的一项；界面显示 <see cref="Label"/>，结果返回 <see cref="Value"/>。</summary>
+public sealed class AuroraDialogChoice
+{
+    public string Label { get; init; } = "";
+
+    public string Value { get; init; } = "";
+}
+
+/// <summary>选择项 JSON 的统一解析入口，命令与合同测试共用同一套严格校验。</summary>
+public static class AuroraDialogChoiceReader
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    public static bool TryRead(string? json, out IReadOnlyList<AuroraDialogChoice> choices, out string error)
+    {
+        choices = [];
+        error = "";
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            error = "choice 弹窗必须提供 options";
+            return false;
+        }
+
+        List<AuroraDialogChoice>? parsed;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<List<AuroraDialogChoice>>(json, Options);
+        }
+        catch (JsonException ex)
+        {
+            error = "options 不是合法的 {label,value} JSON 列表: " + ex.Message;
+            return false;
+        }
+
+        if (parsed is not { Count: > 0 })
+        {
+            error = "choice 弹窗的 options 不能为空";
+            return false;
+        }
+
+        var invalid = parsed.FindIndex(item =>
+            item == null || string.IsNullOrWhiteSpace(item.Label) || string.IsNullOrWhiteSpace(item.Value));
+        if (invalid >= 0)
+        {
+            error = $"options[{invalid}] 必须同时提供非空 label 和 value";
+            return false;
+        }
+
+        choices = parsed;
+        return true;
+    }
 }
 
 /// <summary>一次弹窗的数据。不含任何样式键或颜色——外观由 Aurora 决定（DEC-005）。</summary>
@@ -35,6 +95,9 @@ public sealed class AuroraDialogRequest
     /// <summary>prompt 种类的输入初值；其它种类忽略。</summary>
     public string? Value { get; init; }
 
+    /// <summary>choice 种类的候选项；其它种类忽略。</summary>
+    public IReadOnlyList<AuroraDialogChoice> Choices { get; init; } = [];
+
     public string PrimaryText { get; init; } = "确定";
 
     public string CancelText { get; init; } = "取消";
@@ -52,7 +115,10 @@ public sealed class AuroraDialogRequest
     public int TimeoutSeconds { get; init; }
 }
 
-/// <summary>一次弹窗的结果。超时与点取消都是未接受，用 <see cref="TimedOut"/> 区分。</summary>
+/// <summary>
+/// 一次弹窗的结果。<see cref="Input"/> 对 prompt 是输入文字，对 choice 是所选 value。
+/// 超时与点取消都是未接受，用 <see cref="TimedOut"/> 区分。
+/// </summary>
 public readonly record struct AuroraDialogResult(bool Accepted, bool TimedOut, string? Input)
 {
     public static AuroraDialogResult Rejected { get; } = new(false, false, null);

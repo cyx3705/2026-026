@@ -184,6 +184,12 @@ public sealed class PageColumn
 
     /// <summary>像素宽；"*" 表示占满剩余。</summary>
     public string? Width { get; init; }
+
+    /// <summary>
+    /// 点击本列非空单元格时执行的动作 id。动作参数默认从被点行的同名字段解析，
+    /// 与 <see cref="PageRowAction"/> 使用同一套动作台账和占位符规则。
+    /// </summary>
+    public string? CellAction { get; init; }
 }
 
 /// <summary>组件取数：一条只读命令加固定参数，分页与筛选由组件追加。</summary>

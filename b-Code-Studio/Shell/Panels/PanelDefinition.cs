@@ -138,6 +138,12 @@ public sealed class PanelWidget
     /// <summary>text 的正文，或 button 的按钮文字（不写时用动作声明的标题）。</summary>
     public string? Text { get; set; }
 
+    /// <summary>
+    /// button 专用的受控图标名。模块只声明语义名，不提供 SVG 或任意几何；
+    /// 当前支持 <c>refresh-cw</c>。
+    /// </summary>
+    public string? Icon { get; set; }
+
     /// <summary>textbox 专用：input（缺省）或 select。</summary>
     public string? Mode { get; set; }
 
@@ -301,6 +307,10 @@ public static class PanelDefinitionValidator
             return PanelDefinitionParse.Fail(
                 $"面板 {definition.Id} 的小组件 {widget.Id ?? widget.Kind} 的 minWidth 必须为正数: {min}");
 
+        if (widget.Icon != null && kind != PanelWidgetKind.Button)
+            return PanelDefinitionParse.Fail(
+                $"面板 {definition.Id} 的 {widget.Kind} 不支持 icon；icon 只属于按钮");
+
         switch (kind)
         {
             case PanelWidgetKind.TextBox:
@@ -386,6 +396,9 @@ public static class PanelDefinitionValidator
                 if (widget.EnabledWhen is { } gate && string.IsNullOrWhiteSpace(gate.Selected))
                     return PanelDefinitionParse.Fail(
                         $"面板 {definition.Id} 的按钮 {widget.Action} 的 enabledWhen 只支持 selected=<通道>");
+                if (widget.Icon != null && !PanelIconCatalog.Supports(widget.Icon))
+                    return PanelDefinitionParse.Fail(
+                        $"面板 {definition.Id} 的按钮 {widget.Action} 使用未知 icon={widget.Icon}；当前只支持 refresh-cw");
                 break;
 
             case PanelWidgetKind.Text:

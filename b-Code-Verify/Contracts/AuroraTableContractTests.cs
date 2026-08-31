@@ -21,7 +21,7 @@ public sealed class AuroraTableContractTests
     /// 那时才会重新读一遍为什么当初不给。
     /// </summary>
     [Fact]
-    public void Column_ExposesOnlyKeyTitleAndWidth()
+    public void Column_ExposesOnlyDataShapeAndControlledCellAction()
     {
         var names = typeof(AuroraTableColumn)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -30,7 +30,7 @@ public sealed class AuroraTableContractTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["Key", "Title", "Width"], names);
+        Assert.Equal(["CellAction", "Key", "Title", "Width"], names);
     }
 
     [Fact]
