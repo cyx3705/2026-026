@@ -1,4 +1,5 @@
-﻿using HistoryAurora.Shell.Actions;
+﻿using System.Collections.Generic;
+using HistoryAurora.Shell.Actions;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -221,6 +222,23 @@ public sealed class ActionDeclarationContractTests
         // 把 {target} 原样发上总线会变成一条参数明显错误、却"执行成功"的指令。
         Assert.Null(text);
         Assert.Contains("target", error);
+    }
+
+    [Fact]
+    public void ExpandPlaceholders_SubstitutesSelectionChannel()
+    {
+        var unknown = new List<string>();
+        var content = "SolidWorks .SLDASM → 属性整备（改名）";
+        var expanded = ActionRegistry.ExpandPlaceholders(
+            "minerva.ui.picksource content={selection.minerva.content.value}",
+            key => key == "selection.minerva.content.value" ? content : null,
+            unknown,
+            quoteValues: true);
+
+        Assert.Empty(unknown);
+        Assert.Equal(
+            "minerva.ui.picksource content=" + CommandParser.QuoteArg(content),
+            expanded);
     }
 
     [Fact]

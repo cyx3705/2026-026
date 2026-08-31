@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Selection;
@@ -275,6 +276,15 @@ public sealed partial class PanelView : UserControl
                 options.FirstOrDefault(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
             if (publish != null)
                 combo.SelectionChanged += (_, _) => PublishIfDeclared(publish, id);
+            if (!string.IsNullOrWhiteSpace(widget.CommitAction))
+            {
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string selected || string.IsNullOrWhiteSpace(selected))
+                        return;
+                    Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = selected });
+                };
+            }
 
             if (widget.OptionsSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
                 _feeds.Add(new OptionFeed(id, combo, options, source, ChannelsOf(source), widget.Value));
@@ -343,7 +353,22 @@ public sealed partial class PanelView : UserControl
         {
             try
             {
-                var result = await _bus.ExecuteAsync(widget.SelectCommand!, "UI").ConfigureAwait(true);
+                var unknown = new List<string>();
+                var command = ActionRegistry.ExpandPlaceholders(
+                    widget.SelectCommand!,
+                    SelectionChannels.Chain(
+                        _channels,
+                        control => _getters.TryGetValue(control, out var getter) ? getter() : null),
+                    unknown,
+                    quoteValues: true);
+                if (unknown.Count > 0)
+                {
+                    _log.Log(ShellLogLevel.Warn, "panel",
+                        $"面板 {_definition.Id}: 来源选择指令占位符取不到值 {{{string.Join("}, {", unknown.Distinct())}}}");
+                    return null;
+                }
+
+                var result = await _bus.ExecuteAsync(command, "UI").ConfigureAwait(true);
                 if (!result.Success)
                     return null;
                 return result.Data as string;
@@ -550,6 +575,8 @@ public sealed partial class PanelView : UserControl
         var result = await _bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
         if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
             return;
+        // 选完文件后同一帧刷新表格会叠在对话框关闭的布局上，列宽空转把主进程打满。
+        await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
         _refresher.Refresh(_pageId, null);
     }
 }
