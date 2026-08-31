@@ -121,6 +121,58 @@ public sealed class AuroraDialogContractTests
     }
 
     [Fact]
+    public void ChoiceBuildsScrollableKeyboardListAndReturnsValue()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var choices = Enumerable.Range(1, 40)
+                .Select(index => new AuroraDialogChoice
+                {
+                    Label = $"目录 {index}",
+                    Value = $"z-{index}",
+                })
+                .ToList();
+            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            {
+                Kind = AuroraDialogKind.Choice,
+                Title = "选择 z 级文件夹",
+                Body = "请选择要打开的目录",
+                Choices = choices,
+            });
+
+            Assert.NotNull(dialog.ChoiceBox);
+            Assert.Equal(40, dialog.ChoiceBox!.Items.Count);
+            Assert.True(dialog.ChoiceBox.Focusable);
+            Assert.Equal(ScrollBarVisibility.Auto,
+                ScrollViewer.GetVerticalScrollBarVisibility(dialog.ChoiceBox));
+            Assert.Equal("z-1", dialog.SelectedChoiceValue);
+            dialog.ChoiceBox.SelectedIndex = 18;
+            Assert.Equal("z-19", dialog.SelectedChoiceValue);
+            Assert.NotNull(dialog.CancelButton);
+            Assert.True(dialog.CancelButton!.IsCancel);
+            dialog.Close();
+        });
+    }
+
+    [Fact]
+    public void ChoiceReaderRejectsMalformedEmptyAndIncompleteOptions()
+    {
+        Assert.False(AuroraDialogChoiceReader.TryRead("[]", out _, out var empty));
+        Assert.Contains("不能为空", empty);
+
+        Assert.False(AuroraDialogChoiceReader.TryRead("not-json", out _, out var malformed));
+        Assert.Contains("合法", malformed);
+
+        Assert.False(AuroraDialogChoiceReader.TryRead(
+            """[{"label":"目录"}]""", out _, out var incomplete));
+        Assert.Contains("label 和 value", incomplete);
+
+        Assert.True(AuroraDialogChoiceReader.TryRead(
+            """[{"label":"目录 A","value":"z-A"}]""", out var choices, out var error), error);
+        Assert.Equal("z-A", Assert.Single(choices).Value);
+    }
+
+    [Fact]
     public void InProcessShellClaimsHostConfirmationChannel()
     {
         var path = Path.Combine(

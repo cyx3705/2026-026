@@ -135,7 +135,7 @@ public static partial class PageRenderer
     public static readonly IReadOnlySet<string> SupportedCapabilities =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "table.rowactions", "menu",
+            "table.rowactions", "table.cellaction", "dialog.choice", "menu",
             // REQ-UI-041：表格发布选中行、面板跟随取值与按选中启停。
             // 「表格选中行 → 按钮变可用」这条链路 1.8.14 随页面按钮一起没了，这三条把它接回来，
             // 落点从页内节点 id 换成界面级通道，因此顺带能跨页。
@@ -143,7 +143,7 @@ public static partial class PageRenderer
             // REQ-UI-060：面板的行是声明出来的一等结构，行内可以指定均布或可变宽度，
             // 元素可以注册自己的最窄宽度。它取代了 REQ-UI-043 的 panel.inline——
             // 「与前一个控件同行」在有了真正的行之后没有存在的余地。
-            "panel.rows", "panel.minwidth", "panel.flex",
+            "panel.rows", "panel.minwidth", "panel.flex", "panel.icon",
             // REQ-UI-059：选择框的候选来自一条只读指令，可跟着通道重取（两级联动下拉）。
             "panel.optionssource",
             // REQ-UI-065：极简开关、来源选择器及输入提交动作。
@@ -324,8 +324,35 @@ public static partial class PageRenderer
     /// </summary>
     private static FrameworkElement BuildTable(PageNode node, RenderState state)
     {
+        var broken = new List<string>();
         var columns = (node.Columns ?? [])
-            .Select(column => new AuroraTableColumn(column.Key, column.Title, column.Width))
+            .Select(column =>
+            {
+                if (column.CellAction == null)
+                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
+                if (string.IsNullOrWhiteSpace(column.CellAction))
+                {
+                    broken.Add($"列 {column.Title}：cellAction 为空");
+                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
+                }
+
+                var binding = state.ResolveAction(column.CellAction);
+                if (!binding.Ok)
+                {
+                    broken.Add($"列 {column.Title}：{binding.Error}");
+                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
+                }
+
+                var action = binding.Action!;
+                return new AuroraTableColumn(
+                    column.Key,
+                    column.Title,
+                    column.Width,
+                    new AuroraCellAction(
+                        column.CellAction,
+                        string.IsNullOrWhiteSpace(action.Summary) ? action.Title : action.Summary,
+                        action.Danger));
+            })
             .ToList();
 
         var table = new AuroraTable { EmptyText = "暂无数据" };
@@ -346,12 +373,11 @@ public static partial class PageRenderer
         if (node.DataSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
             state.BindRows(table, columns, source, node.Id);
 
-        var declared = node.RowActions ?? [];
-        if (declared.Count == 0)
-            return table;
+        if (columns.Any(column => column.CellAction != null))
+            state.BindCellActions(table);
 
+        var declared = node.RowActions ?? [];
         var bound = new List<AuroraRowAction>();
-        var broken = new List<string>();
         foreach (var action in declared)
         {
             if (action.Action is not { Length: > 0 } actionId)
@@ -377,17 +403,18 @@ public static partial class PageRenderer
                 binding.Action!.Summary));
         }
 
-        table.SetRowActions(bound);
+        if (declared.Count > 0)
+            table.SetRowActions(bound);
         if (broken.Count == 0)
             return table;
 
-        // 断链的行操作不能只是"少了一个按钮"——那是看不出来的。
+        // 断链的行/单元格操作不能只是"少了一个按钮"——那是看不出来的。
         // 表照画，上面加一块写清是哪几条断了。
         foreach (var reason in broken)
-            state.WarnUnbound("行操作未绑定: " + reason);
+            state.WarnUnbound("表格操作未绑定: " + reason);
 
         var stack = new StackPanel();
-        var notice = Box("行操作未绑定：" + string.Join("；", broken));
+        var notice = Box("表格操作未绑定：" + string.Join("；", broken));
         notice.Margin = new Thickness(0, 0, 0, GapTight);
         stack.Children.Add(notice);
         stack.Children.Add(table);
@@ -650,6 +677,7 @@ public static partial class PageRenderer
     {
         private readonly Dictionary<string, AuroraTable> _nodes = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<AuroraTable, Dictionary<string, PageRowAction>> _rowActions = [];
+        private readonly HashSet<AuroraTable> _cellActionTables = [];
 
         public List<string> Missing { get; } = [];
 
@@ -757,6 +785,38 @@ public static partial class PageRenderer
                 SelectionChannels.Chain(
                     context.Channels,
                     name => ResolveRowArgument(declared, e.Row, name)),
+                out var error);
+            if (text == null)
+            {
+                context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": " + error);
+                return;
+            }
+
+            _ = context.Bus.ExecuteAsync(text, "UI");
+        }
+
+        /// <summary>把表格的单元格动作接到动作台账；同一张表只挂一次事件。</summary>
+        public void BindCellActions(AuroraTable table)
+        {
+            if (_cellActionTables.Add(table))
+                table.CellActionInvoked += (_, e) => InvokeCellAction(e);
+        }
+
+        private void InvokeCellAction(AuroraCellActionEventArgs e)
+        {
+            // 与行操作一致，点击时现取声明，避免模块热重载后继续执行旧指令。
+            var binding = ResolveAction(e.Action.Id);
+            if (!binding.Ok)
+            {
+                context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": " + binding.Error);
+                return;
+            }
+
+            var text = ActionRegistry.BuildCommandText(
+                binding.Action!,
+                SelectionChannels.Chain(
+                    context.Channels,
+                    name => e.Row.TryGetValue(name, out var cell) ? cell : null),
                 out var error);
             if (text == null)
             {

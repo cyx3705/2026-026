@@ -79,11 +79,16 @@ public sealed class AuroraDialogWindow : Window
 
     internal TextBox? ContentBox { get; private set; }
 
+    internal ListBox? ChoiceBox { get; private set; }
+
     internal TextBlock? CountdownText { get; private set; }
 
     internal Button PrimaryButton { get; private set; } = null!;
 
     internal Button? CancelButton { get; private set; }
+
+    internal string? SelectedChoiceValue
+        => (ChoiceBox?.SelectedItem as AuroraDialogChoice)?.Value;
 
     /// <summary>按当前浅色/深色令牌构造，不显示。测试走这条，避免 <c>ShowDialog</c> 挂死 STA。</summary>
     public static AuroraDialogWindow Create(AuroraDialogRequest request, Window? owner = null, bool dark = false)
@@ -102,7 +107,10 @@ public sealed class AuroraDialogWindow : Window
     {
         var window = new AuroraDialogWindow(request, owner, dark);
         window.ShowDialog();
-        return new AuroraDialogResult(window._accepted, window._timedOut, window.PromptBox?.Text);
+        var value = request.Kind == AuroraDialogKind.Choice
+            ? window.SelectedChoiceValue
+            : window.PromptBox?.Text;
+        return new AuroraDialogResult(window._accepted, window._timedOut, value);
     }
 
     private void MergeTheme(bool dark)
@@ -146,6 +154,14 @@ public sealed class AuroraDialogWindow : Window
                 ResizeMode = ResizeMode.NoResize;
                 SizeToContent = SizeToContent.Height;
                 break;
+            case AuroraDialogKind.Choice:
+                Width = 520;
+                Height = 460;
+                MinWidth = 420;
+                MinHeight = 300;
+                ResizeMode = ResizeMode.CanResize;
+                SizeToContent = SizeToContent.Manual;
+                break;
             default:
                 MinWidth = 360;
                 MaxWidth = 560;
@@ -188,6 +204,35 @@ public sealed class AuroraDialogWindow : Window
             inner.Children.Add(PromptBox);
         }
 
+        if (_request.Kind == AuroraDialogKind.Choice)
+        {
+            if (!string.IsNullOrWhiteSpace(_request.Body))
+            {
+                BodyText = new TextBlock { Text = _request.Body, MaxWidth = 460 };
+                BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Body");
+                DockPanel.SetDock(BodyText, Dock.Top);
+                inner.Children.Add(BodyText);
+            }
+
+            ChoiceBox = new ListBox
+            {
+                ItemsSource = _request.Choices,
+                DisplayMemberPath = nameof(AuroraDialogChoice.Label),
+                SelectedIndex = _request.Choices.Count > 0 ? 0 : -1,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+            ScrollViewer.SetVerticalScrollBarVisibility(ChoiceBox, ScrollBarVisibility.Auto);
+            ChoiceBox.MouseDoubleClick += (_, _) =>
+            {
+                if (ChoiceBox.SelectedItem == null)
+                    return;
+                _accepted = true;
+                DialogResult = true;
+            };
+            inner.Children.Add(ChoiceBox);
+            PrimaryButton.IsEnabled = _request.Choices.Count > 0;
+        }
+
         if (_request.Kind == AuroraDialogKind.Content)
         {
             if (!string.IsNullOrWhiteSpace(_request.Body))
@@ -202,7 +247,7 @@ public sealed class AuroraDialogWindow : Window
             ContentBox.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Content");
             inner.Children.Add(ContentBox);
         }
-        else if (!string.IsNullOrWhiteSpace(_request.Body))
+        else if (_request.Kind != AuroraDialogKind.Choice && !string.IsNullOrWhiteSpace(_request.Body))
         {
             BodyText = new TextBlock { Text = _request.Body, MaxWidth = 460 };
             BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Body");

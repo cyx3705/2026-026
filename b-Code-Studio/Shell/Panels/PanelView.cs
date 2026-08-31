@@ -198,9 +198,9 @@ public sealed partial class PanelView : UserControl
                 if (Label(widget) is { Length: > 0 } text)
                     cells.Add(new BoardCell(BuildLabel(text), null, false));
 
+                // 空输入框量不出宽度（内容宽度是 0），因此没声明就给一个够用的下限。
                 cells.Add(new BoardCell(
                     BuildTextBox(widget),
-                    // 空输入框量不出宽度（内容宽度是 0），因此没声明就给一个够用的下限。
                     widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth,
                     widget.Flex));
                 return;
@@ -400,9 +400,10 @@ public sealed partial class PanelView : UserControl
         }
 
         var action = binding.Action!;
+        var label = widget.Text ?? (action.Title.Length > 0 ? action.Title : action.Id);
         var button = new Button
         {
-            Content = widget.Text ?? (action.Title.Length > 0 ? action.Title : action.Id),
+            Content = label,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,
             ToolTip = string.IsNullOrWhiteSpace(action.Summary)
@@ -412,6 +413,22 @@ public sealed partial class PanelView : UserControl
         button.SetResourceReference(
             StyleProperty,
             action.Danger ? "Aurora.Button.Danger" : "Aurora.Button.Ghost");
+
+        if (widget.Icon is { Length: > 0 } iconName)
+        {
+            var content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            content.Children.Add(PanelIconCatalog.Create(iconName, button));
+            content.Children.Add(new TextBlock
+            {
+                Text = label,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            button.Content = content;
+        }
         button.Click += (_, _) => Fire(widget.Action!);
 
         if (widget.EnabledWhen?.Selected is { Length: > 0 } channel)

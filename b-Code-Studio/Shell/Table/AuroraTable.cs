@@ -146,6 +146,9 @@ public sealed class AuroraTable : UserControl
     /// <summary>行内按钮或右键菜单被点。事件里带着被操作的**那一行**，不必回头读选中态。</summary>
     public event EventHandler<AuroraRowActionEventArgs>? RowActionInvoked;
 
+    /// <summary>可点击单元格被触发。事件同时携带列键与被点行，不依赖当前选中态。</summary>
+    public event EventHandler<AuroraCellActionEventArgs>? CellActionInvoked;
+
     /// <summary>选中行的序号；-1 表示无选中。可写，供程序驱动选择。</summary>
     public int SelectedIndex
     {
@@ -288,7 +291,9 @@ public sealed class AuroraTable : UserControl
                 var gridColumn = new GridViewColumn
                 {
                     Header = column.Title,
-                    CellTemplate = CellTemplate(column.Key),
+                    CellTemplate = column.CellAction == null
+                        ? CellTemplate(column.Key)
+                        : CellActionTemplate(column),
                 };
 
                 // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
@@ -419,6 +424,42 @@ public sealed class AuroraTable : UserControl
         cell.AddHandler(MouseEnterEvent, new MouseEventHandler(OnCellMouseEnter));
 
         return new DataTemplate { VisualTree = cell };
+    }
+
+    /// <summary>
+    /// 可点击单元格使用真正的 Button，因此鼠标、Enter 与 Space 走同一条 WPF 命令路径。
+    /// 动作 id 和列键挂在 Tag 上；行仍由按钮继承的 DataContext 提供。
+    /// </summary>
+    private DataTemplate CellActionTemplate(AuroraTableColumn column)
+    {
+        var button = new FrameworkElementFactory(typeof(Button));
+        button.SetValue(TagProperty, new CellActionTag(column.CellAction!.Id, column.Key));
+        button.SetValue(
+            ToolTipProperty,
+            string.IsNullOrWhiteSpace(column.CellAction.Summary)
+                ? $"点击执行 {column.CellAction.Id}"
+                : column.CellAction.Summary);
+        button.SetResourceReference(
+            StyleProperty,
+            column.CellAction.Danger ? "Aurora.Table.CellActionDanger" : "Aurora.Table.CellAction");
+        button.AddHandler(ClickEvent, new RoutedEventHandler(OnCellActionClick));
+
+        var text = new FrameworkElementFactory(typeof(TextBlock));
+        text.SetBinding(TextBlock.TextProperty, new Binding("[" + column.Key + "]"));
+        text.SetResourceReference(StyleProperty, "Aurora.Table.CellActionText");
+        button.AppendChild(text);
+
+        return new DataTemplate { VisualTree = button };
+    }
+
+    private void OnCellActionClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement { Tag: CellActionTag tag } element)
+            return;
+        if (element.DataContext is not IReadOnlyDictionary<string, string> row)
+            return;
+        FireCell(tag.ActionId, tag.ColumnKey, row);
     }
 
     private static void OnCellMouseEnter(object sender, MouseEventArgs e)
@@ -555,6 +596,24 @@ public sealed class AuroraTable : UserControl
             return;
         RowActionInvoked?.Invoke(this, new AuroraRowActionEventArgs(action, row));
     }
+
+    /// <summary>供测试与键盘路径复用：按动作和列键触发某一格。</summary>
+    internal void FireCell(
+        string actionId,
+        string columnKey,
+        IReadOnlyDictionary<string, string> row)
+    {
+        var action = _data.Columns
+            .FirstOrDefault(column => column.Key.Equals(columnKey, StringComparison.Ordinal))
+            ?.CellAction;
+        if (action == null || !action.Id.Equals(actionId, StringComparison.Ordinal))
+            return;
+        if (!row.TryGetValue(columnKey, out var value) || string.IsNullOrWhiteSpace(value))
+            return;
+        CellActionInvoked?.Invoke(this, new AuroraCellActionEventArgs(action, columnKey, row));
+    }
+
+    private sealed record CellActionTag(string ActionId, string ColumnKey);
 
     /// <summary>行内按钮列的宽度按标题估算：中日韩字符按 14px，其余按 8px，另加边框与间距。</summary>
     private static double InlineWidth(IReadOnlyList<AuroraRowAction> actions)

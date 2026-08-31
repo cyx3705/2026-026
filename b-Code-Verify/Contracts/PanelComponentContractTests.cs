@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using HistoryAurora.Shell.Widgets;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
@@ -153,6 +154,32 @@ public sealed class PanelComponentContractTests
     }
 
     [Fact]
+    public void Validate_RejectsUnknownOrNonButtonIcons()
+    {
+        var unknown = PanelDefinitionValidator.Validate(Parse("""
+            {
+              "id": "demo", "title": "演示",
+              "rows": [{ "widgets": [
+                { "kind": "button", "action": "demo.publish", "icon": "rotate" }
+              ] }]
+            }
+            """));
+        Assert.False(unknown.Ok);
+        Assert.Contains("refresh-cw", unknown.Error);
+
+        var nonButton = PanelDefinitionValidator.Validate(Parse("""
+            {
+              "id": "demo", "title": "演示",
+              "rows": [{ "widgets": [
+                { "kind": "text", "text": "刷新", "icon": "refresh-cw" }
+              ] }]
+            }
+            """));
+        Assert.False(nonButton.Ok);
+        Assert.Contains("只属于按钮", nonButton.Error);
+    }
+
+    [Fact]
     public void Validate_RejectsSelectWithoutAnyOptionSource()
     {
         var parsed = PanelDefinitionValidator.Validate(Parse("""
@@ -275,6 +302,39 @@ public sealed class PanelComponentContractTests
 
             // 面板里写的是动作 id；总线上落下的是声明里的指令名。
             Assert.Equal("demo.release.publish note=第一版 channel=stable", Assert.Single(executed));
+        });
+    }
+
+    [Fact]
+    public void Button_RendersControlledRefreshIconWithoutChangingLegacyButtons()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            actions.ReloadAsync().GetAwaiter().GetResult();
+
+            var iconView = new PanelView(Parse("""
+                {
+                  "id": "demo", "title": "演示",
+                  "rows": [{ "widgets": [
+                    { "kind": "button", "action": "demo.publish", "text": "刷新", "icon": "refresh-cw" }
+                  ] }]
+                }
+                """), bus, log, actions);
+            var iconButton = Assert.IsType<Button>(Assert.Single(Elements(iconView)));
+            var content = Assert.IsType<StackPanel>(iconButton.Content);
+            Assert.IsType<Path>(content.Children[0]);
+            Assert.Equal("刷新", Assert.IsType<TextBlock>(content.Children[1]).Text);
+
+            var legacy = new PanelView(Parse("""
+                {
+                  "id": "legacy", "title": "演示",
+                  "rows": [{ "widgets": [
+                    { "kind": "button", "action": "demo.publish", "text": "发布" }
+                  ] }]
+                }
+                """), bus, log, actions);
+            Assert.Equal("发布", Assert.IsType<Button>(Assert.Single(Elements(legacy))).Content);
         });
     }
 

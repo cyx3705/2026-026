@@ -40,6 +40,9 @@ public sealed partial class PageComponentsContractTests
         // 它们不是节点类型，因此单独一份清单——混进组件清单会让
         // type:"table.rowactions" 一边判为已支持、一边渲染成缺件占位。
         Assert.Contains("table.rowactions", PageRenderer.SupportedCapabilities);
+        Assert.Contains("table.cellaction", PageRenderer.SupportedCapabilities);
+        Assert.Contains("dialog.choice", PageRenderer.SupportedCapabilities);
+        Assert.Contains("panel.icon", PageRenderer.SupportedCapabilities);
         Assert.Contains("menu", PageRenderer.SupportedCapabilities);
         Assert.DoesNotContain("table.rowactions", PageRenderer.SupportedComponents);
 

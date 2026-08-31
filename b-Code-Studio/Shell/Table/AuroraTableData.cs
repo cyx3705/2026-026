@@ -13,7 +13,11 @@
 /// <c>"*"</c> 相当于权重 200；<c>null</c> 相当于 120。
 /// 解析不出数字时按未声明处理，不抛——一列宽度写错不该让整张表消失。
 /// </param>
-public sealed record AuroraTableColumn(string Key, string Title, string? Width = null)
+public sealed record AuroraTableColumn(
+    string Key,
+    string Title,
+    string? Width = null,
+    AuroraCellAction? CellAction = null)
 {
     /// <summary>占满剩余宽度的记号。</summary>
     public const string Star = "*";
@@ -28,6 +32,22 @@ public sealed record AuroraTableColumn(string Key, string Title, string? Width =
         && px > 0
             ? px
             : null;
+}
+
+/// <summary>一列的单元格动作。外观与触发方式由 <see cref="AuroraTable"/> 统一提供。</summary>
+public sealed record AuroraCellAction(string Id, string? Summary = null, bool Danger = false);
+
+/// <summary>单元格动作触发事实：动作、列键与被操作行始终来自同一次点击。</summary>
+public sealed class AuroraCellActionEventArgs(
+    AuroraCellAction action,
+    string columnKey,
+    IReadOnlyDictionary<string, string> row) : EventArgs
+{
+    public AuroraCellAction Action { get; } = action;
+
+    public string ColumnKey { get; } = columnKey;
+
+    public IReadOnlyDictionary<string, string> Row { get; } = row;
 }
 
 /// <summary>
