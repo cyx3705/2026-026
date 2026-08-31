@@ -44,22 +44,8 @@ public sealed class AuroraTable : UserControl
     /// <summary>没声明宽度时的权重。</summary>
     private const double AutoWeight = 120;
 
-    /// <summary>
-    /// 分摊的复算轮数上限。每轮只能读到**上一轮布局**的 ActualWidth，
-    /// 因此"设宽 → 量开销 → 再设宽"至少要两轮；列数多、行操作列也在时还要多一轮。
-    /// 用轮数兜底而不是"宽度不再变化"：后者会在某一轮刚好没变时提前停下。
-    /// </summary>
-    private const int MaxWidthPasses = 5;
-
-    /// <summary>小于半像素的列宽变化只是布局取整，不能再触发一轮布局。</summary>
-    private const double WidthEpsilon = 0.5;
-
-    /// <summary>
-    /// 文件对话框关闭、滚动条显隐、列宽回写都会让 ListView 宽半像素到几像素地抖。
-    /// 把这种抖当成「外部宽度变了」会把分摊轮数清零，列宽在两档之间永远跳，整窗卡住。
-    /// 只有明显的外部分配变化才重来。
-    /// </summary>
-    private const double ExternalResizeEpsilon = 8;
+    private const int MaxWidthPasses = AuroraTableLayoutGuard.MaxWidthPasses;
+    private const double WidthEpsilon = AuroraTableLayoutGuard.WidthEpsilon;
 
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
@@ -78,6 +64,7 @@ public sealed class AuroraTable : UserControl
     private bool _headerStyleApplied;
     private bool _widthPassQueued;
     private int _widthPasses;
+    private int _sizeChangeRestarts;
     private GridViewColumn? _actionColumn;
     private int _applyingWidths;
 
@@ -721,15 +708,19 @@ public sealed class AuroraTable : UserControl
 
     private void OnListSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。自己正在分摊时再清零轮数，
-        // 会在两种宽度间来回跳，选完文件后整窗像死了一样。
+        // GridView 改列宽和滚动条显隐都会传播 SizeChanged。门槛若小于滚动条宽度，
+        // 分摊一轮、条一闪、轮数清零，CPU 单核打满，选完文件后整窗像死了。
         if (_applyingWidths > 0 || _widthPassQueued)
             return;
-        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < WidthEpsilon)
-            return;
-        if (_widthPasses > 0 && Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < ExternalResizeEpsilon)
+        var delta = e.NewSize.Width - e.PreviousSize.Width;
+        if (!AuroraTableLayoutGuard.ShouldRestartWidthLayout(
+                delta, _widthPasses, _sizeChangeRestarts))
             return;
 
+        if (Math.Abs(delta) >= AuroraTableLayoutGuard.ExternalResizeEpsilon)
+            _sizeChangeRestarts = 0;
+        else
+            _sizeChangeRestarts++;
         RestartWidthLayout();
     }
 

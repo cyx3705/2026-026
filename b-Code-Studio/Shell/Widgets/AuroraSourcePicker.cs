@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace HistoryAurora.Shell.Widgets;
 
@@ -49,6 +50,11 @@ internal sealed class AuroraSourcePicker : TextBox
         try
         {
             var selected = await (SelectAsync?.Invoke() ?? Task.FromResult<string?>(null));
+            if (string.IsNullOrWhiteSpace(selected))
+                return;
+
+            // 文件对话框是嵌套消息泵。同一帧里改文字、提交、刷新表格会触发列宽空转。
+            await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
             if (string.IsNullOrWhiteSpace(selected))
                 return;
 

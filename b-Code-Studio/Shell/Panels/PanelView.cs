@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using HistoryAurora.Shell.Actions;
 using HistoryAurora.Shell.Pages;
 using HistoryAurora.Shell.Selection;
@@ -550,6 +551,8 @@ public sealed partial class PanelView : UserControl
         var result = await _bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
         if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
             return;
+        // 选完文件后同一帧刷新表格会叠在对话框关闭的布局上，列宽空转把主进程打满。
+        await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
         _refresher.Refresh(_pageId, null);
     }
 }
