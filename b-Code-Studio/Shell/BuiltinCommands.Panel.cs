@@ -25,10 +25,18 @@ internal static partial class BuiltinCommands
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                var dialog = new Microsoft.Win32.OpenFileDialog();
-                return dialog.ShowDialog(s.Window) == true
-                    ? CommandResult.Ok($"已选择 {dialog.FileName}", dialog.FileName)
-                    : CommandResult.Ok("已取消选择");
+                var cwd = Environment.CurrentDirectory;
+                try
+                {
+                    var dialog = new Microsoft.Win32.OpenFileDialog { RestoreDirectory = true };
+                    return dialog.ShowDialog(s.Window) == true
+                        ? CommandResult.Ok($"已选择 {dialog.FileName}", dialog.FileName)
+                        : CommandResult.Ok("已取消选择");
+                }
+                finally
+                {
+                    Environment.CurrentDirectory = cwd;
+                }
             }),
         });
 
@@ -41,10 +49,20 @@ internal static partial class BuiltinCommands
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                var dialog = new Microsoft.Win32.OpenFolderDialog();
-                return dialog.ShowDialog(s.Window) == true
-                    ? CommandResult.Ok($"已选择 {dialog.FolderName}", dialog.FolderName)
-                    : CommandResult.Ok("已取消选择");
+                // OpenFolderDialog 没有 RestoreDirectory。对话框会改进程当前目录，
+                // 后续扫描若从 Environment.CurrentDirectory 起步就会爬进 CAD 树。
+                var cwd = Environment.CurrentDirectory;
+                try
+                {
+                    var dialog = new Microsoft.Win32.OpenFolderDialog();
+                    return dialog.ShowDialog(s.Window) == true
+                        ? CommandResult.Ok($"已选择 {dialog.FolderName}", dialog.FolderName)
+                        : CommandResult.Ok("已取消选择");
+                }
+                finally
+                {
+                    Environment.CurrentDirectory = cwd;
+                }
             }),
         });
 

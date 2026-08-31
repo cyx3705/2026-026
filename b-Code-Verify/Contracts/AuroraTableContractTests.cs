@@ -238,6 +238,52 @@ public sealed class AuroraTableContractTests
         });
     }
 
+    [Fact]
+    public void SetData_WidthJitterAfterLayoutDoesNotHang()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var table = new AuroraTable { Width = 640, Height = 240 };
+            var host = new System.Windows.Window
+            {
+                Content = table,
+                Width = 680,
+                Height = 320,
+                ShowInTaskbar = false,
+                WindowStyle = System.Windows.WindowStyle.None,
+            };
+            try
+            {
+                host.Show();
+                table.SetData(AuroraTableData.Create(
+                    [
+                        new AuroraTableColumn("file", "文件", "220"),
+                        new AuroraTableColumn("status", "状态", "90"),
+                        new AuroraTableColumn("detail", "详情", "*"),
+                    ],
+                    Enumerable.Range(0, 24).Select(index => (IReadOnlyDictionary<string, string>)new Dictionary<string, string>
+                    {
+                        ["file"] = $"part-{index}.par",
+                        ["status"] = "就绪",
+                        ["detail"] = "ok",
+                    }).ToList()));
+                UiTestHost.Pump();
+
+                for (var round = 0; round < 20; round++)
+                {
+                    host.Width = 680 + (round % 3);
+                    UiTestHost.Pump();
+                }
+
+                Assert.Equal(24, table.RowCount);
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+    }
+
     private static System.Windows.Controls.GridView GridView(AuroraTable table)
     {
         var surface = Assert.IsType<System.Windows.Controls.Border>(table.Content);

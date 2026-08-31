@@ -13,6 +13,9 @@ internal sealed class AuroraSourcePicker : TextBox
 
     public Func<string, Task>? CommitAsync { get; set; }
 
+    private bool _selecting;
+    private string? _committed;
+
     public AuroraSourcePicker()
     {
         AcceptsReturn = false;
@@ -27,20 +30,44 @@ internal sealed class AuroraSourcePicker : TextBox
             return;
 
         e.Handled = true;
-        _ = CommitAsync?.Invoke(Text);
+        Commit(Text);
     }
 
     private void OnLostFocus(object sender, RoutedEventArgs e)
-        => _ = CommitAsync?.Invoke(Text);
+    {
+        // 打开文件对话框时本框会失焦。若把当时的空值提交出去，模块命令失败，
+        // 宿主还去抢控制台焦点——对话框一关，整窗就像死了。
+        if (_selecting)
+            return;
+        Commit(Text);
+    }
 
     private async void OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        var selected = await (SelectAsync?.Invoke() ?? Task.FromResult<string?>(null));
-        if (string.IsNullOrWhiteSpace(selected))
-            return;
+        _selecting = true;
+        try
+        {
+            var selected = await (SelectAsync?.Invoke() ?? Task.FromResult<string?>(null));
+            if (string.IsNullOrWhiteSpace(selected))
+                return;
 
-        Text = selected;
-        await (CommitAsync?.Invoke(Text) ?? Task.CompletedTask);
+            Text = selected;
+            Commit(Text);
+        }
+        finally
+        {
+            _selecting = false;
+        }
+    }
+
+    private void Commit(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        if (string.Equals(value, _committed, StringComparison.Ordinal))
+            return;
+        _committed = value;
+        _ = CommitAsync?.Invoke(value);
     }
 }
