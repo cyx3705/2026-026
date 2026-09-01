@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 
 <#
-    构建 HistoryAurora 发布候选到 z-Publish\ 根部。
+    构建 HistoryAurora 发布候选到 `z-Publish/HistoryAurora-vX.Y.Z/`。
 
     与体系其他模块一致：候选是生成物，不手工编辑；SHA256SUMS 覆盖包内全部内容，
     history/ 与 SHA256SUMS 自身除外（宿主 RuntimeModuleDiscoverySource 按此校验）。
@@ -12,12 +12,11 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
 
-    # Diana 发布器的调用契约（Publish-OneHistoryModule.ps1）：候选先扁平写进一个临时
-    # OutputRoot，跑完模块合同与验证之后，由发布器自己提升为 z-Publish\HistoryAurora-vX.Y.Z。
-    # 省略时保持手工用法不变：直接写进 z-Publish 的版本化目录并归档旧版。
+    # 省略时直接写进 z-Publish 的版本化目录并归档旧版。
+    # 传入 OutputRoot 时该目录就是包根（宿主 staging 或临时校验），不二次归档。
     [string]$OutputRoot,
 
-    # 发布器指定本次要编译到哪一份宿主快照；省略时由 Directory.Build.props 决定。
+    # 宿主可传入 HistoryVulcanPackageRoot，指向本次要对齐的宿主快照；省略时由 Directory.Build.props 决定。
     [string]$HistoryVulcanPackageRoot
 )
 
@@ -79,13 +78,12 @@ try {
         (New-Object System.Text.UTF8Encoding $false))
 
     if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
-        # 发布器路径：只交付内容，不碰 z-Publish。归档与版本化目录由它统一处理，
-        # 两边都做会让 history/ 里出现同一版本的两份。
+        # 显式 OutputRoot 只交付包内容，不碰 z-Publish 根（避免与版本化归档抢同一份）。
         $staged = [IO.Path]::GetFullPath($OutputRoot)
         New-Item -ItemType Directory -Path $staged -Force | Out-Null
         Get-ChildItem -LiteralPath $staged -Force | Remove-Item -Recurse -Force
         Copy-Item -Path (Join-Path $stage '*') -Destination $staged -Recurse -Force
-        Write-Host "HistoryAurora $version staged for the publisher: $staged"
+        Write-Host "HistoryAurora $version staged: $staged"
         return
     }
 
