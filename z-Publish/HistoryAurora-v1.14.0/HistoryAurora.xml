@@ -1289,6 +1289,618 @@
             控制台窗口订阅本实例；指令回显由总线 Executed 转发进来。
             </summary>
         </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.QuotedSensitiveField">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;prefix&gt;[\\"']?(?:account|accounts|username|user_name|login|password|passwd|pwd|token|access_token|refresh_token|api_key|apikey|client_secret|secret|private_key|connection_string|authorization|cookie|session|账号|帐号|账户|用户名|登录名|密码|口令|令牌|密钥)[\\"']?\\s*(?:=|:)\\s*)(?&lt;quoted&gt;\\"[^\\"\\r\\n]*\\"|'[^'\\r\\n]*')</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ "prefix" capture group.<br/>
+                ○ Match a character in the set ["'] greedily, optionally.<br/>
+                ○ Match with 29 alternative expressions.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Mm].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Mm].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ll].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Gg].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ff].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Hh].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Ll].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Vv].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Gg].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Hh].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Zz].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Oo] exactly 2 times.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match the string "账号".<br/>
+                    ○ Match the string "帐号".<br/>
+                    ○ Match the string "账户".<br/>
+                    ○ Match the string "用户名".<br/>
+                    ○ Match the string "登录名".<br/>
+                    ○ Match the string "密码".<br/>
+                    ○ Match the string "口令".<br/>
+                    ○ Match the string "令牌".<br/>
+                    ○ Match the string "密钥".<br/>
+                ○ Match a character in the set ["'] greedily, optionally.<br/>
+                ○ Match a whitespace character greedily any number of times.<br/>
+                ○ Match a character in the set [:=].<br/>
+                ○ Match a whitespace character greedily any number of times.<br/>
+            ○ "quoted" capture group.<br/>
+                ○ Match with 2 alternative expressions, atomically.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match '"'.<br/>
+                        ○ Match a character in the set [^\n\r"] greedily any number of times.<br/>
+                        ○ Match '"'.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match '\''.<br/>
+                        ○ Match a character in the set [^\n\r'] greedily any number of times.<br/>
+                        ○ Match '\''.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.UnquotedSensitiveField">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;prefix&gt;[\\"']?(?:account|accounts|username|user_name|login|password|passwd|pwd|token|access_token|refresh_token|api_key|apikey|client_secret|secret|private_key|connection_string|authorization|cookie|session|账号|帐号|账户|用户名|登录名|密码|口令|令牌|密钥)[\\"']?\\s*(?:=|:)\\s*)(?&lt;value&gt;[^\\s,;}\\]\\r\\n\\"'][^\\s,;}\\]\\r\\n]*)</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ "prefix" capture group.<br/>
+                ○ Match a character in the set ["'] greedily, optionally.<br/>
+                ○ Match with 29 alternative expressions.<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Mm].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Mm].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ll].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Gg].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ww].<br/>
+                        ○ Match a character in the set [Dd].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Cc] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ff].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Hh].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Ll].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Pp].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Vv].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Yy].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match '_'.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                        ○ Match a character in the set [Gg].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Uu].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Hh].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Rr].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Zz].<br/>
+                        ○ Match a character in the set [Aa].<br/>
+                        ○ Match a character in the set [Tt].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Cc].<br/>
+                        ○ Match a character in the set [Oo] exactly 2 times.<br/>
+                        ○ Match a character in the set [Kk\u212A].<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                    ○ Match a sequence of expressions.<br/>
+                        ○ Match a character in the set [Ss].<br/>
+                        ○ Match a character in the set [Ee].<br/>
+                        ○ Match a character in the set [Ss] exactly 2 times.<br/>
+                        ○ Match a character in the set [Ii].<br/>
+                        ○ Match a character in the set [Oo].<br/>
+                        ○ Match a character in the set [Nn].<br/>
+                    ○ Match the string "账号".<br/>
+                    ○ Match the string "帐号".<br/>
+                    ○ Match the string "账户".<br/>
+                    ○ Match the string "用户名".<br/>
+                    ○ Match the string "登录名".<br/>
+                    ○ Match the string "密码".<br/>
+                    ○ Match the string "口令".<br/>
+                    ○ Match the string "令牌".<br/>
+                    ○ Match the string "密钥".<br/>
+                ○ Match a character in the set ["'] greedily, optionally.<br/>
+                ○ Match a whitespace character greedily any number of times.<br/>
+                ○ Match a character in the set [:=].<br/>
+                ○ Match a whitespace character greedily any number of times.<br/>
+            ○ "value" capture group.<br/>
+                ○ Match a character in the set [^\n\r"',;]}\s].<br/>
+                ○ Match a character in the set [^\n\r,;]}\s] greedily any number of times.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.AuthorizationBearer">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;prefix&gt;\\b(?:authorization\\s*(?:=|:)\\s*)?bearer\\s+)[A-Za-z0-9._~+/=-]+</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ "prefix" capture group.<br/>
+                ○ Match if at a word boundary.<br/>
+                ○ Optional (greedy).<br/>
+                    ○ Match a character in the set [Aa].<br/>
+                    ○ Match a character in the set [Uu].<br/>
+                    ○ Match a character in the set [Tt].<br/>
+                    ○ Match a character in the set [Hh].<br/>
+                    ○ Match a character in the set [Oo].<br/>
+                    ○ Match a character in the set [Rr].<br/>
+                    ○ Match a character in the set [Ii].<br/>
+                    ○ Match a character in the set [Zz].<br/>
+                    ○ Match a character in the set [Aa].<br/>
+                    ○ Match a character in the set [Tt].<br/>
+                    ○ Match a character in the set [Ii].<br/>
+                    ○ Match a character in the set [Oo].<br/>
+                    ○ Match a character in the set [Nn].<br/>
+                    ○ Match a whitespace character greedily any number of times.<br/>
+                    ○ Match a character in the set [:=].<br/>
+                    ○ Match a whitespace character greedily any number of times.<br/>
+                ○ Match a character in the set [Bb].<br/>
+                ○ Match a character in the set [Ee].<br/>
+                ○ Match a character in the set [Aa].<br/>
+                ○ Match a character in the set [Rr].<br/>
+                ○ Match a character in the set [Ee].<br/>
+                ○ Match a character in the set [Rr].<br/>
+                ○ Match a whitespace character greedily at least once.<br/>
+            ○ Match a character in the set [+--9=A-Z_a-z~\u212A] greedily at least once.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.CredentialUri">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;scheme&gt;\\b[a-z][a-z0-9+.-]*://)[^/@\\s:]+:[^/@\\s]+@</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ "scheme" capture group.<br/>
+                ○ Match if at a word boundary.<br/>
+                ○ Match a character in the set [A-Za-z\u212A].<br/>
+                ○ Match a character in the set [+-.0-9A-Za-z\u212A] greedily any number of times.<br/>
+                ○ Match the string "://".<br/>
+            ○ Match a character in the set [^/:@\s] greedily at least once.<br/>
+            ○ Match ':'.<br/>
+            ○ Match a character in the set [^/@\s] greedily at least once.<br/>
+            ○ Match '@'.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.DelimitedCredential">
+            <remarks>
+            Pattern:<br/>
+            <code>(?&lt;boundary&gt;^|\\s)(?:[A-Z0-9._%+-]+@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+[A-Z]{2,}|[A-Z0-9._]{3,}(?:-[A-Z0-9._]+)*)(?&lt;delimiter&gt;-{4,}|\\|{3,})(?:[^\\s|;]{4,})(?&lt;suffix&gt;$|\\s)</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ "boundary" capture group.<br/>
+                ○ Match with 2 alternative expressions.<br/>
+                    ○ Match if at the beginning of the string.<br/>
+                    ○ Match a whitespace character.<br/>
+            ○ Match with 2 alternative expressions.<br/>
+                ○ Match a sequence of expressions.<br/>
+                    ○ Match a character in the set [%+-.0-9A-Z_a-z\u212A] greedily at least once.<br/>
+                    ○ Match '@'.<br/>
+                    ○ Loop greedily at least once.<br/>
+                        ○ Match a character in the set [0-9A-Za-z\u212A].<br/>
+                        ○ Optional (greedy).<br/>
+                            ○ Match a character in the set [-0-9A-Za-z\u212A] greedily at most 61 times.<br/>
+                            ○ Match a character in the set [0-9A-Za-z\u212A].<br/>
+                        ○ Match '.'.<br/>
+                    ○ Match a character in the set [A-Za-z\u212A] greedily at least twice.<br/>
+                ○ Match a sequence of expressions.<br/>
+                    ○ Match a character in the set [.0-9A-Z_a-z\u212A] greedily at least 3 times.<br/>
+                    ○ Loop greedily any number of times.<br/>
+                        ○ Match '-'.<br/>
+                        ○ Match a character in the set [.0-9A-Z_a-z\u212A] greedily at least once.<br/>
+            ○ "delimiter" capture group.<br/>
+                ○ Match with 2 alternative expressions.<br/>
+                    ○ Match '-' greedily at least 4 times.<br/>
+                    ○ Match '|' greedily at least 3 times.<br/>
+            ○ Match a character in the set [^;|\s] greedily at least 4 times.<br/>
+            ○ "suffix" capture group.<br/>
+                ○ Match with 2 alternative expressions, atomically.<br/>
+                    ○ Match if at the end of the string or if before an ending newline.<br/>
+                    ○ Match a whitespace character.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.KnownOpaqueSecret">
+            <remarks>
+            Pattern:<br/>
+            <code>\\b(?:sk-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{16,}|gh[oprsu]_[A-Za-z0-9]{16,}|AKIA[A-Z0-9]{16})\\b</code><br/>
+            Options:<br/>
+            <code>RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at a word boundary.<br/>
+            ○ Match with 3 alternative expressions.<br/>
+                ○ Match a sequence of expressions.<br/>
+                    ○ Match the string "sk-".<br/>
+                    ○ Match a character in the set [-0-9A-Z_a-z] greedily at least 16 times.<br/>
+                ○ Match a sequence of expressions.<br/>
+                    ○ Match 'g'.<br/>
+                    ○ Match with 2 alternative expressions.<br/>
+                        ○ Match a sequence of expressions.<br/>
+                            ○ Match the string "ithub_pat_".<br/>
+                            ○ Match a character in the set [0-9A-Z_a-z] greedily at least 16 times.<br/>
+                        ○ Match a sequence of expressions.<br/>
+                            ○ Match 'h'.<br/>
+                            ○ Match a character in the set [oprsu].<br/>
+                            ○ Match '_'.<br/>
+                            ○ Match a character in the set [0-9A-Za-z] greedily at least 16 times.<br/>
+                ○ Match a sequence of expressions.<br/>
+                    ○ Match the string "AKIA".<br/>
+                    ○ Match a character in the set [0-9A-Z] exactly 16 times.<br/>
+            ○ Match if at a word boundary.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:HistoryAurora.Shell.Logging.ConsoleLogSanitizer.PrivateKeyBlock">
+            <remarks>
+            Pattern:<br/>
+            <code>-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----[\\s\\S]*?-----END(?: [A-Z0-9]+)* PRIVATE KEY-----</code><br/>
+            Options:<br/>
+            <code>RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match the string "-----".<br/>
+            ○ Match a character in the set [Bb].<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match a character in the set [Gg].<br/>
+            ○ Match a character in the set [Ii].<br/>
+            ○ Match a character in the set [Nn].<br/>
+            ○ Loop greedily any number of times.<br/>
+                ○ Match ' '.<br/>
+                ○ Match a character in the set [0-9A-Za-z\u212A] greedily at least once.<br/>
+            ○ Match ' '.<br/>
+            ○ Match a character in the set [Pp].<br/>
+            ○ Match a character in the set [Rr].<br/>
+            ○ Match a character in the set [Ii].<br/>
+            ○ Match a character in the set [Vv].<br/>
+            ○ Match a character in the set [Aa].<br/>
+            ○ Match a character in the set [Tt].<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match ' '.<br/>
+            ○ Match a character in the set [Kk\u212A].<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match a character in the set [Yy].<br/>
+            ○ Match the string "-----".<br/>
+            ○ Match any character lazily any number of times.<br/>
+            ○ Match the string "-----".<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match a character in the set [Nn].<br/>
+            ○ Match a character in the set [Dd].<br/>
+            ○ Loop greedily any number of times.<br/>
+                ○ Match ' '.<br/>
+                ○ Match a character in the set [0-9A-Za-z\u212A] greedily at least once.<br/>
+            ○ Match ' '.<br/>
+            ○ Match a character in the set [Pp].<br/>
+            ○ Match a character in the set [Rr].<br/>
+            ○ Match a character in the set [Ii].<br/>
+            ○ Match a character in the set [Vv].<br/>
+            ○ Match a character in the set [Aa].<br/>
+            ○ Match a character in the set [Tt].<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match ' '.<br/>
+            ○ Match a character in the set [Kk\u212A].<br/>
+            ○ Match a character in the set [Ee].<br/>
+            ○ Match a character in the set [Yy].<br/>
+            ○ Match the string "-----".<br/>
+            </code>
+            </remarks>
+        </member>
         <member name="T:HistoryAurora.Shell.MessageBoxConfirmation">
             <summary>
             二次确认的模态对话框实现(§5.2 拦截器;手输指令路径的危险操作闸口)。
@@ -3815,34 +4427,83 @@
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1">
-            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SelectionPlaceholder method.</summary>
+        <member name="T:System.Text.RegularExpressions.Generated.QuotedSensitiveField_1">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the QuotedSensitiveField method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
         </member>
-        <member name="F:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.Instance">
+        <member name="F:System.Text.RegularExpressions.Generated.QuotedSensitiveField_1.Instance">
             <summary>Cached, thread-safe singleton instance.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.#ctor">
+        <member name="T:System.Text.RegularExpressions.Generated.UnquotedSensitiveField_2">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the UnquotedSensitiveField method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.UnquotedSensitiveField_2.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.AuthorizationBearer_3">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the AuthorizationBearer method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.AuthorizationBearer_3.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.CredentialUri_4">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the CredentialUri method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.CredentialUri_4.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.DelimitedCredential_5">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the DelimitedCredential method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.DelimitedCredential_5.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.KnownOpaqueSecret_6">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the KnownOpaqueSecret method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.KnownOpaqueSecret_6.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.PrivateKeyBlock_7">
+            <summary>Caches a <see cref="T:System.Text.RegularExpressions.Regex"/> instance for the PrivateKeyBlock method.</summary>
+            <remarks>A custom Regex-derived type could not be generated because RegexOptions.NonBacktracking isn't supported.</remarks>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.PrivateKeyBlock_7.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the SelectionPlaceholder method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.#ctor">
             <summary>Initializes the instance.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory">
+        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory">
             <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory.CreateInstance">
+        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory.CreateInstance">
             <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
         </member>
-        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory.Runner">
+        <member name="T:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory.Runner">
             <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
             <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
             <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if a possible match was found; false if no more matches are possible.</returns>
         </member>
-        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_1.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+        <member name="M:System.Text.RegularExpressions.Generated.SelectionPlaceholder_8.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
             <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
             <param name="inputSpan">The text being scanned by the regular expression.</param>
             <returns>true if the regular expression matches at the current position; otherwise, false.</returns>

@@ -31,6 +31,51 @@ public sealed class ConsoleLogSnapshotContractTests
     }
 
     [Fact]
+    public void BufferAndSnapshotRedactCredentialsWithoutDamagingDiagnostics()
+    {
+        var log = new MemoryShellLog();
+        log.Log(
+            ShellLogLevel.Error,
+            "shell.chrome",
+            "请求失败 password=plain-secret Authorization: Bearer bearer-secret\n"
+            + "System.InvalidOperationException: useful failure\n"
+            + "   at HistoryAurora.Shell.ConsoleView.Run() in ConsoleView.cs:line 42");
+        log.Log(ShellLogLevel.Info, "result", "operator@example.com----delimited-secret");
+        log.Log(ShellLogLevel.Info, "result", "operator-name|||another-secret");
+        log.Log(ShellLogLevel.Info, "result", "endpoint=https://operator:uri-secret@example.test/api");
+        log.Log(ShellLogLevel.Info, "result", "api_key=sk-1234567890abcdefghijklmnop");
+        log.Log(ShellLogLevel.Info, "result", "{\"token\":\"quoted-secret\",\"count\":2}");
+
+        var buffered = log.Snapshot();
+        var snapshot = log.ReadSnapshot(new ConsoleLogQuery(
+            ShellLogLevel.Trace, null, null, null, null, 100));
+        var exported = string.Join("\n", snapshot.Entries.Select(item => item.Message));
+
+        Assert.All(buffered, entry => Assert.DoesNotContain("secret", entry.Message, StringComparison.Ordinal));
+        Assert.DoesNotContain("operator@example.com", exported, StringComparison.Ordinal);
+        Assert.DoesNotContain("operator-name", exported, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-1234567890abcdefghijklmnop", exported, StringComparison.Ordinal);
+        Assert.Contains("password=[REDACTED]", exported, StringComparison.Ordinal);
+        Assert.Contains("Authorization: [REDACTED]", exported, StringComparison.Ordinal);
+        Assert.Contains("https://[REDACTED]:[REDACTED]@example.test/api", exported, StringComparison.Ordinal);
+        Assert.Contains("\"token\":\"[REDACTED]\"", exported, StringComparison.Ordinal);
+        Assert.Contains("System.InvalidOperationException: useful failure", exported, StringComparison.Ordinal);
+        Assert.Contains("at HistoryAurora.Shell.ConsoleView.Run() in ConsoleView.cs:line 42", exported, StringComparison.Ordinal);
+        Assert.Contains("\nSystem.InvalidOperationException", snapshot.Entries.Single(item => item.Level == "Error").Message);
+    }
+
+    [Fact]
+    public void SanitizerLeavesOrdinaryErrorTextAndSeparatorsIntact()
+    {
+        const string message =
+            "Build failed: timeout after 30 seconds\n"
+            + "--- End of inner exception stack trace ---\n"
+            + "source=module-loader accountCount=4";
+
+        Assert.Equal(message, ConsoleLogSanitizer.Redact(message));
+    }
+
+    [Fact]
     public void SnapshotHonorsTheByteLimitAtEntryBoundaries()
     {
         var log = new MemoryShellLog();

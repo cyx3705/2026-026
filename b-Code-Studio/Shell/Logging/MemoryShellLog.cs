@@ -1,6 +1,7 @@
 using HistoryVulcan.Core.Logging;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace HistoryAurora.Shell.Logging;
 
@@ -22,7 +23,11 @@ public sealed class MemoryShellLog : IShellLog
 
     public void Log(ShellLogLevel level, string category, string message)
     {
-        var entry = new ShellLogEntry(DateTime.Now, level, category, message);
+        var entry = new ShellLogEntry(
+            DateTime.Now,
+            level,
+            category,
+            ConsoleLogSanitizer.Redact(message));
         lock (_gate)
         {
             _buffer.Enqueue(new SequencedLogEntry(++_sequence, entry));
@@ -122,6 +127,79 @@ public sealed class MemoryShellLog : IShellLog
     }
 
     private sealed record SequencedLogEntry(long Sequence, ShellLogEntry Entry);
+}
+
+internal static partial class ConsoleLogSanitizer
+{
+    private const string Mask = "[REDACTED]";
+
+    internal static string Redact(string message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        var redacted = AuthorizationBearer().Replace(message, "${prefix}" + Mask);
+        redacted = QuotedSensitiveField().Replace(
+            redacted,
+            match => match.Groups["prefix"].Value
+                     + match.Groups["quoted"].Value[0]
+                     + Mask
+                     + match.Groups["quoted"].Value[0]);
+        redacted = UnquotedSensitiveField().Replace(redacted, "${prefix}" + Mask);
+        redacted = CredentialUri().Replace(redacted, "${scheme}" + Mask + ":" + Mask + "@");
+        redacted = DelimitedCredential().Replace(
+            redacted,
+            "${boundary}" + Mask + "${delimiter}" + Mask + "${suffix}");
+        redacted = KnownOpaqueSecret().Replace(redacted, Mask);
+        redacted = PrivateKeyBlock().Replace(redacted, Mask);
+        return redacted;
+    }
+
+    private const string SensitiveFieldNames =
+        "account|accounts|username|user_name|login|password|passwd|pwd|token|access_token|refresh_token|"
+        + "api_key|apikey|client_secret|secret|private_key|connection_string|authorization|cookie|session|"
+        + "账号|帐号|账户|用户名|登录名|密码|口令|令牌|密钥";
+
+    [GeneratedRegex(
+        "(?<prefix>[\\\"']?(?:" + SensitiveFieldNames + ")[\\\"']?\\s*(?:=|:)\\s*)(?<quoted>\\\"[^\\\"\\r\\n]*\\\"|'[^'\\r\\n]*')",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex QuotedSensitiveField();
+
+    [GeneratedRegex(
+        "(?<prefix>[\\\"']?(?:" + SensitiveFieldNames + ")[\\\"']?\\s*(?:=|:)\\s*)(?<value>[^\\s,;}\\]\\r\\n\\\"'][^\\s,;}\\]\\r\\n]*)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex UnquotedSensitiveField();
+
+    [GeneratedRegex(
+        "(?<prefix>\\b(?:authorization\\s*(?:=|:)\\s*)?bearer\\s+)[A-Za-z0-9._~+/=-]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex AuthorizationBearer();
+
+    [GeneratedRegex(
+        "(?<scheme>\\b[a-z][a-z0-9+.-]*://)[^/@\\s:]+:[^/@\\s]+@",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex CredentialUri();
+
+    [GeneratedRegex(
+        "(?<boundary>^|\\s)(?:[A-Z0-9._%+-]+@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+[A-Z]{2,}|[A-Z0-9._]{3,}(?:-[A-Z0-9._]+)*)(?<delimiter>-{4,}|\\|{3,})(?:[^\\s|;]{4,})(?<suffix>$|\\s)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex DelimitedCredential();
+
+    [GeneratedRegex(
+        "\\b(?:sk-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{16,}|gh[oprsu]_[A-Za-z0-9]{16,}|AKIA[A-Z0-9]{16})\\b",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex KnownOpaqueSecret();
+
+    [GeneratedRegex(
+        "-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----[\\s\\S]*?-----END(?: [A-Z0-9]+)* PRIVATE KEY-----",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        1000)]
+    private static partial Regex PrivateKeyBlock();
 }
 
 internal sealed record ConsoleLogQuery(

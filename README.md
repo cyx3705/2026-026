@@ -23,7 +23,8 @@ HistoryAurora 的任务就是把它们从宿主搬出来——搬走之后 MCP �
 
 当前版本 **1.14.0**。Aurora 已承载宿主前端的窗口、布局、控制台与主题能力；新增隐藏只读
 `aurora.log.snapshot`，从控制台实际使用的内存日志缓冲区提供有界结构化快照，供
-HistoryDiana 的 `diana.log.read` 在当前进程命令总线上调用。
+HistoryDiana 的 `diana.log.read` 在当前进程命令总线上调用。日志进入缓冲前统一净化
+账号、密码、令牌、密钥和凭据 URI 等敏感文本，控制台与 AI 查询共享同一份净化结果。
 
 ## 目录
 
