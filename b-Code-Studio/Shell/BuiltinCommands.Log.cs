@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Docking;
@@ -8,6 +10,7 @@ using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryVulcan.Services;
 using HistoryAurora.Shell.Console;
+using HistoryAurora.Shell.Logging;
 using HistoryAurora.Shell.Panels;
 
 namespace HistoryAurora.Shell;
@@ -16,6 +19,78 @@ internal static partial class BuiltinCommands
 {
     private static void RegisterLog(CommandRegistry r, ShellCommandServices s)
     {
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.log.snapshot",
+            Domain = "aurora",
+            CommandClass = "log",
+            Summary = "读取当前前端控制台内存日志快照",
+            Example = "aurora.log.snapshot minlevel=error source=shell.chrome limit=100",
+            HiddenReason = "Diana 进程内只读提供者，不直接对远程暴露",
+            Readonly = true,
+            Parameters =
+            [
+                new ParameterSpec { Name = "minlevel", Description = "trace/debug/info/warn/error/fatal", Default = "error", AllowedValues = ["trace", "debug", "info", "warn", "error", "fatal"] },
+                new ParameterSpec { Name = "source", Description = "日志来源精确匹配" },
+                new ParameterSpec { Name = "keyword", Description = "来源或完整消息包含匹配" },
+                new ParameterSpec { Name = "since", Description = "ISO 8601 起始时间" },
+                new ParameterSpec { Name = "after", Description = "只返回该单调序号之后的记录" },
+                new ParameterSpec { Name = "limit", Description = "返回条数，范围 1~500", Type = ParamType.Int, Default = "100" },
+            ],
+            Handler = CommandDescriptor.Sync(ctx =>
+            {
+                if (s.Log is not MemoryShellLog log)
+                    return CommandResult.Fail("当前 Aurora 控制台快照提供者不可用");
+
+                var minimumLevelText = ctx.GetString("minlevel") ?? "error";
+                if (!Enum.TryParse<ShellLogLevel>(minimumLevelText, true, out var minimumLevel)
+                    || !Enum.IsDefined(minimumLevel))
+                {
+                    return CommandResult.Fail($"未知日志级别: {minimumLevelText}");
+                }
+
+                var limit = ctx.GetInt("limit", 100);
+                if (limit is < 1 or > 500)
+                    return CommandResult.Fail("limit 必须在 1~500 之间");
+
+                DateTimeOffset? since = null;
+                if (ctx.GetString("since") is { Length: > 0 } sinceText)
+                {
+                    if (!DateTimeOffset.TryParse(
+                            sinceText,
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeLocal,
+                            out var parsedSince))
+                    {
+                        return CommandResult.Fail("since 必须是有效的 ISO 8601 时间");
+                    }
+                    since = parsedSince;
+                }
+
+                long? after = null;
+                if (ctx.GetString("after") is { Length: > 0 } afterText)
+                {
+                    if (!long.TryParse(afterText, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedAfter)
+                        || parsedAfter < 0)
+                    {
+                        return CommandResult.Fail("after 必须是非负整数");
+                    }
+                    after = parsedAfter;
+                }
+
+                var snapshot = log.ReadSnapshot(new ConsoleLogQuery(
+                    minimumLevel,
+                    Normalize(ctx.GetString("source")),
+                    Normalize(ctx.GetString("keyword")),
+                    since,
+                    after,
+                    limit));
+                return CommandResult.Ok(
+                    $"控制台日志匹配 {snapshot.MatchedCount} 条，返回 {snapshot.ReturnedCount} 条",
+                    JsonSerializer.SerializeToElement(snapshot));
+            }),
+        });
+
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.log.level",
@@ -254,5 +329,7 @@ internal static partial class BuiltinCommands
             }),
         });
     }
-}
 
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
