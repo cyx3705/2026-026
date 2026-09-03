@@ -138,7 +138,9 @@ public sealed partial class PanelView
         CommandResult result;
         try
         {
-            result = await _bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
+            // 与表格取数同一条口径：候选是页面自己要的，不是用户下的指令，
+            // 走安静通道不回显（见 PageRenderer.FetchAsync）。
+            result = await _bus.InvokeAsync(text, "UI").ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -195,22 +197,27 @@ public sealed partial class PanelView
     {
         var previous = feed.Box.SelectedItem as string;
 
-        feed.Options.Clear();
-        foreach (var value in values)
-            feed.Options.Add(value);
+        // 换候选是程序行为，不是用户选了什么。不压住提交动作的话，重取一次候选就等于
+        // 替用户点了一下——模块那边会当成一次真实选择去改数据。
+        WriteBack(() =>
+        {
+            feed.Options.Clear();
+            foreach (var value in values)
+                feed.Options.Add(value);
 
-        if (values.Count == 0)
-        {
-            feed.Box.SelectedItem = null;
-        }
-        else
-        {
-            feed.Box.SelectedItem =
-                values.FirstOrDefault(value => value.Equals(previous, StringComparison.Ordinal))
-                ?? values.FirstOrDefault(value =>
-                    value.Equals(feed.DeclaredValue, StringComparison.Ordinal))
-                ?? values[0];
-        }
+            if (values.Count == 0)
+            {
+                feed.Box.SelectedItem = null;
+            }
+            else
+            {
+                feed.Box.SelectedItem =
+                    values.FirstOrDefault(value => value.Equals(previous, StringComparison.Ordinal))
+                    ?? values.FirstOrDefault(value =>
+                        value.Equals(feed.DeclaredValue, StringComparison.Ordinal))
+                    ?? values[0];
+            }
+        });
 
         // 选中项可能因为换候选而变了，而这个框可能正是别人取数的依据（REQ-UI-045）。
         // 不补这一发，下一级会停在上一批候选算出来的那个值上。

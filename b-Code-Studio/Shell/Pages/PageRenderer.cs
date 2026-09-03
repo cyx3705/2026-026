@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -1101,12 +1101,25 @@ public static partial class PageRenderer
             swimlane.SetDescription(parsed.Value);
         }
 
+        /// <summary>
+        /// 取一次数。走 <c>InvokeAsync</c> 而不是 <c>ExecuteAsync</c>——**取数不是操作**。
+        ///
+        /// 操作者通道每调一次就往控制台写两行（回显 + 结果）。而一次用户动作会连带
+        /// 触发本页全部表格重取：Minerva 属性整备改一格材料，控制台就多出五对
+        /// 「minerva.ui.data view=parts」「✓ Minerva 零件」，十行里没有一行是用户想看的，
+        /// 真正的结果反倒被顶出屏幕。CommandBus 早就为这类高频内部调用留了安静通道
+        /// （见 <c>CommandBus.InvokeAsync</c> 的注释：「问题不在延迟而在语义」）。
+        /// 失败仍然照常写日志——下面那两条 Warn 才是取数该发出的声音。
+        /// </summary>
         private async Task<string?> FetchAsync(string text)
         {
             CommandResult result;
             try
             {
-                result = await context.Bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
+                // 留一条 Debug 痕迹。安静通道不回显，但「这一页到底取过数没有」在排障时
+                // 必须查得到；Debug 在控制台默认级别之下，平时一行都不占。
+                context.Log.Log(ShellLogLevel.Debug, "page", context.Owner + ": 取数 " + text);
+                result = await context.Bus.InvokeAsync(text, "UI").ConfigureAwait(true);
             }
             catch (Exception ex)
             {

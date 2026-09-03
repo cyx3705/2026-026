@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -37,6 +37,15 @@ public sealed partial class PanelView : UserControl
     private readonly string? _pageId;
     private readonly Dictionary<string, Func<string>> _getters = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Action<string>> _setters = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 正在**程序回写**控件值（P-07 <c>aurora.ui.panelset</c>、跟随通道、候选重取）。
+    ///
+    /// 回写期间控件的提交动作必须闭嘴。回写不是用户的编辑，把它当编辑发出去会形成回环：
+    /// 模块按表格算出「这一列不统一」回写成「（不写）」，控件反手把「（不写）」当成
+    /// 一次用户选择提交回模块，于是整表被清空——用户看到的是自己什么都没点，材料却没了。
+    /// </summary>
+    private bool _writingBack;
 
     /// <summary>跟随选择通道的文本框：通道名 → （列名, 控件 id）。</summary>
     private readonly List<(string Channel, string Column, string ControlId)> _followers = [];
@@ -173,8 +182,28 @@ public sealed partial class PanelView : UserControl
     {
         if (!_setters.TryGetValue(controlId, out var setter))
             return false;
-        setter(value);
+        WriteBack(() => setter(value));
         return true;
+    }
+
+    /// <summary>
+    /// 在「这是程序回写、不是用户编辑」的标记下改控件值。
+    ///
+    /// 用 try/finally 而不是改完再清：回写会同步引发 SelectionChanged，
+    /// 处理器里任何一个异常都会把标记永久留在开着的位置，从此这个面板再不提交任何东西。
+    /// </summary>
+    private void WriteBack(Action write)
+    {
+        var previous = _writingBack;
+        _writingBack = true;
+        try
+        {
+            write();
+        }
+        finally
+        {
+            _writingBack = previous;
+        }
     }
 
     // ---------------------------------------------------------------- 小组件构建
@@ -280,6 +309,8 @@ public sealed partial class PanelView : UserControl
             {
                 combo.SelectionChanged += (_, _) =>
                 {
+                    if (_writingBack)
+                        return;
                     if (combo.SelectedItem is not string selected || string.IsNullOrWhiteSpace(selected))
                         return;
                     Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = selected });
@@ -526,7 +557,7 @@ public sealed partial class PanelView : UserControl
             if (only != null && !string.Equals(only, channel, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (_setters.TryGetValue(controlId, out var setter))
-                setter(_channels.Value(channel, column) ?? "");
+                WriteBack(() => setter(_channels.Value(channel, column) ?? ""));
         }
 
         foreach (var (channel, button, reason, readyTip) in _gates)

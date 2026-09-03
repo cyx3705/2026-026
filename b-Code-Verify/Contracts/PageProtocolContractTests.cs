@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Text.Json;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Pages;
@@ -197,7 +197,9 @@ public sealed class PageProtocolContractTests
 
             // 控件 Loaded 后才走总线，异步回填。
             Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 2), "表格未从总线取到行");
-            Assert.Single(executed);
+            // 取数走安静通道：行回来了，但控制台上一行都不该多——一次用户动作会连带
+            // 触发本页全部表格重取，那些回显里没有一行是用户想看的。
+            Assert.Empty(executed);
 
             // 选中行仍然可读：rowActions 的参数绑定要用它。
             table.SelectedIndex = 1;

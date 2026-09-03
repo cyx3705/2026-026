@@ -71,9 +71,12 @@ public sealed class AuroraOptionBoxContractTests
 
             RaiseMouse(box, MouseButton.Right);
 
-            Assert.NotNull(box.ContextMenu);
-            Assert.Equal(3, box.ContextMenu!.Items.Count);
-            Assert.True(((System.Windows.Controls.MenuItem)box.ContextMenu.Items[1]).IsChecked);
+            // 菜单是独立实例，不挂在 ContextMenu 属性上：挂上去会和 WPF 自己那条
+            // 按属性开菜单的路径撞车，表现为刚导入后第一次右键菜单闪一下就没。
+            Assert.Null(box.ContextMenu);
+            Assert.NotNull(box.OptionsMenu);
+            Assert.Equal(3, box.OptionsMenu!.Items.Count);
+            Assert.True(((System.Windows.Controls.MenuItem)box.OptionsMenu.Items[1]).IsChecked);
         });
     }
 

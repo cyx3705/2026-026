@@ -61,6 +61,20 @@ try {
         Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force
     }
 
+    # b-Office/package 随包进 docs/。这不是附赠品：Diana 的 `diana.docs.*` 通道按候选包里的
+    # docs/ 建索引，别的项目就是从那里读 Aurora 的组件清单与模块 API。少打这一步，
+    # `diana.docs.catalog` 里 aurora 那条的 Documents 会变成空数组——不报错，只是各模块
+    # 写页面时再也查不到协议参考。1.14.0 的包里有 docs/，1.15.0 一度漏掉，据此补回。
+    $packageDocuments = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'b-Office\package') -Filter '*.md' -File)
+    if ($packageDocuments.Count -eq 0) {
+        throw 'b-Office/package must contain at least one Markdown document'
+    }
+    $docsStage = Join-Path $stage 'docs'
+    New-Item -ItemType Directory -Path $docsStage -Force | Out-Null
+    foreach ($document in $packageDocuments) {
+        Copy-Item -LiteralPath $document.FullName -Destination (Join-Path $docsStage $document.Name) -Force
+    }
+
     # SHA256SUMS：覆盖包内全部有效载荷，排除自身与 history/
     $lines = Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object {
         $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')

@@ -142,7 +142,8 @@ public sealed class CellActionContractTests
             Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 1));
 
             table.FireCell("demo.folder.open", "folder", table.Data.Rows[0]);
-            Assert.True(UiTestHost.PumpUntil(() => executed.Count >= 2));
+            // 只有单元格动作会回显；表格取数走安静通道，不进这份账。
+            Assert.True(UiTestHost.PumpUntil(() => executed.Count >= 1));
             Assert.Contains("demo.open project=Janus folder=z-docs", executed);
         });
     }
