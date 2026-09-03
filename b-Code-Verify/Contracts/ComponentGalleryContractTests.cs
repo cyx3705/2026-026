@@ -1,10 +1,10 @@
 ﻿using System.Text.Json;
 using System.Windows;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.Selection;
-using HistoryAurora.Shell.Logging;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Views;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Components.Selection;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -129,7 +129,7 @@ public sealed class ComponentGalleryContractTests
     [Fact]
     public void DataCommandsAreInTheSnapshotThatGetsPublishedToTheHost()
     {
-        var published = HistoryAurora.Shell.FrontendCommandCatalog.FrameworkSourceDescriptors
+        var published = HistoryAurora.Shell.Composition.FrontendCommandCatalog.FrameworkSourceDescriptors
             .Select(descriptor => descriptor.Name)
             .ToList();
 

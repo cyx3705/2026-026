@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Components.Table;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -25,7 +25,7 @@ public sealed class DockingSurfaceContractTests
     {
         var exported = Aurora.GetExportedTypes()
             .Where(type => (type.Namespace ?? "").StartsWith(
-                "HistoryAurora.Shell.Docking",
+                "HistoryAurora.Shell.Base.Docking",
                 StringComparison.Ordinal))
             .Select(type => type.FullName!)
             .OrderBy(name => name, StringComparer.Ordinal)
@@ -40,9 +40,9 @@ public sealed class DockingSurfaceContractTests
         // 窗体与装配清单同样只对本程序集有意义：ShellConfig 里装的就是停靠描述符。
         var exported = Aurora.GetExportedTypes().Select(type => type.FullName!).ToHashSet(StringComparer.Ordinal);
 
-        Assert.DoesNotContain("HistoryAurora.Shell.ShellWindow", exported);
-        Assert.DoesNotContain("HistoryAurora.Shell.ShellConfig", exported);
-        Assert.DoesNotContain("HistoryAurora.Shell.ShellCommandServices", exported);
+        Assert.DoesNotContain("HistoryAurora.Shell.Composition.ShellWindow", exported);
+        Assert.DoesNotContain("HistoryAurora.Shell.Composition.ShellConfig", exported);
+        Assert.DoesNotContain("HistoryAurora.Shell.Composition.ShellCommandServices", exported);
     }
 
     [Fact]

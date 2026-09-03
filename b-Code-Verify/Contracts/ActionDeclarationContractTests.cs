@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using HistoryAurora.Shell.Actions;
+using HistoryAurora.Shell.Components.Actions;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -251,9 +251,9 @@ public sealed class ActionDeclarationContractTests
         var registry = new CommandRegistry();
         registry.Register(new CommandDescriptor
         {
-            Name = HistoryAurora.Shell.Modules.ModuleCommandProbe.SelfDomain
+            Name = HistoryAurora.Shell.Components.Modules.ModuleCommandProbe.SelfDomain
                    + ActionRegistry.ActionsSuffix,
-            Domain = HistoryAurora.Shell.Modules.ModuleCommandProbe.SelfDomain,
+            Domain = HistoryAurora.Shell.Components.Modules.ModuleCommandProbe.SelfDomain,
             CommandClass = "ui",
             Summary = "列出模块声明的动作",
             Readonly = true,

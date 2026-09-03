@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "template": {
     "isTemplate": false,
@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.15.0",
+    "version": "1.16.0",
     "branch": "main"
   },
   "paths": {

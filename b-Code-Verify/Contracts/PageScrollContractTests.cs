@@ -1,13 +1,13 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.Graph;
-using HistoryAurora.Shell.Logging;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Selection;
-using HistoryAurora.Shell.Table;
-using HistoryAurora.Shell.Views;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Components.Graph;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Components.Selection;
+using HistoryAurora.Shell.Components.Table;
+using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using Xunit;
 

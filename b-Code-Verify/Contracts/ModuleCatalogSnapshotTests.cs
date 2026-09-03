@@ -4,7 +4,7 @@ using HistoryVulcan.Services.Modules;
 using HistoryVulcan.Services.Commands;
 using System.Text.Json;
 using System.Xml.Linq;
-using HistoryAurora.Shell.Views;
+using HistoryAurora.Shell.HostedPages.Views;
 using Xunit;
 
 namespace HistoryAurora.Verify.Contracts;

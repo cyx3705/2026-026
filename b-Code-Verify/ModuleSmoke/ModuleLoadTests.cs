@@ -70,13 +70,13 @@ public sealed class ModuleLoadTests
         Assert.True(context.IsCollectible);
 
         var snapshotType = assembly.GetType(
-            "HistoryAurora.Shell.Docking.DockLayoutSnapshot", throwOnError: true)!;
+            "HistoryAurora.Shell.Base.Docking.DockLayoutSnapshot", throwOnError: true)!;
         var nodeType = assembly.GetType(
-            "HistoryAurora.Shell.Docking.DockLayoutNodeSnapshot", throwOnError: true)!;
+            "HistoryAurora.Shell.Base.Docking.DockLayoutNodeSnapshot", throwOnError: true)!;
         var kindType = assembly.GetType(
-            "HistoryAurora.Shell.Docking.DockLayoutNodeKind", throwOnError: true)!;
+            "HistoryAurora.Shell.Base.Docking.DockLayoutNodeKind", throwOnError: true)!;
         var codecType = assembly.GetType(
-            "HistoryAurora.Shell.Docking.DockLayoutSnapshotCodec", throwOnError: true)!;
+            "HistoryAurora.Shell.Base.Docking.DockLayoutSnapshotCodec", throwOnError: true)!;
 
         var snapshot = Activator.CreateInstance(snapshotType)!;
         var root = Activator.CreateInstance(nodeType)!;

@@ -1,7 +1,7 @@
 using System.IO;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Composition;
 using HistoryVulcan.Core.Commands;
-using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using Xunit;

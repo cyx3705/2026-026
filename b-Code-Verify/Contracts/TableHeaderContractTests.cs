@@ -27,7 +27,7 @@ public sealed class TableHeaderContractTests
             // pack://application 的 authority 会退到入口程序集（testhost.exe）而解析不到。
             // 走组件自己的那条路——AuroraComponentResources 把控件字典并进元素资源，
             // 这也正是真机上表头样式的取用方式。
-            var table = new HistoryAurora.Shell.Table.AuroraTable();
+            var table = new HistoryAurora.Shell.Components.Table.AuroraTable();
             var style = Assert.IsType<Style>(table.TryFindResource("Aurora.GridHeader"));
             var trigger = Assert.Single(
                 style.Triggers.OfType<Trigger>(),

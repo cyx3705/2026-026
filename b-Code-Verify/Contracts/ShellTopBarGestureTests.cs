@@ -1,9 +1,10 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using HistoryAurora.Shell.Docking;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Base.Docking;
+using HistoryAurora.Shell.Composition;
 using Xunit;
+using HistoryAurora.Shell.Base;
 
 namespace HistoryAurora.Verify;
 
@@ -90,9 +91,9 @@ public sealed class ShellTopBarGestureTests
     {
         var root = FindSourceRoot();
         var coordinator = File.ReadAllText(
-            Path.Combine(root, "b-Code-Studio", "Shell", "ShellTopBarCoordinator.cs"));
+            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "ShellTopBarCoordinator.cs"));
         var driver = File.ReadAllText(
-            Path.Combine(root, "b-Code-Studio", "Shell", "Docking", "WindowDragDriver.cs"));
+            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "Docking", "WindowDragDriver.cs"));
 
         Assert.DoesNotContain(".DragMove(", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("Mouse.Capture(null)", coordinator, StringComparison.Ordinal);
@@ -107,7 +108,7 @@ public sealed class ShellTopBarGestureTests
     {
         var root = FindSourceRoot();
         var coordinator = File.ReadAllText(
-            Path.Combine(root, "b-Code-Studio", "Shell", "ShellTopBarCoordinator.cs"));
+            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "ShellTopBarCoordinator.cs"));
 
         Assert.DoesNotContain("DispatcherTimer", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("_hostDrag", coordinator, StringComparison.Ordinal);
@@ -382,6 +383,7 @@ public sealed class ShellTopBarGestureTests
                     directory.FullName,
                     "b-Code-Studio",
                     "Shell",
+                    "1-Base",
                     "Docking",
                     "WindowDragDriver.cs")))
             {

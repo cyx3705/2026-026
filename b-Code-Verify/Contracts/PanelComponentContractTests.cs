@@ -6,10 +6,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using HistoryAurora.Shell.Widgets;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Panels;
+using HistoryAurora.Shell.Components.Widgets;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Components.Panels;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -628,13 +628,13 @@ public sealed class PanelComponentContractTests
             // 那样测的是 WPF 的字典缓存，不是这次的改动。
             Assert.Same(panel.TryFindResource("Aurora.Panel.Surface"), surface.Style);
 
-            var console = new HistoryAurora.Shell.Console.ConsoleView(
-                new HistoryAurora.Shell.Logging.MemoryShellLog(),
+            var console = new HistoryAurora.Shell.HostedPages.Console.ConsoleView(
+                new HistoryAurora.Shell.Neutral.Logging.MemoryShellLog(),
                 bus,
                 new CommandHistory(System.IO.Path.Combine(
                     System.IO.Path.GetTempPath(),
                     $"HistoryAurora-panelstyle-{Guid.NewGuid():N}.txt")),
-                new HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession());
+                new HistoryAurora.Shell.Neutral.CommandSurface.DeferredCommandCatalogSession());
             var host = new Window { Content = console, Width = 760, Height = 420, ShowInTaskbar = false };
             host.Show();
             UiTestHost.Pump();
@@ -846,9 +846,9 @@ public sealed class PanelComponentContractTests
             var (bus, log, actions) = Host(declare: true);
             actions.ReloadAsync().GetAwaiter().GetResult();
 
-            var rendered = HistoryAurora.Shell.Pages.PageRenderer.Render(
+            var rendered = HistoryAurora.Shell.Components.Pages.PageRenderer.Render(
                 PagePanel(),
-                new HistoryAurora.Shell.Pages.PageRenderContext
+                new HistoryAurora.Shell.Components.Pages.PageRenderContext
                 {
                     Bus = bus,
                     Log = log,
@@ -868,9 +868,9 @@ public sealed class PanelComponentContractTests
         });
     }
 
-    private static HistoryAurora.Shell.Pages.PageDescription PagePanel()
+    private static HistoryAurora.Shell.Components.Pages.PageDescription PagePanel()
     {
-        var parsed = HistoryAurora.Shell.Pages.PageDescriptionReader.Read("""
+        var parsed = HistoryAurora.Shell.Components.Pages.PageDescriptionReader.Read("""
             {
               "schemaVersion": 1,
               "owner": "HistoryDemo",

@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text.Json;
-using HistoryAurora.Shell.Views;
+using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Services.Modules;
 using Xunit;
@@ -57,7 +57,7 @@ public sealed class ModulesPageContractTests
     public void HotReloadGoesThroughTheShellDirectoryPickerNotAWpfDialog()
     {
         var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "Views", "HostedPageData.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "3-HostedPages", "Views", "HostedPageData.cs"));
 
         Assert.Contains("aurora.ui.selectdirectory", source, StringComparison.Ordinal);
         Assert.Contains("vulcan.module.install path=", source, StringComparison.Ordinal);
@@ -76,7 +76,7 @@ public sealed class ModulesPageContractTests
     public void TheCommandCountColumnCountsTheWholeDomain()
     {
         var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "Views", "HostedPageData.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "3-HostedPages", "Views", "HostedPageData.cs"));
 
         Assert.Contains("DomainCommandCount", source, StringComparison.Ordinal);
         Assert.Contains("ModuleDomainNaming.ToDomain", source, StringComparison.Ordinal);
@@ -99,7 +99,7 @@ public sealed class ModulesPageContractTests
     public void FileAndDirectoryPickersRestoreTheProcessWorkingDirectory()
     {
         var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "BuiltinCommands.Panel.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "4-Composition", "BuiltinCommands.Panel.cs"));
 
         Assert.Contains("new Microsoft.Win32.OpenFileDialog { RestoreDirectory = true }", source, StringComparison.Ordinal);
         Assert.Contains("new Microsoft.Win32.OpenFolderDialog()", source, StringComparison.Ordinal);

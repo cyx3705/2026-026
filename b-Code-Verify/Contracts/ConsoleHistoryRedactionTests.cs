@@ -2,7 +2,7 @@ using System.IO;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Composition;
 using Xunit;
 
 namespace HistoryAurora.Verify.Contracts;
@@ -79,11 +79,11 @@ public sealed class ConsoleHistoryRedactionTests
                     });
                     var log = new MemoryLog();
                     var bus = new CommandBus(registry, log);
-                    _ = new HistoryAurora.Shell.Console.ConsoleView(
+                    _ = new HistoryAurora.Shell.HostedPages.Console.ConsoleView(
                         log,
                         bus,
                         history,
-                        new HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession());
+                        new HistoryAurora.Shell.Neutral.CommandSurface.DeferredCommandCatalogSession());
 
                     bus.ExecuteAsync("vulcan.web.token console-history-secret", "手动").GetAwaiter().GetResult();
                     bus.ExecuteAsync("vulcan.app.set mcp.token setting-history-secret", "手动")

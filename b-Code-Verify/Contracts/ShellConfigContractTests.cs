@@ -1,5 +1,5 @@
 ﻿using HistoryVulcan.Core.Commands;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Composition;
 using Xunit;
 
 namespace HistoryAurora.Verify.Contracts;

@@ -1,7 +1,7 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Composition;
 using Xunit;
 
 namespace HistoryAurora.Verify.Contracts;

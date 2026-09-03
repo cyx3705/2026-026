@@ -1,9 +1,9 @@
 using System.Windows;
 using System.Text.Json;
 using System.Windows.Controls;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Table;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Components.Table;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;

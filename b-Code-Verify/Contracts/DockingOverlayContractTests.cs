@@ -105,7 +105,7 @@ public sealed class DockingOverlayContractTests
     public void AuroraThemeInstallsTheOwnedOverlayTemplateAfterDockingStyles()
     {
         var document = XDocument.Load(Path.Combine(
-            FindSourceRoot(), "b-Code-Studio", "Shell", "Themes", "AuroraTheme.xaml"));
+            FindSourceRoot(), "b-Code-Studio", "Shell", "2-Components", "Themes", "AuroraTheme.xaml"));
         var sources = document.Descendants(Xaml + "ResourceDictionary")
             .Select(dictionary => (string?)dictionary.Attribute("Source"))
             .Where(source => source != null)
@@ -122,7 +122,7 @@ public sealed class DockingOverlayContractTests
     {
         var root = FindSourceRoot();
         var probe = File.ReadAllText(Path.Combine(
-            root, "b-Code-Studio", "Shell", "Docking", "DockingDragProbe.cs"));
+            root, "b-Code-Studio", "Shell", "1-Base", "Docking", "DockingDragProbe.cs"));
 
         Assert.DoesNotContain("ApplyTemplate", probe, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsurePreviewScale", probe, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class DockingOverlayContractTests
 
     private static XDocument LoadOverlay()
         => XDocument.Load(Path.Combine(
-            FindSourceRoot(), "b-Code-Studio", "Shell", "Themes", "AuroraOverlay.xaml"));
+            FindSourceRoot(), "b-Code-Studio", "Shell", "2-Components", "Themes", "AuroraOverlay.xaml"));
 
     private static string FindSourceRoot()
     {
@@ -149,6 +149,7 @@ public sealed class DockingOverlayContractTests
                     directory.FullName,
                     "b-Code-Studio",
                     "Shell",
+                    "1-Base",
                     "Docking",
                     "WindowDragDriver.cs")))
             {

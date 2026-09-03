@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Components.Widgets;
 using Xunit;
 
 namespace HistoryAurora.Verify;

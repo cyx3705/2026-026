@@ -1,7 +1,7 @@
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Input;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Components.Widgets;
 using Xunit;
 
 namespace HistoryAurora.Verify;

@@ -52,12 +52,27 @@
 
   <ItemGroup>
     <!--
-      Link 不加 `Shell\` 前缀：XAML 的 pack URI 对应的资源名由 Link 路径决定，
-      加了前缀资源会落在 `shell/themes/…` 而 URI 找的是 `themes/…`，
+      **一层一组，`Include` 里写死层目录**——这不是啰嗦，是两件事的唯一落点：
+
+      一、`Link` 必须把层目录吃掉。XAML 的 pack URI 对应的资源名由 Link 路径决定，
+      而 `%(RecursiveDir)` 只覆盖 `**` 之后的那一段：`Include` 写到 `2-Components\` 为止，
+      `Themes\AuroraTokens.xaml` 的 RecursiveDir 就还是 `Themes\`，
+      `/HistoryAurora;component/Themes/AuroraTokens.xaml` 一行不用改。
+      若图省事写回 `..\Shell\**\*.xaml`，资源会落在 `2-components/themes/…`，
       运行期报 IOException「找不到资源」，编译期完全看不出来。
+
+      二、这同时是分层门禁的第一道闸。新加一个没分层的顶层目录不会被任何一组捞到，
+      整个目录直接不参与编译——比测试更早、更硬地拦住「就这一次」。
+      加层要同时改这里、改 `LayerContractTests` 的层名表，两处都改才生效。
     -->
-    <Compile Include="..\Shell\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
-    <Page Include="..\Shell\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shell\0-Neutral\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shell\1-Base\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shell\2-Components\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shell\3-HostedPages\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Shell\4-Composition\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="..\Shell\2-Components\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="..\Shell\3-HostedPages\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="..\Shell\4-Composition\**\*.xaml" Link="%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AuroraBusinessComposition.cs" Link="AuroraBusinessComposition.cs" />
   </ItemGroup>
 

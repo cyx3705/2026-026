@@ -1,8 +1,8 @@
 ﻿using System.Windows.Controls;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.CommandSurface;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;

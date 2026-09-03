@@ -2,8 +2,9 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HistoryAurora.Shell;
+using HistoryAurora.Shell.Composition;
 using Xunit;
+using HistoryAurora.Shell.Base.Dialogs;
 
 namespace HistoryAurora.Verify;
 
@@ -234,7 +235,7 @@ public sealed class AuroraDialogContractTests
         });
     }
 
-    private sealed class MemoryLayoutStore : HistoryAurora.Shell.Docking.ILayoutStore
+    private sealed class MemoryLayoutStore : HistoryAurora.Shell.Base.Docking.ILayoutStore
     {
         private string? _current;
         private readonly Dictionary<string, string> _named = new(StringComparer.OrdinalIgnoreCase);
