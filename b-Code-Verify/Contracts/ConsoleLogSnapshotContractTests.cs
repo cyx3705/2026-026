@@ -1,6 +1,6 @@
 using System.Text.Json;
-using HistoryAurora.Shell;
-using HistoryAurora.Shell.Logging;
+using HistoryAurora.Shell.Composition;
+using HistoryAurora.Shell.Neutral.Logging;
 using HistoryVulcan.Core.Logging;
 using Xunit;
 

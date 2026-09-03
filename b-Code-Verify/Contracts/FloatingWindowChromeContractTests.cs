@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Shell;
 using AvalonDock.Controls;
-using HistoryAurora.Shell.Themes;
+using HistoryAurora.Shell.Components.Themes;
 using Xunit;
 
 namespace HistoryAurora.Verify;

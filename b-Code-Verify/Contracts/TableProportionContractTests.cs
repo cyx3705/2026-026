@@ -1,9 +1,9 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.Graph;
-using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Components.Graph;
+using HistoryAurora.Shell.Components.Table;
 using HistoryVulcan.Core.Commands;
 using Xunit;
 
@@ -96,7 +96,7 @@ public sealed class TableProportionContractTests
         UiTestHost.RunSta(() =>
         {
             var registry = new CommandRegistry();
-            var log = new HistoryAurora.Shell.Logging.MemoryShellLog();
+            var log = new HistoryAurora.Shell.Neutral.Logging.MemoryShellLog();
             var bus = new CommandBus(registry, log);
             var swimlane = new AuroraSwimlane(bus, log, new ActionRegistry(bus, log));
 

@@ -1,5 +1,5 @@
 using System.Windows.Threading;
-using HistoryAurora.Shell.Modules;
+using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;

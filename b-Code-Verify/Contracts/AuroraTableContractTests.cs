@@ -1,5 +1,5 @@
 using System.Reflection;
-using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Components.Table;
 using Xunit;
 
 namespace HistoryAurora.Verify;

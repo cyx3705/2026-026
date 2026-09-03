@@ -1,6 +1,6 @@
-using HistoryAurora.Shell.Pages;
+using HistoryAurora.Shell.Components.Pages;
 using HistoryVulcan.Core.Commands;
-using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using Xunit;
 

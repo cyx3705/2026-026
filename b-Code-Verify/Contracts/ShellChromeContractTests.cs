@@ -10,14 +10,14 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
-using HistoryAurora.Shell.Docking;
+using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using HistoryAurora.Shell.CommandSurface;
+using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryVulcan.Services;
-using HistoryAurora.Shell;
-using HistoryAurora.Shell.Console;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Composition;
+using HistoryAurora.Shell.HostedPages.Console;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using AvalonDock.Themes;
@@ -281,7 +281,7 @@ public sealed class ShellChromeContractTests
 
                 var output = FindVisualDescendants<ListBox>(window)
                     .Single(list => list.Name == "Output");
-                var rows = output.Items.Cast<HistoryAurora.Shell.Console.ConsoleRow>()
+                var rows = output.Items.Cast<HistoryAurora.Shell.HostedPages.Console.ConsoleRow>()
                     .Where(item => item.Text.Contains("123", StringComparison.Ordinal))
                     .ToList();
 
@@ -1198,7 +1198,7 @@ public sealed class ShellChromeContractTests
                 log,
                 bus,
                 new CommandHistory(Path.Combine(Path.GetTempPath(), $"HistoryVulcan-history-{Guid.NewGuid():N}.txt")),
-                new HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession());
+                new HistoryAurora.Shell.Neutral.CommandSurface.DeferredCommandCatalogSession());
             var host = new Window
             {
                 Content = console,
@@ -1369,7 +1369,7 @@ public sealed class ShellChromeContractTests
                 log,
                 new CommandBus(new CommandRegistry(), log),
                 new CommandHistory(Path.Combine(Path.GetTempPath(), $"HistoryVulcan-history-{Guid.NewGuid():N}.txt")),
-                new HistoryAurora.Shell.CommandSurface.DeferredCommandCatalogSession());
+                new HistoryAurora.Shell.Neutral.CommandSurface.DeferredCommandCatalogSession());
             var host = new Window
             {
                 Content = console,

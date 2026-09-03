@@ -1,4 +1,4 @@
-using HistoryAurora.Shell.Graph;
+using HistoryAurora.Shell.Components.Graph;
 using Xunit;
 
 namespace HistoryAurora.Verify;

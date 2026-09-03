@@ -1,5 +1,5 @@
-using HistoryAurora.Shell.Logging;
-using HistoryAurora.Shell.Modules;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Services.Commands;
 using Xunit;

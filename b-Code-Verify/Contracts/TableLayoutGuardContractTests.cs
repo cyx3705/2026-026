@@ -1,5 +1,5 @@
 using System.IO;
-using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Components.Table;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -94,11 +94,11 @@ public sealed class TableLayoutGuardContractTests
     public void WidthLayoutIgnoresListViewSizeChanged()
     {
         var picker = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "Widgets", "AuroraSourcePicker.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "2-Components", "Widgets", "AuroraSourcePicker.cs"));
         var panel = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "Panels", "PanelView.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "2-Components", "Panels", "PanelView.cs"));
         var table = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "Table", "AuroraTable.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "2-Components", "Table", "AuroraTable.cs"));
 
         Assert.Contains(
             "DispatcherPriority.ApplicationIdle",

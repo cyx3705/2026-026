@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text.Json;
-using HistoryAurora.Shell.CommandSurface;
-using HistoryAurora.Shell.Pages;
-using HistoryAurora.Shell.Views;
+using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
@@ -107,7 +107,7 @@ public sealed class CommandPagesContractTests
             var registry = new CommandRegistry();
             var log = new NullShellLog();
             var bus = new CommandBus(registry, log);
-            var actions = new HistoryAurora.Shell.Actions.ActionRegistry(bus, log);
+            var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
             ComponentGalleryCommands.Register(registry);
             actions.DeclareLocal(ComponentGalleryCommands.Owner, ComponentGalleryCommands.Actions);
             actions.DeclareLocal(HostedPageDescriptions.Owner, HostedPageData.Actions);
@@ -120,7 +120,7 @@ public sealed class CommandPagesContractTests
                     Log = log,
                     Owner = HostedPageDescriptions.Owner,
                     Actions = actions,
-                    Channels = new HistoryAurora.Shell.Selection.SelectionChannels(),
+                    Channels = new HistoryAurora.Shell.Components.Selection.SelectionChannels(),
                 });
 
                 Assert.True(
@@ -165,7 +165,7 @@ public sealed class CommandPagesContractTests
                 Catalog = () => catalog,
             });
 
-            var actions = new HistoryAurora.Shell.Actions.ActionRegistry(bus, log);
+            var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
             actions.DeclareLocal(HostedPageDescriptions.Owner, HostedPageData.Actions);
 
             var parsed = PageDescriptionReader.Read(
@@ -179,7 +179,7 @@ public sealed class CommandPagesContractTests
                 Log = log,
                 Owner = HostedPageDescriptions.Owner,
                 Actions = actions,
-                Channels = new HistoryAurora.Shell.Selection.SelectionChannels(),
+                Channels = new HistoryAurora.Shell.Components.Selection.SelectionChannels(),
             });
 
             var host = new System.Windows.Window
@@ -188,13 +188,13 @@ public sealed class CommandPagesContractTests
                 Height = 600,
                 ShowActivated = false,
                 ShowInTaskbar = false,
-                Content = HistoryAurora.Shell.Pages.PageRegistrar.Inset(rendered.Root),
+                Content = HistoryAurora.Shell.Components.Pages.PageRegistrar.Inset(rendered.Root),
             };
 
             try
             {
                 host.Show();
-                var table = Assert.Single(Descendants<HistoryAurora.Shell.Table.AuroraTable>(host));
+                var table = Assert.Single(Descendants<HistoryAurora.Shell.Components.Table.AuroraTable>(host));
                 var filled = UiTestHost.PumpUntil(() => table.RowCount > 0);
 
                 Assert.True(filled, "命令集打开时是空的——搜索框还没输入就把整张表挡住了");
@@ -239,7 +239,7 @@ public sealed class CommandPagesContractTests
             Catalog = () => null,
         });
 
-        var actions = new HistoryAurora.Shell.Actions.ActionRegistry(bus, log);
+        var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
         actions.DeclareLocal(HostedPageDescriptions.Owner, HostedPageData.Actions);
 
         foreach (var action in HostedPageData.Actions)
@@ -298,7 +298,7 @@ public sealed class CommandPagesContractTests
     public void TheCompositionRootActuallyWiresTheCatalogSession()
     {
         var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "ShellWindow.xaml.cs"));
+            RepositoryRoot(), "b-Code-Studio", "Shell", "4-Composition", "ShellWindow.xaml.cs"));
 
         Assert.Contains("Catalog = _catalog,", source, StringComparison.Ordinal);
     }

@@ -9,7 +9,7 @@
 
 本文是 HistoryAurora 窗口、内置页面和外置 UI 模块的视觉合同。嵌入页面必须复用 Aurora 动态资源，
 不得复制固定色板或在页面内维护第二套浅色/深色主题。运行时真值位于
-`b-Code-Studio/Shell/Themes/AuroraTokens.xaml`、`AuroraTokens.Dark.xaml` 和 `AuroraControls.xaml`。
+`b-Code-Studio/Shell/2-Components/Themes/AuroraTokens.xaml`、`AuroraTokens.Dark.xaml` 和 `AuroraControls.xaml`。
 
 ## 1. 使用原则
 

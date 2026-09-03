@@ -1,11 +1,11 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Controls;
-using HistoryAurora.Shell.Actions;
-using HistoryAurora.Shell.Logging;
-using HistoryAurora.Shell.Panels;
-using HistoryAurora.Shell.Selection;
-using HistoryAurora.Shell.Widgets;
+using HistoryAurora.Shell.Components.Actions;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Components.Selection;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using Xunit;
 

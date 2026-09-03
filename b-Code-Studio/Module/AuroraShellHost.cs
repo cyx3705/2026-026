@@ -1,14 +1,15 @@
 ﻿using System.Windows;
 using System.Windows.Threading;
-using HistoryAurora.Shell;
-using HistoryAurora.Shell.Docking;
-using HistoryAurora.Shell.Logging;
-using HistoryAurora.Shell.Modules;
+using HistoryAurora.Shell.Base.Docking;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
 using HistoryVulcan.Services;
+using HistoryAurora.Shell.Base.Dialogs;
+using HistoryAurora.Shell.Composition;
 
 
 namespace HistoryAurora.Module;

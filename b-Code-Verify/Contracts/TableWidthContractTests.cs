@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using HistoryAurora.Shell.Table;
+using HistoryAurora.Shell.Components.Table;
 using Xunit;
 
 namespace HistoryAurora.Verify;
