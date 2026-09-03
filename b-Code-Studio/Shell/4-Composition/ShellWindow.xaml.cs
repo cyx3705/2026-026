@@ -14,6 +14,7 @@ using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Components.Modules;
+using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Themes;
 using AvalonDock.Controls;
@@ -93,7 +94,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
     private readonly DispatcherTimer _chromeUpkeep;
     private readonly DispatcherTimer _discoverDebounce;
-    private readonly CoalescingAsyncWork _discover = new();
+    private readonly CoalescingAsyncWork<PageLoadReport?> _discover = new();
     private bool _reservePending;
     private bool _closing;
     private bool _allowClose;
@@ -478,6 +479,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>
     /// 把界面发现推迟到注册表安静下来。必须走 Background：默认 Normal
     /// 会插在窗口 Show 前面，发现风暴结束之前主窗口一直不出现。
+    ///
+    /// 「安静」只是猜测，不是保证：宿主装载模块要花几百毫秒，这期间注册表可以安静得
+    /// 远超防抖窗口，于是这一轮发现问到的是一张还没长齐的目录。宿主 5.1.3 起
+    /// 给出确定的完成点（<c>aurora.host.ready</c>），本定时器退居兜底。
     /// </summary>
     internal void ScheduleDiscover()
     {
@@ -487,11 +492,21 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _discoverDebounce.Start();
     }
 
-    /// <summary>拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。</summary>
-    internal Task DiscoverModuleSurfacesAsync()
+    /// <summary>撤掉尚未触发的防抖发现；已经确定要整轮重拉时用，省掉紧随其后的重复一轮。</summary>
+    internal void CancelScheduledDiscover() => _discoverDebounce.Stop();
+
+    /// <summary>
+    /// 拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。
+    ///
+    /// 返回的任务在**队列排空之后**才落定：闸门对在途一轮之外的请求会补跑一轮，
+    /// 因此调用方 await 到的必然是一轮「开始于本次调用之后」的完整拉取。
+    /// <c>aurora.host.ready</c> 依赖这一点——它要回一个说得出数的结果，
+    /// 而不是把在途那一轮（问的还是半成品目录）的结果冒充成自己的。
+    /// </summary>
+    internal Task<PageLoadReport?> DiscoverModuleSurfacesAsync()
         => _discover.RunAsync(DiscoverModuleSurfacesCoreAsync);
 
-    private async Task DiscoverModuleSurfacesCoreAsync()
+    private async Task<PageLoadReport?> DiscoverModuleSurfacesCoreAsync()
     {
         try
         {
@@ -499,13 +514,15 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             // 顺序反了会在冷启动那一轮把每个按钮都判成「未声明」。
             await _actions.ReloadAsync().ConfigureAwait(true);
             _panels.RebuildAll();
-            await _pageLoader.ReloadAsync().ConfigureAwait(true);
+            var report = await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
                 await _annotationClaimer.ClaimAsync().ConfigureAwait(true);
+            return report;
         }
         catch (Exception ex)
         {
             _log.Log(ShellLogLevel.Warn, "ui-claim", "模块界面发现失败: " + ex.Message);
+            return null;
         }
     }
 

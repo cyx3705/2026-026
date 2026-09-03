@@ -99,5 +99,9 @@ internal static partial class BuiltinCommands
             RegisterDataRefresh(r, s.DataRefresher);
         if (s.PageLoader != null && s.ComponentRequests != null)
             RegisterPages(r, s.PageLoader, s.ComponentRequests);
+        // 就绪钩子无条件登记：它只调 ShellWindow 的整轮发现，不依赖上面任何一个可选台账。
+        // 更要紧的是它必须在 Attach 那一刻就进宿主注册表——晚登记的界面命令宿主永远看不见，
+        // 而宿主正是靠「注册表里有没有这条」决定要不要通知本模块。
+        RegisterHostReady(r, s);
     }
 }
