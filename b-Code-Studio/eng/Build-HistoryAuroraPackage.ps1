@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 
 <#
-    构建 HistoryAurora 发布候选到 z-Publish\ 根部。
+    构建 HistoryAurora 发布候选到 `z-Publish/HistoryAurora-vX.Y.Z/`。
 
     与体系其他模块一致：候选是生成物，不手工编辑；SHA256SUMS 覆盖包内全部内容，
     history/ 与 SHA256SUMS 自身除外（宿主 RuntimeModuleDiscoverySource 按此校验）。
@@ -12,12 +12,11 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
 
-    # Diana 发布器的调用契约（Publish-OneHistoryModule.ps1）：候选先扁平写进一个临时
-    # OutputRoot，跑完模块合同与验证之后，由发布器自己提升为 z-Publish\HistoryAurora-vX.Y.Z。
-    # 省略时保持手工用法不变：直接写进 z-Publish 的版本化目录并归档旧版。
+    # 省略时直接写进 z-Publish 的版本化目录并归档旧版。
+    # 传入 OutputRoot 时该目录就是包根（宿主 staging 或临时校验），不二次归档。
     [string]$OutputRoot,
 
-    # 发布器指定本次要编译到哪一份宿主快照；省略时由 Directory.Build.props 决定。
+    # 宿主可传入 HistoryVulcanPackageRoot，指向本次要对齐的宿主快照；省略时由 Directory.Build.props 决定。
     [string]$HistoryVulcanPackageRoot
 )
 
@@ -62,6 +61,20 @@ try {
         Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force
     }
 
+    # b-Office/package 随包进 docs/。这不是附赠品：Diana 的 `diana.docs.*` 通道按候选包里的
+    # docs/ 建索引，别的项目就是从那里读 Aurora 的组件清单与模块 API。少打这一步，
+    # `diana.docs.catalog` 里 aurora 那条的 Documents 会变成空数组——不报错，只是各模块
+    # 写页面时再也查不到协议参考。1.14.0 的包里有 docs/，1.15.0 一度漏掉，据此补回。
+    $packageDocuments = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'b-Office\package') -Filter '*.md' -File)
+    if ($packageDocuments.Count -eq 0) {
+        throw 'b-Office/package must contain at least one Markdown document'
+    }
+    $docsStage = Join-Path $stage 'docs'
+    New-Item -ItemType Directory -Path $docsStage -Force | Out-Null
+    foreach ($document in $packageDocuments) {
+        Copy-Item -LiteralPath $document.FullName -Destination (Join-Path $docsStage $document.Name) -Force
+    }
+
     # SHA256SUMS：覆盖包内全部有效载荷，排除自身与 history/
     $lines = Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object {
         $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
@@ -79,13 +92,12 @@ try {
         (New-Object System.Text.UTF8Encoding $false))
 
     if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
-        # 发布器路径：只交付内容，不碰 z-Publish。归档与版本化目录由它统一处理，
-        # 两边都做会让 history/ 里出现同一版本的两份。
+        # 显式 OutputRoot 只交付包内容，不碰 z-Publish 根（避免与版本化归档抢同一份）。
         $staged = [IO.Path]::GetFullPath($OutputRoot)
         New-Item -ItemType Directory -Path $staged -Force | Out-Null
         Get-ChildItem -LiteralPath $staged -Force | Remove-Item -Recurse -Force
         Copy-Item -Path (Join-Path $stage '*') -Destination $staged -Recurse -Force
-        Write-Host "HistoryAurora $version staged for the publisher: $staged"
+        Write-Host "HistoryAurora $version staged: $staged"
         return
     }
 
