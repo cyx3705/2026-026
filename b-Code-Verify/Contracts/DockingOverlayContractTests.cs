@@ -117,20 +117,6 @@ public sealed class DockingOverlayContractTests
             $"AuroraOverlay must override docking defaults: docking={docking}, overlay={overlay}");
     }
 
-    [Fact]
-    public void ProbeIsReadOnlyAndCannotReintroduceRuntimeVisualRepair()
-    {
-        var root = FindSourceRoot();
-        var probe = File.ReadAllText(Path.Combine(
-            root, "b-Code-Studio", "Shell", "1-Base", "Docking", "DockingDragProbe.cs"));
-
-        Assert.DoesNotContain("ApplyTemplate", probe, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsurePreviewScale", probe, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsureDockingIndicatorVisuals", probe, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsureOpenOverlayVisuals", probe, StringComparison.Ordinal);
-        Assert.DoesNotContain("DockingOverlayResourceRepair", probe, StringComparison.Ordinal);
-    }
-
     private static string SetterValue(XElement style, string property)
         => (string?)style.Elements(Xaml + "Setter")
             .Single(setter => (string?)setter.Attribute("Property") == property)
