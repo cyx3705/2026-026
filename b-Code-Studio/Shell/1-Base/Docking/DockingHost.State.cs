@@ -66,9 +66,7 @@ internal sealed partial class DockingHost
         if (a.IsHidden || IsFloating(a))
             return null;
 
-        ILayoutElement? centerAnchor = _manager.Layout.RootPanel.Descendents()
-            .OfType<LayoutDocumentPane>()
-            .SingleOrDefault();
+        ILayoutElement? centerAnchor = TryFindMainDocumentPane();
         if (centerAnchor == null)
             return null;
 

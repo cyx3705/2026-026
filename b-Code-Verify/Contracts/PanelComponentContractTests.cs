@@ -124,144 +124,42 @@ public sealed class PanelComponentContractTests
         Converters = { new JsonStringEnumConverter() },
     };
 
-    [Fact]
-    public void Validate_RejectsButtonWithoutAction()
-    {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [ { "widgets": [ { "kind": "button", "text": "执行" } ] } ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        // 报错要说清"为什么不能写指令名"，否则下一个作者只会把 action 填成指令名。
-        Assert.Contains("action", parsed.Error);
-    }
-
-    [Fact]
-    public void Validate_RejectsUnknownWidgetKind()
-    {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [ { "widgets": [ { "kind": "slider", "id": "speed" } ] } ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("slider", parsed.Error);
-    }
-
-    [Fact]
-    public void Validate_RejectsUnknownOrNonButtonIcons()
-    {
-        var unknown = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [{ "widgets": [
-                { "kind": "button", "action": "demo.publish", "icon": "rotate" }
-              ] }]
-            }
-            """));
-        Assert.False(unknown.Ok);
-        Assert.Contains("refresh-cw", unknown.Error);
-
-        var nonButton = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [{ "widgets": [
-                { "kind": "text", "text": "刷新", "icon": "refresh-cw" }
-              ] }]
-            }
-            """));
-        Assert.False(nonButton.Ok);
-        Assert.Contains("只属于按钮", nonButton.Error);
-    }
-
-    [Fact]
-    public void Validate_RejectsSelectWithoutAnyOptionSource()
-    {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [ { "widgets": [ { "kind": "textbox", "id": "pick", "mode": "select" } ] } ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("options", parsed.Error);
-    }
-
     /// <summary>
-    /// 静态候选与动态候选只能二选一（REQ-UI-059）。
-    /// 两个都写的话，界面上看到的那一份取决于取数回来的时机，而两次打开可能不一样——
-    /// 那种缺陷只会以"偶尔选项不对"的形态出现，查不出来。
+    /// 面板声明的拒绝口径(REQ-UI-059)。每一条对应一种「界面上会变成什么症状」:
+    /// 报错文本必须点名出错的那一处,否则下一个作者只会照着猜。
     /// </summary>
-    [Fact]
-    public void Validate_RejectsStaticAndDynamicOptionsTogether()
+    [Theory]
+    // 按钮没写 action:点了没反应。报错要说清"为什么不能写指令名"。
+    [InlineData("""[ { "widgets": [ { "kind": "button", "text": "执行" } ] } ]""", "action")]
+    // 不认识的控件种类:整行渲染不出来。
+    [InlineData("""[ { "widgets": [ { "kind": "slider", "id": "speed" } ] } ]""", "slider")]
+    // 图标名不在白名单里。
+    [InlineData("""[ { "widgets": [ { "kind": "button", "action": "demo.publish", "icon": "rotate" } ] } ]""", "refresh-cw")]
+    // 图标只属于按钮,挂到文本上就是个不可点的装饰。
+    [InlineData("""[ { "widgets": [ { "kind": "text", "text": "刷新", "icon": "refresh-cw" } ] } ]""", "只属于按钮")]
+    // select 没有任何候选来源:下拉永远是空的。
+    [InlineData("""[ { "widgets": [ { "kind": "textbox", "id": "pick", "mode": "select" } ] } ]""", "options")]
+    // 静态候选与动态候选只能二选一:两个都写,看到哪一份取决于取数回来的时机,
+    // 两次打开可能不一样——那种缺陷只会以"偶尔选项不对"的形态出现,查不出来。
+    [InlineData("""[ { "widgets": [ { "kind": "textbox", "id": "pick", "mode": "select", "options": [ "甲" ], "optionsSource": { "command": "demo.ui.data" } } ] } ]""", "二选一")]
+    // 不认识的行模式。
+    [InlineData("""[ { "mode": "justify", "widgets": [ { "kind": "text", "text": "一" } ] } ]""", "justify")]
+    // 最窄宽度写成 0 或负数的症状是「那一格没了」,必须在收下声明时判死。
+    [InlineData("""[ { "widgets": [ { "kind": "textbox", "id": "note", "minWidth": 0 } ] } ]""", "minWidth")]
+    // 控件重名:占位符按 id 取值,按钮拿到的参数取决于构建顺序。
+    // **跨行也要判**——行只是版面,取值作用域是整个面板。
+    [InlineData("""[ { "widgets": [ { "kind": "textbox", "id": "name" } ] }, { "widgets": [ { "kind": "textbox", "id": "name" } ] } ]""", "name")]
+    public void Validate_RejectsDeclarationsThatWouldRenderWrong(string rows, string expectedInError)
     {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
+        var parsed = PanelDefinitionValidator.Validate(Parse($$"""
             {
               "id": "demo", "title": "演示",
-              "rows": [ { "widgets": [
-                { "kind": "textbox", "id": "pick", "mode": "select",
-                  "options": [ "甲" ],
-                  "optionsSource": { "command": "demo.ui.data" } }
-              ] } ]
+              "rows": {{rows}}
             }
             """));
 
         Assert.False(parsed.Ok);
-        Assert.Contains("二选一", parsed.Error);
-    }
-
-    [Fact]
-    public void Validate_RejectsUnknownRowMode()
-    {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [ { "mode": "justify", "widgets": [ { "kind": "text", "text": "一" } ] } ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("justify", parsed.Error);
-    }
-
-    /// <summary>最窄宽度写成 0 或负数的症状是「那一格没了」，必须在收下声明时判死。</summary>
-    [Fact]
-    public void Validate_RejectsNonPositiveMinWidth()
-    {
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [ { "widgets": [ { "kind": "textbox", "id": "note", "minWidth": 0 } ] } ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("minWidth", parsed.Error);
-    }
-
-    [Fact]
-    public void Validate_RejectsDuplicateControlIdsAcrossRows()
-    {
-        // 占位符按 id 取值，重名意味着按钮拿到的参数取决于构建顺序。
-        // **跨行也要判**：行只是版面，取值作用域是整个面板。
-        var parsed = PanelDefinitionValidator.Validate(Parse("""
-            {
-              "id": "demo", "title": "演示",
-              "rows": [
-                { "widgets": [ { "kind": "textbox", "id": "name" } ] },
-                { "widgets": [ { "kind": "textbox", "id": "name" } ] }
-              ]
-            }
-            """));
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("name", parsed.Error);
+        Assert.Contains(expectedInError, parsed.Error);
     }
 
     [Fact]
