@@ -20,6 +20,7 @@ using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
+using AvalonDock.Layout;
 using AvalonDock.Themes;
 using AvalonDock.Themes.VS2013.Themes;
 using Xunit;
@@ -480,7 +481,7 @@ public sealed class ShellChromeContractTests
             UiTestHost.Pump();
 
             var tabs = FindVisualDescendants<LayoutDocumentTabItem>(window)
-                .Where(item => item.Model is { ContentId: { Length: > 0 }, Parent: AvalonDock.Layout.LayoutDocumentPane })
+                .Where(item => item.Model is { ContentId: { Length: > 0 }, Parent: LayoutDocumentPane })
                 .ToList();
             Assert.True(tabs.Count >= 2, "需要至少两个中央页签才能验证「点另一个页签能换页」");
             var target = tabs.First(item => item.Model is { IsSelected: false });
@@ -513,6 +514,61 @@ public sealed class ShellChromeContractTests
             {
                 Mouse.Capture(null);
             }
+        });
+    }
+
+    /// <summary>
+    /// 中央区不分栏(REQ-UI-078),而且必须在**整壳**里验:裸 DockingManager 复现不出来,
+    /// 真机那次的空白窗格只在 ShellWindow 环境下出现(壳的窗格模板把内容挂在
+    /// <c>PART_SelectedContentHost</c> 上,绑的是 <c>SelectedContent</c>)。
+    ///
+    /// 两条断言对应用户报的两个症状:中央区分栏后只剩一个文档区(不再有空白窗格),
+    /// 且窗口控制栏仍在命令集所在的那个窗格里(主命令页没有被顶成工具页)。
+    /// </summary>
+    [Theory]
+    [InlineData(0)] // 新窗格落在左侧——真机就是这个方向出的问题
+    [InlineData(1)]
+    public void SplitCenterCollapsesBackAndKeepsTheChromeWithTheCommandCatalog(int newPaneIndex)
+    {
+        RunShell(window =>
+        {
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            var manager = window.DockManager;
+            var moved = manager.Layout.Descendents().OfType<LayoutContent>()
+                .First(item => item.ContentId == StandardWindowIds.CommandDetail);
+            var pane = (LayoutDocumentPane)moved.Parent!;
+            ((ILayoutContainer)pane).RemoveChild(moved);
+            var group = new LayoutDocumentPaneGroup
+            {
+                Orientation = Orientation.Horizontal,
+            };
+            ((ILayoutContainer)pane.Parent!).ReplaceChild(pane, group);
+            group.Children.Add(pane);
+            group.Children.Insert(newPaneIndex, new LayoutDocumentPane(moved));
+            manager.UpdateLayout();
+            UiTestHost.Pump();
+
+            var panes = manager.Layout.RootPanel.Descendents()
+                .OfType<LayoutDocumentPane>()
+                .ToList();
+            var single = Assert.Single(panes);
+            Assert.Contains(single.Children, item => item.ContentId == StandardWindowIds.CommandDetail);
+            Assert.Contains(single.Children, item => item.ContentId == StandardWindowIds.Mcp);
+            Assert.InRange(single.SelectedContentIndex, 0, single.Children.Count - 1);
+            Assert.Empty(manager.Layout.RootPanel.Descendents()
+                .OfType<LayoutDocumentPaneGroup>());
+
+            // 控制栏由壳的低频巡检(400ms,幂等)放回宿主,推进真实时间才看得到结果。
+            UiTestHost.PumpFor(700);
+            var control = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
+            control.ApplyTemplate();
+            var chrome = control.Template?.FindName("ShellChromeHost", control) as ContentControl;
+            Assert.NotNull(chrome);
+            Assert.True(
+                chrome!.Content != null,
+                "窗口控制栏必须留在命令集所在的窗格里，否则主命令页被顶成工具页");
         });
     }
 

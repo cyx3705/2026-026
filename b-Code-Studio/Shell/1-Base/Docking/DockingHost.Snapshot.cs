@@ -9,6 +9,7 @@ internal sealed partial class DockingHost
 {
     private DockLayoutSnapshot CaptureLayoutSnapshot(LayoutRoot root)
     {
+        MergeStrayDocumentPanes();
         if (NeedsCentralWorkspaceRepair())
         {
             using (Suppress())
@@ -55,12 +56,6 @@ internal sealed partial class DockingHost
                 SelectedContentId = pane.SelectedContent?.ContentId,
                 Contents = pane.Children.Select(CaptureContent).Where(item => item != null)
                     .Cast<DockContentSnapshot>().ToList(),
-            },
-            LayoutDocumentPaneGroup group => new DockLayoutNodeSnapshot
-            {
-                Kind = DockLayoutNodeKind.DocumentPaneGroup,
-                Orientation = group.Orientation.ToString(),
-                Children = group.Children.Cast<ILayoutElement>().Select(CaptureNode).ToList(),
             },
             LayoutAnchorablePaneGroup group => new DockLayoutNodeSnapshot
             {
@@ -111,11 +106,6 @@ internal sealed partial class DockingHost
             {
                 Kind = "anchorable",
                 Root = CaptureNode(anchorable.RootPanel),
-            },
-            LayoutDocumentFloatingWindow document => new DockFloatingWindowSnapshot
-            {
-                Kind = "document",
-                Root = CaptureNode(document.RootPanel),
             },
             _ => null,
         };
@@ -182,7 +172,6 @@ internal sealed partial class DockingHost
             DockLayoutNodeKind.Panel => RestorePanel(snapshot, seen),
             DockLayoutNodeKind.DocumentPane => RestoreDocumentPane(snapshot, seen),
             DockLayoutNodeKind.AnchorablePane => RestoreAnchorablePane(snapshot, seen),
-            DockLayoutNodeKind.DocumentPaneGroup => RestoreDocumentPaneGroup(snapshot, seen),
             DockLayoutNodeKind.AnchorablePaneGroup => RestoreAnchorablePaneGroup(snapshot, seen),
             _ => throw new InvalidDataException($"未知布局节点: {snapshot.Kind}"),
         };
@@ -227,20 +216,6 @@ internal sealed partial class DockingHost
         }
         Select(pane, snapshot.SelectedContentId);
         return pane;
-    }
-
-    private LayoutDocumentPaneGroup RestoreDocumentPaneGroup(
-        DockLayoutNodeSnapshot snapshot,
-        HashSet<string> seen)
-    {
-        var group = new LayoutDocumentPaneGroup { Orientation = ParseOrientation(snapshot.Orientation) };
-        foreach (var child in snapshot.Children)
-        {
-            var restored = RestoreNode(child, seen);
-            if (restored is ILayoutDocumentPane documentPane)
-                group.Children.Add(documentPane);
-        }
-        return group;
     }
 
     private LayoutAnchorablePaneGroup RestoreAnchorablePaneGroup(
@@ -289,13 +264,6 @@ internal sealed partial class DockingHost
                     root.FloatingWindows.Add(new LayoutAnchorableFloatingWindow
                     {
                         RootPanel = anchorableGroup,
-                    });
-                    break;
-                case "document" when restored is LayoutDocumentPaneGroup documentGroup &&
-                                       documentGroup.ChildrenCount > 0:
-                    root.FloatingWindows.Add(new LayoutDocumentFloatingWindow
-                    {
-                        RootPanel = documentGroup,
                     });
                     break;
             }
@@ -363,9 +331,6 @@ internal sealed partial class DockingHost
             case LayoutAnchorablePane item:
                 Set(item, width, height, minWidth, minHeight);
                 break;
-            case LayoutDocumentPaneGroup item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
             case LayoutAnchorablePaneGroup item:
                 Set(item, width, height, minWidth, minHeight);
                 break;
@@ -390,10 +355,6 @@ internal sealed partial class DockingHost
                     (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
                 return true;
             case LayoutAnchorablePane item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            case LayoutDocumentPaneGroup item:
                 (width, height, minWidth, minHeight) =
                     (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
                 return true;
@@ -438,19 +399,6 @@ internal sealed partial class DockingHost
 
     private static void Set(
         LayoutAnchorablePane item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
-    {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
-    }
-
-    private static void Set(
-        LayoutDocumentPaneGroup item,
         GridLength width,
         GridLength height,
         double minWidth,

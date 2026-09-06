@@ -9,7 +9,6 @@ internal enum DockLayoutNodeKind
     Panel,
     DocumentPane,
     AnchorablePane,
-    DocumentPaneGroup,
     AnchorablePaneGroup,
 }
 

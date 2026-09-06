@@ -483,91 +483,57 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
-    /// 回归(2026-09-06 真机):把中央页拖出去再丢回中央区,AvalonDock 会把中央区拆成
-    /// <c>LayoutDocumentPaneGroup</c> 下的两个 <c>LayoutDocumentPane</c>。
-    /// 此前 <c>DetectSide</c> 与 <c>EnsureCenterColumn</c> 用 <c>SingleOrDefault</c> 取中央区,
-    /// 于是布局差分的定时器每一拍都抛 <c>Sequence contains more than one element</c>
-    /// ——真机 11 秒里 158 条未处理异常,基线再也建不起来,随后的 <c>aurora.ui.float</c>
-    /// 一并失败,存盘则抛「必须且只能存在一个中央主文档区」。
-    /// 三条断言分别压住三个改点:差分、停靠、存盘。
+    /// 中央区不分栏(REQ-UI-078)。AvalonDock 允许把中央页丢到中央区侧边、就地拆出第二个文档区,
+    /// 而那个形态在本壳里是坏的:主区认定错位(命令集被顶成工具页)、新窗格的
+    /// <c>SelectedContentIndex</c> 停在 -1 导致内容整片空白。因此布局落定时一律并回主文档区。
+    ///
+    /// 分栏到并回之间仍有一拍瞬态。那一拍里布局差分、换边停靠与存盘都不得塌(REQ-UI-076):
+    /// 2026-09-06 真机就是在这里以 <c>Sequence contains more than one element</c>
+    /// 从布局差分的定时器里抛出 158 条未处理异常。
     /// </summary>
-    [Fact]
-    public void SplitCenterKeepsDiffsDockingAndSavingAlive()
+    [Theory]
+    [InlineData(0)] // 新窗格落在左侧——命令集所在的那个不再排第一
+    [InlineData(1)] // 新窗格落在右侧
+    public void SplitCenterIsFoldedBackIntoTheOnlyDocumentPane(int newPaneIndex)
     {
         UiTestHost.RunSta(() =>
         {
             var store = new MemoryLayoutStore();
-            var descriptors = new[]
-            {
-                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                Tool("business", DockSide.Center, 1),
-                Tool("side", DockSide.Left, 0.2),
-            };
-            var window = ShowHost(descriptors, store, out var host);
-            try
-            {
-                var manager = (DockingManager)window.Content;
-                SplitCenterArea(manager, "business");
-                UiTestHost.Pump();
-                Assert.Equal(
-                    2,
-                    manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>().Count());
-
-                // DetectSide:侧边窗口仍要认出自己在左边,而不是把整轮差分连同基线一起抛掉。
-                Assert.Equal(DockSide.Left, host.ListWindows().Single(item => item.Id == "side").Side);
-
-                // EnsureCenterColumn:换边要照常落地。
-                host.Dock("side", DockSide.Bottom, 0.3);
-                UiTestHost.Pump();
-                Assert.Equal(DockSide.Bottom, host.ListWindows().Single(item => item.Id == "side").Side);
-
-                // LayoutHasMainDocumentPane:分栏后的中央区照样要能存盘。
-                host.SaveCurrentLayout();
-                Assert.NotNull(store.ReadCurrent());
-            }
-            finally
-            {
-                window.Close();
-            }
-        });
-    }
-
-    /// <summary>
-    /// 回归(2026-09-06 真机):拖拽中途失败会留下一个「有页签、没内容」的文档区。
-    /// AvalonDock 新建的文档区把 <c>SelectedContentIndex</c> 停在 -1,而窗格模板里的
-    /// <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>——页签照画,内容整片空白,
-    /// 且 <c>aurora.ui.show</c> 救不回来(它只改 <c>IsSelected</c>,不改窗格的选中下标)。
-    /// </summary>
-    [Fact]
-    public void DocumentPaneWithChildrenAlwaysKeepsASelectedContent()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var store = new MemoryLayoutStore();
+            var log = new RecordingLog();
             var window = ShowHost(
                 [
                     Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
                     Tool("business", DockSide.Center, 1),
+                    Tool("side", DockSide.Left, 0.2),
                 ],
                 store,
-                out var host);
+                out var host,
+                log);
             try
             {
                 var manager = (DockingManager)window.Content;
-                SplitCenterArea(manager, "business");
-                UiTestHost.Pump();
+                SplitCenterArea(manager, "business", newPaneIndex);
 
-                var panes = manager.Layout.RootPanel.Descendents()
-                    .OfType<LayoutDocumentPane>()
-                    .ToList();
-                Assert.Equal(2, panes.Count);
-                Assert.All(panes, pane =>
-                {
-                    Assert.NotEmpty(pane.Children);
-                    Assert.InRange(pane.SelectedContentIndex, 0, pane.Children.Count - 1);
-                    Assert.NotNull(pane.SelectedContent);
-                });
-                Assert.Equal(2, host.ListWindows().Count(item => item.Side == DockSide.Center));
+                // 瞬态那一拍:确实是两个文档区,而差分/停靠/存盘一个都不许塌。
+                Assert.Equal(
+                    2,
+                    manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>().Count());
+                Assert.Equal(DockSide.Left, host.ListWindows().Single(item => item.Id == "side").Side);
+                host.Dock("side", DockSide.Bottom, 0.3);
+                host.SaveCurrentLayout();
+                Assert.True(
+                    store.ReadCurrent() != null,
+                    string.Join(" | ", log.Snapshot().Select(x => x.Message)));
+
+                // 落定之后:中央区只剩一个文档区,两页都在里面,并且选得中。
+                UiTestHost.Pump();
+                var pane = Assert.Single(
+                    manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>());
+                Assert.Equal(
+                    [StandardWindowIds.Mcp, "business"],
+                    pane.Children.Select(content => content.ContentId));
+                Assert.InRange(pane.SelectedContentIndex, 0, pane.Children.Count - 1);
+                Assert.Equal(DockSide.Bottom, host.ListWindows().Single(item => item.Id == "side").Side);
             }
             finally
             {
@@ -1474,10 +1440,11 @@ public sealed class DockingContractTests
     private static Window ShowHost(
         IReadOnlyList<ToolWindowDescriptor> tools,
         MemoryLayoutStore store,
-        out DockingHost host)
+        out DockingHost host,
+        IShellLog? log = null)
     {
         var manager = new DockingManager();
-        host = new DockingHost(manager, tools, store, new NullLog());
+        host = new DockingHost(manager, tools, store, log ?? new NullLog());
         host.Initialize();
         var window = new Window
         {
@@ -1492,8 +1459,11 @@ public sealed class DockingContractTests
         return window;
     }
 
-    /// <summary>把中央区拆成左右两个文档区——等价于用户把一个中央页拖到中央区侧边放下。</summary>
-    private static void SplitCenterArea(DockingManager manager, string id)
+    /// <summary>
+    /// 把中央区拆成左右两个文档区——等价于用户把一个中央页拖到中央区侧边放下。
+    /// <paramref name="newPaneIndex"/> 为 0 表示新窗格落在左侧。
+    /// </summary>
+    private static void SplitCenterArea(DockingManager manager, string id, int newPaneIndex)
     {
         var content = manager.Layout.Descendents().OfType<LayoutContent>()
             .Single(item => item.ContentId == id);
@@ -1503,7 +1473,7 @@ public sealed class DockingContractTests
         var group = new LayoutDocumentPaneGroup { Orientation = Orientation.Horizontal };
         ((ILayoutContainer)pane.Parent!).ReplaceChild(pane, group);
         group.Children.Add(pane);
-        group.Children.Add(new LayoutDocumentPane(content));
+        group.Children.Insert(newPaneIndex, new LayoutDocumentPane(content));
         manager.UpdateLayout();
     }
 
@@ -1584,6 +1554,15 @@ public sealed class DockingContractTests
         public string? ReadNamed(string name) => null;
         public void WriteNamed(string name, string payload) => throw new IOException("simulated layout write failure");
         public IReadOnlyList<string> ListNamed() => [];
+    }
+
+    private sealed class RecordingLog : IShellLog
+    {
+        private readonly List<ShellLogEntry> _entries = [];
+        public void Log(ShellLogLevel level, string category, string message)
+            => _entries.Add(new ShellLogEntry(DateTime.Now, level, category, message));
+        public event EventHandler<ShellLogEntry>? EntryAdded { add { } remove { } }
+        public IReadOnlyList<ShellLogEntry> Snapshot() => _entries;
     }
 
     private sealed class NullLog : IShellLog

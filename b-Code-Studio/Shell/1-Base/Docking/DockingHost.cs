@@ -58,6 +58,7 @@ internal sealed partial class DockingHost : IDockingService
     private string? _snapshotBeforeMaximize;
     private bool _centerRepairPending;
     private bool _presentationRefreshPending;
+    private bool _centerMergePending;
 
     // W-05 比例语义:AvalonDock 对与文档区同面板的侧窗格采用像素语义
     // (LayoutPanelControl.OnFixChildrenDockLengths 会把星值固化为像素),
@@ -732,6 +733,11 @@ internal sealed partial class DockingHost : IDockingService
 
     private void OnLayoutUpdated(object? sender, EventArgs e)
     {
+        // 「中央区只有一个文档区」与「这次变更要不要回声成指令」无关,因此排在两个守卫之前:
+        // 主窗体缩放会把 _windowResizePending 顶起 200ms,一次拖拽只要落进那个窗口,
+        // 后面就再没有 Updated 把合并排上队。
+        ScheduleCenterMerge();
+
         if (_suppress > 0 || _windowResizePending)
             return;
 
@@ -747,6 +753,8 @@ internal sealed partial class DockingHost : IDockingService
     {
         if (_suppress > 0)
             return;
+
+        MergeStrayDocumentPanes();
 
         if (NeedsCentralWorkspaceRepair())
         {
