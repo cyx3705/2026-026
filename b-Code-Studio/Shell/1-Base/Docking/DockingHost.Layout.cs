@@ -309,8 +309,8 @@ internal sealed partial class DockingHost
 
     private bool LayoutHasMainDocumentPane()
     {
-        var panes = _manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>().ToList();
-        return panes.Count == 1 && panes[0].Children.OfType<LayoutDocument>().All(document =>
+        var pane = TryFindMainDocumentPane();
+        return pane != null && pane.Children.OfType<LayoutDocument>().All(document =>
             document.ContentId != null && _byId.ContainsKey(document.ContentId));
     }
 
@@ -359,10 +359,20 @@ internal sealed partial class DockingHost
     private bool UsesDocumentIdentity(ToolWindowDescriptor descriptor)
         => IsPrimaryCommandDocument(descriptor.Id);
 
-    private LayoutDocumentPane FindMainDocumentPane()
+    /// <summary>
+    /// 中央主文档区 = 根面板里第一个不在浮窗内的 <see cref="LayoutDocumentPane"/>。
+    /// 浮出一个中央页时 AvalonDock 会为浮窗另建一个文档区,把中央区拖成左右两半也会分裂出第二个,
+    /// 所以"整棵布局有且只有一个文档区"不成立 —— 取主文档区一律走这里,不得再用
+    /// <c>Single</c>/<c>SingleOrDefault</c>(否则 <c>Sequence contains more than one element</c>
+    /// 会从布局差分的定时器里以未处理异常的形式抛出来)。
+    /// </summary>
+    private LayoutDocumentPane? TryFindMainDocumentPane()
         => _manager.Layout.RootPanel.Descendents()
-               .OfType<LayoutDocumentPane>()
-               .FirstOrDefault(pane => !IsInsideFloatingWindow(pane))
+            .OfType<LayoutDocumentPane>()
+            .FirstOrDefault(pane => !IsInsideFloatingWindow(pane));
+
+    private LayoutDocumentPane FindMainDocumentPane()
+        => TryFindMainDocumentPane()
            ?? throw new InvalidOperationException("布局中找不到中央主文档区");
 
     private LayoutDocument? FindCenterDocument(string id)
@@ -487,6 +497,7 @@ internal sealed partial class DockingHost
         _manager.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             _presentationRefreshPending = false;
+            RepairDocumentPaneSelection();
             var mainPane = _manager.Layout.RootPanel.Descendents()
                 .OfType<LayoutDocumentPane>()
                 .FirstOrDefault(pane => !IsInsideFloatingWindow(pane));
@@ -502,6 +513,30 @@ internal sealed partial class DockingHost
                     tabs.Visibility = Visibility.Visible;
             }
         });
+    }
+
+    /// <summary>
+    /// 非空文档区必须有选中内容。窗格控件是 <c>TabControl</c>,模板里的
+    /// <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>——
+    /// <c>SelectedContentIndex</c> 停在 -1 时页签照画、内容整片空白,
+    /// 而这正是拖拽中途失败留下的残局(AvalonDock 新建的文档区不会自己选一页)。
+    /// </summary>
+    private void RepairDocumentPaneSelection()
+    {
+        var broken = _manager.Layout.Descendents()
+            .OfType<LayoutDocumentPane>()
+            .Where(pane => pane.Children.Count > 0 &&
+                           (pane.SelectedContentIndex < 0 ||
+                            pane.SelectedContentIndex >= pane.Children.Count))
+            .ToList();
+        if (broken.Count == 0)
+            return;
+
+        using (Suppress())
+        {
+            foreach (var pane in broken)
+                pane.SelectedContentIndex = 0;
+        }
     }
 
     private void EnsureRegistered(string id)
