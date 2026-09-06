@@ -38,25 +38,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private DockingDragSession? _dragSession;
     private bool _disposed;
 
-    static ShellTopBarCoordinator()
-    {
-        // 页签左键由 Aurora 独占。只在隧道阶段判定 Handled 是不够的:冒泡阶段 WPF 仍会把
-        // MouseDown 就地升发成 MouseLeftButtonDown,AvalonDock 的
-        // LayoutDocumentTabItem.OnMouseLeftButtonDown 照跑不误——真机 2026-09-06 就是在那里
-        // 对一个刚被换页回收掉的页签解引用 Model,抛 NullReferenceException,整条路由中断:
-        // 页换不成,捕获又留在原地,于是「点页签变成拖窗口」。中央页与工具页两种页签都会中招。
-        //
-        // 类处理器按派生类优先调用,而 AvalonDock 那个实现是 UIElement 上注册的虚方法转发器
-        // (handledEventsToo:false),所以在这两个类型上判定 Handled 就能整条断掉。
-        foreach (var tabType in new[] { typeof(LayoutDocumentTabItem), typeof(LayoutAnchorableTabItem) })
-        {
-            EventManager.RegisterClassHandler(
-                tabType,
-                UIElement.MouseLeftButtonDownEvent,
-                new MouseButtonEventHandler(static (_, e) => e.Handled = true));
-        }
-    }
-
     public ShellTopBarCoordinator(
         Window window,
         DockingManager manager,
@@ -220,12 +201,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return false;
         }
 
-        // 页签的左键手势只能有一个主人,AvalonDock 那一路由类处理器断掉
-        // (见 static 构造函数)。选中/激活本来由它顺手做,这里必须自己补上,
-        // 否则点页签换不了页——但**必须排在抓取之后**:换页会让 TabControl 重建容器,
-        // 被点的那个页签当场作废,先选后抓就抓在一个已经死掉的元素上。
-        e.Handled = true;
-
+        // **换页归 AvalonDock**。这里既不判 Handled 也不自己写选中——两条都试过,两条都错:
+        // 判了 Handled,容器 TabItem 收不到冒泡的按下,页就换不了(1.17.5 真机);
+        // 自己写选中,要么把窗格的选中下标反向写成 -1(模型层:LayoutDocumentPane.IndexOf
+        // 不认 LayoutAnchorable,而中央页全是 anchorable),要么因为文档区里混着隐藏页
+        // 而错位一格(控件层)。两种都实测过。
+        //
+        // Aurora 只负责拖:按下起会话、越过阈值再浮出去,而浮之前先放掉捕获
+        // (见 RestoreAndFloatAsync)。AvalonDock 那条并行拖拽之所以会闹,
+        // 根子在「页签被摘走时捕获还在它身上」——放掉捕获就够了,不必去抢按下事件。
         var floating = FindFloatingWindow(id);
         if (floating != null)
         {
@@ -239,11 +223,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             if (CountFloatingPages(floating) > 1)
             {
                 StartFloatingTabSession(tab, id, floating, e);
-                ActivateTabPage(id);
                 return false;
             }
 
-            ActivateTabPage(id);
             return false;
         }
 
@@ -271,7 +253,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
 
         StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
-        ActivateTabPage(id);
         return false;
     }
 
@@ -410,14 +391,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     private void OnDockTabMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         => HandleDockTabMouseLeftButtonDown(e);
-
-    private void ActivateTabPage(string id)
-    {
-        if (FindLayoutContent(id) is not { } content)
-            return;
-        content.IsSelected = true;
-        content.IsActive = true;
-    }
 
     private void StartTabSession(
         FrameworkElement tab,
