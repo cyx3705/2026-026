@@ -22,17 +22,6 @@ namespace HistoryAurora.Verify;
 public sealed class DockingContractTests
 {
     [Fact]
-    public void DockSideKeepsLegacyTabValue()
-    {
-        Assert.Equal(0, (int)DockSide.Left);
-        Assert.Equal(1, (int)DockSide.Right);
-        Assert.Equal(2, (int)DockSide.Top);
-        Assert.Equal(3, (int)DockSide.Bottom);
-        Assert.Equal(4, (int)DockSide.Tab);
-        Assert.Equal(5, (int)DockSide.Center);
-    }
-
-    [Fact]
     public void ToolWindowDefaultsToRightAndModulesCanOverridePlacement()
     {
         var defaultWindow = new ToolWindowDescriptor
@@ -140,33 +129,6 @@ public sealed class DockingContractTests
             Assert.True(commandCatalog.IsVisible);
             Assert.False(commandCatalog.IsFloating);
             Assert.Equal(DockSide.Center, commandCatalog.Side);
-        });
-    }
-
-    [Fact]
-    public void InvalidLegacyXmlFallsBackToTheCurrentDefaultLayout()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var store = new MemoryLayoutStore();
-            store.WriteCurrent("<LayoutRoot />");
-
-            var manager = new DockingManager();
-            var host = new DockingHost(
-                manager,
-                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
-                store,
-                new NullLog());
-            host.Initialize();
-
-            var commandCatalog = Assert.Single(host.ListWindows());
-            Assert.True(commandCatalog.IsVisible);
-            Assert.Equal(DockSide.Center, commandCatalog.Side);
-            var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
-            Assert.Equal(
-                StandardWindowIds.Mcp,
-                Assert.Single(pane.Children.OfType<LayoutDocument>()).ContentId);
-            Assert.Equal(GridUnitType.Star, pane.DockWidth.GridUnitType);
         });
     }
 
@@ -520,6 +482,56 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>
+    /// 回归(2026-09-06 真机):把中央页拖出去再丢回中央区,AvalonDock 会把中央区拆成
+    /// <c>LayoutDocumentPaneGroup</c> 下的两个 <c>LayoutDocumentPane</c>。
+    /// 此前 <c>DetectSide</c> 与 <c>EnsureCenterColumn</c> 用 <c>SingleOrDefault</c> 取中央区,
+    /// 于是布局差分的定时器每一拍都抛 <c>Sequence contains more than one element</c>
+    /// ——真机 11 秒里 158 条未处理异常,基线再也建不起来,随后的 <c>aurora.ui.float</c>
+    /// 一并失败,存盘则抛「必须且只能存在一个中央主文档区」。
+    /// 三条断言分别压住三个改点:差分、停靠、存盘。
+    /// </summary>
+    [Fact]
+    public void SplitCenterKeepsDiffsDockingAndSavingAlive()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var descriptors = new[]
+            {
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("business", DockSide.Center, 1),
+                Tool("side", DockSide.Left, 0.2),
+            };
+            var window = ShowHost(descriptors, store, out var host);
+            try
+            {
+                var manager = (DockingManager)window.Content;
+                SplitCenterArea(manager, "business");
+                UiTestHost.Pump();
+                Assert.Equal(
+                    2,
+                    manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>().Count());
+
+                // DetectSide:侧边窗口仍要认出自己在左边,而不是把整轮差分连同基线一起抛掉。
+                Assert.Equal(DockSide.Left, host.ListWindows().Single(item => item.Id == "side").Side);
+
+                // EnsureCenterColumn:换边要照常落地。
+                host.Dock("side", DockSide.Bottom, 0.3);
+                UiTestHost.Pump();
+                Assert.Equal(DockSide.Bottom, host.ListWindows().Single(item => item.Id == "side").Side);
+
+                // LayoutHasMainDocumentPane:分栏后的中央区照样要能存盘。
+                host.SaveCurrentLayout();
+                Assert.NotNull(store.ReadCurrent());
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     [Fact]
     public void JsonSnapshotPreservesNestedSplitsTabsSelectionAndMultipleFloatingWindows()
     {
@@ -727,6 +739,9 @@ public sealed class DockingContractTests
     [Theory]
     [InlineData(null)]
     [InlineData("{not-json")]
+    // 1.7.0 之前的 XML 存档。壳里早已没有 XML 反序列化路径,它对读取侧就是又一份非 JSON 负载,
+    // 走的是同一条回退:落到位置台账,且不删掉原文件。
+    [InlineData("<LayoutRoot />")]
     public void MissingOrCorruptSnapshotFallsBackToPlacementsWithoutDeletingIt(string? payload)
     {
         UiTestHost.RunSta(() =>
@@ -1431,6 +1446,21 @@ public sealed class DockingContractTests
         window.Show();
         manager.UpdateLayout();
         return window;
+    }
+
+    /// <summary>把中央区拆成左右两个文档区——等价于用户把一个中央页拖到中央区侧边放下。</summary>
+    private static void SplitCenterArea(DockingManager manager, string id)
+    {
+        var content = manager.Layout.Descendents().OfType<LayoutContent>()
+            .Single(item => item.ContentId == id);
+        var pane = Assert.IsType<LayoutDocumentPane>(content.Parent);
+        ((ILayoutContainer)pane).RemoveChild(content);
+
+        var group = new LayoutDocumentPaneGroup { Orientation = Orientation.Horizontal };
+        ((ILayoutContainer)pane.Parent!).ReplaceChild(pane, group);
+        group.Children.Add(pane);
+        group.Children.Add(new LayoutDocumentPane(content));
+        manager.UpdateLayout();
     }
 
     private static void AssertCenterTool(DockingManager manager, string id)

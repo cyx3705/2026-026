@@ -15,7 +15,7 @@ internal sealed partial class DockingHost
                 EnsureCentralWorkspace();
         }
         if (!LayoutHasMainDocumentPane())
-            throw new InvalidOperationException("布局中必须且只能存在一个中央主文档区");
+            throw new InvalidOperationException("布局中找不到中央主文档区");
 
         return new DockLayoutSnapshot
         {

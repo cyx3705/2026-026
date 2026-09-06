@@ -192,8 +192,7 @@ internal sealed partial class DockingHost
     /// <summary>找到包含主文档区的中央列;若中央区不是垂直面板,则就地包一层。</summary>
     private LayoutPanel EnsureCenterColumn()
     {
-        var document = _manager.Layout.Descendents().OfType<LayoutDocumentPane>().SingleOrDefault()
-                       ?? throw new InvalidOperationException("布局中找不到中央主文档区");
+        var document = FindMainDocumentPane();
         for (ILayoutContainer? parent = document.Parent;
              parent != null;
              parent = (parent as ILayoutElement)?.Parent)

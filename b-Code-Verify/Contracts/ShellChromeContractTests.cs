@@ -143,14 +143,21 @@ public sealed class ShellChromeContractTests
             settings: settings);
     }
 
+    /// <summary>
+    /// 停靠覆盖层是独立窗口,它的画刷必须同时满足两件事:在主题**源字典**里就已可绘制
+    /// (拖动那一刻才合并就来不及,按钮会是一片透明),以及能从 <c>DockManager</c> 自身解析出来
+    /// (它取不到主窗口的资源树)。两条路径合在一条用例里断言,省掉一次整壳启动。
+    /// </summary>
     [Fact]
-    public void DockingOverlayBrushesKeepButtonsVisibleAndPreviewFillTransparent()
+    public void DockingOverlayBrushesAreDrawableInTheThemeSourceAndFromTheManager()
     {
         RunShell(window =>
         {
-            // The overlay is an independent Window. These keys must resolve from
-            // the manager theme itself, not from the main window's resource tree.
             var manager = window.DockManager;
+            var theme = Assert.IsAssignableFrom<DictionaryTheme>(manager.Theme);
+            var dictionary = theme.ThemeResourceDictionary;
+            Assert.NotNull(dictionary);
+
             var keys = new[]
             {
                 ResourceKeys.DockingButtonForegroundBrushKey,
@@ -161,10 +168,18 @@ public sealed class ShellChromeContractTests
 
             foreach (var key in keys)
             {
-                var brush = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
+                var prewarmed = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
+                var resolved = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
                 if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                {
+                    Assert.Equal(0, prewarmed.Color.A);
+                    Assert.Equal(0, resolved.Color.A);
                     continue;
-                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
+                }
+
+                Assert.True(prewarmed.Opacity > 0 && prewarmed.Color.A > 0,
+                    $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
+                Assert.True(resolved.Opacity > 0 && resolved.Color.A > 0,
                     $"停靠覆盖层画刷 {key} 不能是透明回退值");
             }
 
@@ -175,41 +190,9 @@ public sealed class ShellChromeContractTests
             var starBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
             Assert.Equal(0, starBackground.Color.A);
-            var previewBackground = Assert.IsType<SolidColorBrush>(
-                manager.TryFindResource(ResourceKeys.PreviewBoxBackgroundBrushKey));
-            Assert.Equal(0, previewBackground.Color.A);
             var buttonBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
             Assert.Equal(0, buttonBackground.Color.A);
-        });
-    }
-
-    [Fact]
-    public void DockingThemeResourceDictionaryIsPrewarmedBeforeDrag()
-    {
-        RunShell(window =>
-        {
-            var theme = Assert.IsAssignableFrom<DictionaryTheme>(window.DockManager.Theme);
-            var dictionary = theme.ThemeResourceDictionary;
-            Assert.NotNull(dictionary);
-
-            foreach (var key in new[]
-                     {
-                         ResourceKeys.DockingButtonForegroundBrushKey,
-                         ResourceKeys.DockingButtonForegroundArrowBrushKey,
-                         ResourceKeys.PreviewBoxBorderBrushKey,
-                         ResourceKeys.PreviewBoxBackgroundBrushKey,
-                     })
-            {
-                var brush = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
-                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
-                {
-                    Assert.Equal(0, brush.Color.A);
-                    continue;
-                }
-                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
-                    $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
-            }
 
             var width = Assert.IsType<double>(FindResource(
                 dictionary!, ResourceKeys.DockingButtonWidthKey));
