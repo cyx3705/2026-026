@@ -497,6 +497,7 @@ internal sealed partial class DockingHost
         _manager.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             _presentationRefreshPending = false;
+            RepairDocumentPaneSelection();
             var mainPane = _manager.Layout.RootPanel.Descendents()
                 .OfType<LayoutDocumentPane>()
                 .FirstOrDefault(pane => !IsInsideFloatingWindow(pane));
@@ -512,6 +513,30 @@ internal sealed partial class DockingHost
                     tabs.Visibility = Visibility.Visible;
             }
         });
+    }
+
+    /// <summary>
+    /// 非空文档区必须有选中内容。窗格控件是 <c>TabControl</c>,模板里的
+    /// <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>——
+    /// <c>SelectedContentIndex</c> 停在 -1 时页签照画、内容整片空白,
+    /// 而这正是拖拽中途失败留下的残局(AvalonDock 新建的文档区不会自己选一页)。
+    /// </summary>
+    private void RepairDocumentPaneSelection()
+    {
+        var broken = _manager.Layout.Descendents()
+            .OfType<LayoutDocumentPane>()
+            .Where(pane => pane.Children.Count > 0 &&
+                           (pane.SelectedContentIndex < 0 ||
+                            pane.SelectedContentIndex >= pane.Children.Count))
+            .ToList();
+        if (broken.Count == 0)
+            return;
+
+        using (Suppress())
+        {
+            foreach (var pane in broken)
+                pane.SelectedContentIndex = 0;
+        }
     }
 
     private void EnsureRegistered(string id)

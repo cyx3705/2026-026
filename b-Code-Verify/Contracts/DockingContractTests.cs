@@ -532,6 +532,50 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>
+    /// 回归(2026-09-06 真机):拖拽中途失败会留下一个「有页签、没内容」的文档区。
+    /// AvalonDock 新建的文档区把 <c>SelectedContentIndex</c> 停在 -1,而窗格模板里的
+    /// <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>——页签照画,内容整片空白,
+    /// 且 <c>aurora.ui.show</c> 救不回来(它只改 <c>IsSelected</c>,不改窗格的选中下标)。
+    /// </summary>
+    [Fact]
+    public void DocumentPaneWithChildrenAlwaysKeepsASelectedContent()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryLayoutStore();
+            var window = ShowHost(
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Center, 1),
+                ],
+                store,
+                out var host);
+            try
+            {
+                var manager = (DockingManager)window.Content;
+                SplitCenterArea(manager, "business");
+                UiTestHost.Pump();
+
+                var panes = manager.Layout.RootPanel.Descendents()
+                    .OfType<LayoutDocumentPane>()
+                    .ToList();
+                Assert.Equal(2, panes.Count);
+                Assert.All(panes, pane =>
+                {
+                    Assert.NotEmpty(pane.Children);
+                    Assert.InRange(pane.SelectedContentIndex, 0, pane.Children.Count - 1);
+                    Assert.NotNull(pane.SelectedContent);
+                });
+                Assert.Equal(2, host.ListWindows().Count(item => item.Side == DockSide.Center));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     [Fact]
     public void JsonSnapshotPreservesNestedSplitsTabsSelectionAndMultipleFloatingWindows()
     {

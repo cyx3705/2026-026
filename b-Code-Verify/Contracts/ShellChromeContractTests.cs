@@ -460,6 +460,62 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// 回归(2026-09-06 真机):中央页签的左键手势必须只有一个主人。
+    /// AvalonDock 的 <c>LayoutDocumentTabItem</c> 会在自己的 OnMouseDown/OnMouseMove 里
+    /// 另起一条拖拽,跨过同一个系统阈值、调同一个 <c>StartDraggingFloatingWindowForContent</c>。
+    /// 两条路同时跑的后果:先到的那个把页面浮走,Aurora 这侧的 <c>aurora.ui.float</c>
+    /// 看到「已经浮着」直接成功返回却等不到自己的浮窗宿主,2 秒后报「未创建浮窗宿主」;
+    /// 与此同时那个页签已被摘出可视树,AvalonDock 仍在对它调 <c>PointToScreen</c>,
+    /// 鼠标每动一下抛一条「此 Visual 未连接到 PresentationSource」(真机一次拖拽 100 条)。
+    /// 所以按下必须在隧道阶段判定 Handled——**同时**由 Aurora 自己补上选中,
+    /// 否则点页签换不了页(选中本来是 AvalonDock 在同一个处理器里顺手做的)。
+    /// </summary>
+    [Fact]
+    public void CenterPageTabPressHasOneOwnerAndStillSelectsThePage()
+    {
+        RunShell(window =>
+        {
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            var tabs = FindVisualDescendants<LayoutDocumentTabItem>(window)
+                .Where(item => item.Model is { ContentId: { Length: > 0 }, Parent: AvalonDock.Layout.LayoutDocumentPane })
+                .ToList();
+            Assert.True(tabs.Count >= 2, "需要至少两个中央页签才能验证「点另一个页签能换页」");
+            var target = tabs.First(item => item.Model is { IsSelected: false });
+            // 选中一旦落地,TabControl 会回收容器并把这个页签的 Model 置空——
+            // 断言必须拿模型本身,不能再走页签。
+            var model = target.Model!;
+
+            // 必须发**隧道的** Mouse.PreviewMouseDown:PreviewMouseLeftButtonDown 是 Direct 事件,
+            // 由 WPF 在路由每一站上就地提升,直接发它只会打到页签自己身上,
+            // 挂在 DockingManager 上的那个处理器根本不会被调用。
+            var press = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.PreviewMouseDownEvent,
+                Source = target,
+            };
+            target.RaiseEvent(press);
+            UiTestHost.Pump();
+
+            try
+            {
+                Assert.True(
+                    press.Handled,
+                    "中央页签的左键必须在隧道阶段判定 Handled，否则 AvalonDock 会另起一条拖拽");
+                Assert.True(
+                    model.IsSelected,
+                    "判定 Handled 之后，选中必须由 Aurora 自己补上，否则点页签换不了页");
+                Assert.True(model.IsActive);
+            }
+            finally
+            {
+                Mouse.Capture(null);
+            }
+        });
+    }
+
     [Fact]
     public void CentralTabsUseOneVisualSelectionSource()
     {

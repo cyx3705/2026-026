@@ -201,6 +201,18 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return false;
         }
 
+        // 页签的左键手势只能有一个主人。AvalonDock 的 LayoutDocumentTabItem 会在自己的
+        // OnMouseDown/OnMouseMove 里另起一条拖拽:它同样跨过系统阈值、同样调
+        // StartDraggingFloatingWindowForContent,于是一次拖动出现两个浮窗请求——
+        // 先到的那个把页面浮走,Aurora 这一侧的 aurora.ui.float 看到「已经浮着」直接成功返回,
+        // 却等不到属于自己的 LayoutFloatingWindowControlCreated,2 秒后报「未创建浮窗宿主」;
+        // 同时那个页签已被摘出可视树,而 LayoutDocumentTabItem.OnMouseMove 仍在对它调
+        // PointToScreen,鼠标每动一下抛一条「此 Visual 未连接到 PresentationSource」。
+        // 因此在隧道阶段就判定 Handled,断掉 AvalonDock 那条路;
+        // 选中/激活本来由它顺手做,这里必须自己补上,否则点页签换不了页。
+        ActivateTabPage(id);
+        e.Handled = true;
+
         var floating = FindFloatingWindow(id);
         if (floating != null)
         {
@@ -383,6 +395,14 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private void OnDockTabMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         => HandleDockTabMouseLeftButtonDown(e);
 
+    private void ActivateTabPage(string id)
+    {
+        if (FindLayoutContent(id) is not { } content)
+            return;
+        content.IsSelected = true;
+        content.IsActive = true;
+    }
+
     private void StartTabSession(
         FrameworkElement tab,
         string id,
@@ -473,6 +493,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         };
         if (!session.TryTransition(DockingDragState.FloatRequested))
             return;
+
+        // 浮出去会把这个页签从可视树上摘掉。摘之前必须先放掉捕获:捕获还在的话,
+        // 后续鼠标移动仍旧送到那个已经断开 PresentationSource 的页签上。
+        // 拖动的接力从这里起就交给 WindowDragDriver(见 OnFloatingWindowCreated),
+        // 不再需要页签持有捕获。
+        WindowDragDriver.ReleaseMouseCapture(session.Surface);
         session.LastScreenPoint = context.PointerPixels;
         ApplyFloatingModelGeometry(context, FindLayoutContent(context.PageId));
         var completion = new TaskCompletionSource<bool>(
