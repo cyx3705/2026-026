@@ -360,28 +360,16 @@ internal sealed partial class DockingHost
         => IsPrimaryCommandDocument(descriptor.Id);
 
     /// <summary>
-    /// 中央主文档区 = **命令集所在的那个**不在浮窗内的 <see cref="LayoutDocumentPane"/>;
-    /// 找不到命令集时退回第一个。
-    ///
-    /// 为什么不能只按「第一个」认定:AvalonDock 允许把中央页丢到中央区侧边就地分栏,
-    /// 分栏落在左侧时新窗格排在前面,于是命令集所在的那个反而不是主区——窗口控制栏
-    /// 跟着搬家,主命令页被当成工具页(真机 2026-09-06)。分栏本身由
-    /// <see cref="MergeStrayDocumentPanes"/> 并回,这里保证并回之前的那一拍也认得准。
-    ///
-    /// 浮窗自带的文档区永远不算主区,所以取主文档区一律走这里,不得再用
+    /// 中央主文档区 = 根面板里第一个不在浮窗内的 <see cref="LayoutDocumentPane"/>。
+    /// 浮出一个中央页时 AvalonDock 会为浮窗另建一个文档区,把中央区拖成左右两半也会分裂出第二个,
+    /// 所以"整棵布局有且只有一个文档区"不成立 —— 取主文档区一律走这里,不得再用
     /// <c>Single</c>/<c>SingleOrDefault</c>(否则 <c>Sequence contains more than one element</c>
     /// 会从布局差分的定时器里以未处理异常的形式抛出来)。
     /// </summary>
     private LayoutDocumentPane? TryFindMainDocumentPane()
-    {
-        var panes = _manager.Layout.RootPanel.Descendents()
+        => _manager.Layout.RootPanel.Descendents()
             .OfType<LayoutDocumentPane>()
-            .Where(pane => !IsInsideFloatingWindow(pane))
-            .ToList();
-        return panes.FirstOrDefault(pane => pane.Children.Any(content =>
-                   IsPrimaryCommandDocument(content.ContentId ?? string.Empty)))
-               ?? panes.FirstOrDefault();
-    }
+            .FirstOrDefault(pane => !IsInsideFloatingWindow(pane));
 
     private LayoutDocumentPane FindMainDocumentPane()
         => TryFindMainDocumentPane()
@@ -509,6 +497,7 @@ internal sealed partial class DockingHost
         _manager.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             _presentationRefreshPending = false;
+            RepairDocumentPaneSelection();
             var mainPane = _manager.Layout.RootPanel.Descendents()
                 .OfType<LayoutDocumentPane>()
                 .FirstOrDefault(pane => !IsInsideFloatingWindow(pane));
@@ -526,89 +515,27 @@ internal sealed partial class DockingHost
         });
     }
 
-    private void ScheduleCenterMerge()
-    {
-        if (_centerMergePending)
-            return;
-        _centerMergePending = true;
-        _manager.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
-        {
-            _centerMergePending = false;
-            MergeStrayDocumentPanes();
-        });
-    }
-
     /// <summary>
-    /// 中央区有且只有一个文档区(DEC/REQ-UI-078)。AvalonDock 允许把中央页丢到中央区侧边、
-    /// 就地拆成 <c>LayoutDocumentPaneGroup</c> 下的两个文档区,而那个形态在本壳里是坏的:
-    ///
-    /// <list type="bullet">
-    ///   <item>主文档区按「第一个非浮窗文档区」认定,分栏落在左侧时新窗格排在前面,
-    ///     命令集所在的那个反而不再是主区——窗口控制栏跟着搬家,主页被当成工具页。</item>
-    ///   <item>新窗格的 <c>SelectedContentIndex</c> 停在 -1,而窗格模板里
-    ///     <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>,于是页签照画、
-    ///     内容整片空白;写 0 进去会被 AvalonDock 夹回 -1(实测),从模型侧修不动。</item>
-    /// </list>
-    ///
-    /// 与其逐条去修分栏形态,不如取消这条形态:分栏一出现就把页面并回主文档区。
-    /// 用户要并排看两页,靠的是浮窗,不是把中央区劈开。
+    /// 非空文档区必须有选中内容。窗格控件是 <c>TabControl</c>,模板里的
+    /// <c>PART_SelectedContentHost</c> 绑的是 <c>SelectedContent</c>——
+    /// <c>SelectedContentIndex</c> 停在 -1 时页签照画、内容整片空白,
+    /// 而这正是拖拽中途失败留下的残局(AvalonDock 新建的文档区不会自己选一页)。
     /// </summary>
-    private void MergeStrayDocumentPanes()
+    private void RepairDocumentPaneSelection()
     {
-        var main = TryFindMainDocumentPane();
-        if (main == null)
-            return;
-
-        var strays = _manager.Layout.RootPanel.Descendents()
+        var broken = _manager.Layout.Descendents()
             .OfType<LayoutDocumentPane>()
-            .Where(pane => !ReferenceEquals(pane, main) && !IsInsideFloatingWindow(pane))
+            .Where(pane => pane.Children.Count > 0 &&
+                           (pane.SelectedContentIndex < 0 ||
+                            pane.SelectedContentIndex >= pane.Children.Count))
             .ToList();
-        if (strays.Count == 0)
+        if (broken.Count == 0)
             return;
 
         using (Suppress())
         {
-            foreach (var content in strays.SelectMany(stray => stray.Children.ToArray()))
-            {
-                (content.Parent as ILayoutContainer)?.RemoveChild(content);
-                main.Children.Add(content);
-            }
-
-            _manager.Layout.CollectGarbage();
-            UnwrapDocumentPaneGroups();
-            NormalizeMainDocumentSizing(main);
-        }
-
-        _log.Info(LayoutSource, "中央区不分栏:拆出的页面已并回主文档区");
-        ScheduleCenterDocumentPresentation();
-    }
-
-    /// <summary>
-    /// 拆掉分栏留下的 <c>LayoutDocumentPaneGroup</c> 空壳。<c>CollectGarbage</c> 只清空节点,
-    /// 而并回之后那层壳里还剩主文档区一个孩子,会一直留在树上;快照已经不认识这种节点
-    /// (中央区不分栏之后它没有存在的理由),不拆掉就会以「不支持的布局节点」把存盘打断。
-    /// 壳自己的尺寸要交给幸存的那个孩子,否则中央列会塌成默认宽度。
-    /// </summary>
-    private void UnwrapDocumentPaneGroups()
-    {
-        for (var guard = 0; guard < 8; guard++)
-        {
-            var group = _manager.Layout.RootPanel.Descendents()
-                .OfType<LayoutDocumentPaneGroup>()
-                .FirstOrDefault(item => item.Children.Count <= 1);
-            if (group?.Parent is not ILayoutContainer parent)
-                return;
-
-            if (group.Children.Count == 0)
-            {
-                parent.RemoveChild(group);
-                continue;
-            }
-
-            var only = group.Children[0];
-            SetDockLength(only, horizontal: true, GetDockLength(group, horizontal: true));
-            SetDockLength(only, horizontal: false, GetDockLength(group, horizontal: false));
-            parent.ReplaceChild(group, only);
+            foreach (var pane in broken)
+                pane.SelectedContentIndex = 0;
         }
     }
 

@@ -38,25 +38,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private DockingDragSession? _dragSession;
     private bool _disposed;
 
-    static ShellTopBarCoordinator()
-    {
-        // 页签左键由 Aurora 独占。只在隧道阶段判定 Handled 是不够的:冒泡阶段 WPF 仍会把
-        // MouseDown 就地升发成 MouseLeftButtonDown,AvalonDock 的
-        // LayoutDocumentTabItem.OnMouseLeftButtonDown 照跑不误——真机 2026-09-06 就是在那里
-        // 对一个刚被换页回收掉的页签解引用 Model,抛 NullReferenceException,整条路由中断:
-        // 页换不成,捕获又留在原地,于是「点页签变成拖窗口」。
-        //
-        // 类处理器按派生类优先调用,而 AvalonDock 那个实现是 UIElement 上注册的虚方法转发器
-        // (handledEventsToo:false),所以在这两个类型上判定 Handled 就能整条断掉。
-        foreach (var tabType in new[] { typeof(LayoutDocumentTabItem), typeof(LayoutAnchorableTabItem) })
-        {
-            EventManager.RegisterClassHandler(
-                tabType,
-                UIElement.MouseLeftButtonDownEvent,
-                new MouseButtonEventHandler(static (_, e) => e.Handled = true));
-        }
-    }
-
     public ShellTopBarCoordinator(
         Window window,
         DockingManager manager,
@@ -220,10 +201,16 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return false;
         }
 
-        // 页签的左键手势只能有一个主人,AvalonDock 那一路由类处理器断掉
-        // (见 static 构造函数)。选中/激活本来由它顺手做,这里必须自己补上,
-        // 否则点页签换不了页——但**必须排在抓取之后**:换页会让 TabControl 重建容器,
-        // 被点的那个页签当场作废,先选后抓就抓在一个已经死掉的元素上。
+        // 页签的左键手势只能有一个主人。AvalonDock 的 LayoutDocumentTabItem 会在自己的
+        // OnMouseDown/OnMouseMove 里另起一条拖拽:它同样跨过系统阈值、同样调
+        // StartDraggingFloatingWindowForContent,于是一次拖动出现两个浮窗请求——
+        // 先到的那个把页面浮走,Aurora 这一侧的 aurora.ui.float 看到「已经浮着」直接成功返回,
+        // 却等不到属于自己的 LayoutFloatingWindowControlCreated,2 秒后报「未创建浮窗宿主」;
+        // 同时那个页签已被摘出可视树,而 LayoutDocumentTabItem.OnMouseMove 仍在对它调
+        // PointToScreen,鼠标每动一下抛一条「此 Visual 未连接到 PresentationSource」。
+        // 因此在隧道阶段就判定 Handled,断掉 AvalonDock 那条路;
+        // 选中/激活本来由它顺手做,这里必须自己补上,否则点页签换不了页。
+        ActivateTabPage(id);
         e.Handled = true;
 
         var floating = FindFloatingWindow(id);
@@ -239,19 +226,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             if (CountFloatingPages(floating) > 1)
             {
                 StartFloatingTabSession(tab, id, floating, e);
-                ActivateTabPage(id);
                 return false;
             }
 
-            ActivateTabPage(id);
-            return false;
-        }
-
-        // 命令集是主命令页,浮不出去(DockingHost.Float 直接拒绝)。连拖动会话都不要起——
-        // 起了就会去等一个永远不会出现的浮窗宿主,2 秒后报「未创建页面 mcp 的浮窗宿主」。
-        if (id.Equals(StandardWindowIds.Mcp, StringComparison.OrdinalIgnoreCase))
-        {
-            ActivateTabPage(id);
             return false;
         }
 
@@ -279,7 +256,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
 
         StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
-        ActivateTabPage(id);
         return false;
     }
 

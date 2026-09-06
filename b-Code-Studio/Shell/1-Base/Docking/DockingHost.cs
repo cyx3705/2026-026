@@ -58,7 +58,6 @@ internal sealed partial class DockingHost : IDockingService
     private string? _snapshotBeforeMaximize;
     private bool _centerRepairPending;
     private bool _presentationRefreshPending;
-    private bool _centerMergePending;
 
     // W-05 比例语义:AvalonDock 对与文档区同面板的侧窗格采用像素语义
     // (LayoutPanelControl.OnFixChildrenDockLengths 会把星值固化为像素),
@@ -308,16 +307,6 @@ internal sealed partial class DockingHost : IDockingService
 
     public void Float(string id)
     {
-        // 命令集是主命令页,任何身份下都不浮动。只在文档分支里拦是不够的:
-        // 它一旦以工具窗口身份落在中央区,就会走到下面 anchorable.Float(),
-        // 而 AvalonDock 在那条路上会去改窗格控件的 ItemsPanel.Children,
-        // 直接抛「无法显式修改 Panel 的 Children 集合」(真机 2026-09-06)。
-        if (IsPrimaryCommandDocument(id))
-        {
-            _log.Warn(LayoutSource, "命令集是主窗口，不能浮动");
-            return;
-        }
-
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
@@ -743,11 +732,6 @@ internal sealed partial class DockingHost : IDockingService
 
     private void OnLayoutUpdated(object? sender, EventArgs e)
     {
-        // 「中央区只有一个文档区」与「这次变更要不要回声成指令」无关,因此排在两个守卫之前:
-        // 主窗体缩放会把 _windowResizePending 顶起 200ms,一次拖拽只要落进那个窗口,
-        // 后面就再没有 Updated 把合并排上队。
-        ScheduleCenterMerge();
-
         if (_suppress > 0 || _windowResizePending)
             return;
 
@@ -763,8 +747,6 @@ internal sealed partial class DockingHost : IDockingService
     {
         if (_suppress > 0)
             return;
-
-        MergeStrayDocumentPanes();
 
         if (NeedsCentralWorkspaceRepair())
         {

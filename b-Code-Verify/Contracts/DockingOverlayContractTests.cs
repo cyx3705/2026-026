@@ -60,46 +60,6 @@ public sealed class DockingOverlayContractTests
         Assert.All(expected, name => Assert.Contains(name, names));
     }
 
-    /// <summary>
-    /// REQ-UI-078:中央区不分栏。把中央页丢到中央区的上/下/左/右这四个落点必须是折叠的——
-    /// 元素要留着(AvalonDock 的 OverlayWindow 按名字取这些 PART,删掉会在它内部空引用),
-    /// 但折叠之后屏幕矩形为空,命中测试永远落不进去。
-    /// 并入标签组(...Into)与停到侧边(...AsAnchorablePane)是本壳支持的落法,必须仍然可见。
-    /// </summary>
-    [Fact]
-    public void CenterSplitDropTargetsAreCollapsedWhileTabAndSideTargetsStay()
-    {
-        var overlay = LoadOverlay();
-
-        string? VisibilityOf(string name) => overlay.Descendants()
-            .Single(element => (string?)element.Attribute(X + "Name") == name)
-            .Attribute("Visibility")?.Value;
-
-        string[] split =
-        [
-            "PART_DocumentPaneDropTargetTop",
-            "PART_DocumentPaneDropTargetRight",
-            "PART_DocumentPaneDropTargetBottom",
-            "PART_DocumentPaneDropTargetLeft",
-            "PART_DocumentPaneFullDropTargetTop",
-            "PART_DocumentPaneFullDropTargetRight",
-            "PART_DocumentPaneFullDropTargetBottom",
-            "PART_DocumentPaneFullDropTargetLeft",
-        ];
-        Assert.All(split, name => Assert.Equal("Collapsed", VisibilityOf(name)));
-
-        string[] kept =
-        [
-            "PART_DocumentPaneDropTargetInto",
-            "PART_DocumentPaneFullDropTargetInto",
-            "PART_DocumentPaneDropTargetTopAsAnchorablePane",
-            "PART_DocumentPaneDropTargetRightAsAnchorablePane",
-            "PART_DocumentPaneDropTargetBottomAsAnchorablePane",
-            "PART_DocumentPaneDropTargetLeftAsAnchorablePane",
-        ];
-        Assert.All(kept, name => Assert.Null(VisibilityOf(name)));
-    }
-
     [Fact]
     public void OverlaySeparatesStableHitRectanglesFromClippedIndicatorArtwork()
     {
