@@ -41,6 +41,131 @@ public sealed class DockingContractTests
         Assert.Equal(DockSide.Top, overriddenWindow.DefaultSide);
     }
 
+    /// <summary>
+    /// REQ-UI-083：AvalonDock 自己建出来的中央文档窗格必须被换掉。
+    ///
+    /// 把一页浮出去再丢回中央区、或者把中央区拖成两半，新窗格是原装的
+    /// <c>LayoutDocumentPane</c>，它的 <c>IndexOf</c> 不认工具页——「换不了页、拖不动」
+    /// 会在那一格里当场复发，而且只在拖过的那台机器上复发。
+    /// </summary>
+    [Fact]
+    public void StockDocumentPaneCreatedByAvalonDockIsUpgraded()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var manager = new DockingManager();
+            var host = new DockingHost(
+                manager,
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Center, 1),
+                ],
+                new MemoryLayoutStore(),
+                new NullLog());
+            host.Initialize();
+
+            // 模拟 AvalonDock 的手笔：把中央区整个换成一个原装窗格。
+            var original = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
+            var stock = new LayoutDocumentPane();
+            foreach (var child in original.Children.ToList())
+            {
+                original.Children.Remove(child);
+                stock.Children.Add(child);
+            }
+
+            ((ILayoutContainer)original.Parent!).ReplaceChild(original, stock);
+            manager.Layout.CollectGarbage();
+
+            // 任何一次经过布局差分的操作都应该把它换掉。
+            host.Show("business");
+
+            var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
+            Assert.IsType<CenterDocumentPane>(pane);
+            Assert.Equal(
+                [StandardWindowIds.Mcp, "business"],
+                pane.Children.Select(item => item.ContentId));
+            Assert.Equal("business", pane.SelectedContent?.ContentId);
+        });
+    }
+
+    /// <summary>
+    /// 注册协议给不出「主页面」：文档身份只属于 Aurora 自己的命令集，
+    /// 任何模块声明 <c>side=center</c> 拿到的都是工具窗口——位置在中央区，身份是工具页。
+    ///
+    /// 这条不是本轮新加的行为，而是把一条**一直成立、却没人守着**的约束钉进门禁：
+    /// 谁要是哪天给 <c>UsesDocumentIdentity</c> 开第二个口子，这里会红。
+    /// </summary>
+    [Fact]
+    public void RegistrationNeverProducesASecondMainDocument()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var manager = new DockingManager();
+            var host = new DockingHost(
+                manager,
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Center, 1),
+                ],
+                new MemoryLayoutStore(),
+                new NullLog());
+            host.Initialize();
+            host.RegisterWindow(Tool("late", DockSide.Center, 1), "module:test");
+
+            // 整棵布局里只有命令集是文档；其余中央页都是工具窗口。
+            Assert.Equal(
+                [StandardWindowIds.Mcp],
+                manager.Layout.Descendents().OfType<LayoutDocument>().Select(item => item.ContentId));
+            foreach (var id in new[] { "business", "late" })
+            {
+                var anchorable = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                    .Single(item => item.ContentId == id);
+                Assert.True(anchorable.CanDockAsTabbedDocument);
+                Assert.Equal(DockSide.Center, host.ListWindows().Single(item => item.Id == id).Side);
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-083：<c>aurora.ui.show</c> 对中央区里的**工具页**必须真的换页。
+    ///
+    /// 1.18.2 之前它报成功但什么都不换——`LayoutDocumentPane` 的 `IndexOf` 对 anchorable
+    /// 返回 -1，`IsSelected` 于是把窗格写成「什么都不选」。
+    /// </summary>
+    [Fact]
+    public void ShowSelectsACenterToolPage()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var manager = new DockingManager();
+            var host = new DockingHost(
+                manager,
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("business", DockSide.Center, 1),
+                    Tool("other", DockSide.Center, 1),
+                ],
+                new MemoryLayoutStore(),
+                new NullLog());
+            host.Initialize();
+
+            var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
+            var business = manager.Layout.Descendents().OfType<LayoutAnchorable>()
+                .Single(item => item.ContentId == "business");
+
+            host.Show(StandardWindowIds.Mcp);
+            Assert.Equal(StandardWindowIds.Mcp, pane.SelectedContent?.ContentId);
+
+            host.Show("business");
+            Assert.Equal("business", pane.SelectedContent?.ContentId);
+            Assert.Same(business, pane.SelectedContent);
+            Assert.Equal(pane.Children.IndexOf(business), pane.SelectedContentIndex);
+
+            host.Show("other");
+            Assert.Equal("other", pane.SelectedContent?.ContentId);
+        });
+    }
+
     [Fact]
     public void CenterIsExplicitAndUsesTheMainDocumentPane()
     {
@@ -242,7 +367,7 @@ public sealed class DockingContractTests
                 // 命令集 + 组件测试 + 刚注册的 business。数的是「中央区能并排放页签」，
                 // 具体几页取决于自持页有几页声明 side=center，不是本条的契约。
                 Assert.Equal(3, multiple.Items.Count);
-                var centerPane = Assert.IsType<LayoutDocumentPane>(((ILayoutControl)multiple).Model);
+                var centerPane = Assert.IsAssignableFrom<LayoutDocumentPane>(((ILayoutControl)multiple).Model);
                 var business = Assert.Single(
                     centerPane.Children.OfType<LayoutAnchorable>(),
                     item => item.ContentId == "business");
@@ -315,7 +440,7 @@ public sealed class DockingContractTests
             var recoveredDetails = recoveredManager.Layout.Descendents().OfType<LayoutAnchorable>()
                 .Single(item => item.ContentId == "details");
             Assert.True(recoveredDetails.CanDockAsTabbedDocument);
-            Assert.IsType<LayoutDocumentPane>(recoveredDetails.Parent);
+            Assert.IsAssignableFrom<LayoutDocumentPane>(recoveredDetails.Parent);
         });
     }
 
@@ -1497,7 +1622,7 @@ public sealed class DockingContractTests
     {
         var content = manager.Layout.Descendents().OfType<LayoutContent>()
             .Single(item => item.ContentId == id);
-        var pane = Assert.IsType<LayoutDocumentPane>(content.Parent);
+        var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(content.Parent);
         ((ILayoutContainer)pane).RemoveChild(content);
 
         var group = new LayoutDocumentPaneGroup { Orientation = Orientation.Horizontal };

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -240,11 +240,75 @@ internal sealed partial class DockingHost
 
     private bool NeedsCentralWorkspaceRepair()
     {
-        if (_maximizedId != null || !_byId.ContainsKey(StandardWindowIds.Mcp))
+        if (_maximizedId != null)
+            return false;
+
+        if (HasStockDocumentPane())
+            return true;
+
+        if (!_byId.ContainsKey(StandardWindowIds.Mcp))
             return false;
 
         var document = FindCenterDocument(StandardWindowIds.Mcp);
         return document == null || document.Parent is not LayoutDocumentPane || IsFloating(document);
+    }
+
+    private bool HasStockDocumentPane()
+        => _manager.Layout.RootPanel.Descendents()
+            .OfType<LayoutDocumentPane>()
+            .Any(pane => pane is not CenterDocumentPane && !IsInsideFloatingWindow(pane));
+
+    /// <summary>
+    /// 中央文档窗格必须是 <see cref="CenterDocumentPane"/>（REQ-UI-083）。
+    ///
+    /// Aurora 自己建的都是，但**AvalonDock 也会建**：把一页浮出去再丢回中央区、
+    /// 或者把中央区拖成左右两半，新出来的那个窗格是原装的 <see cref="LayoutDocumentPane"/>，
+    /// 它的 <c>IndexOf</c> 不认工具页——于是「换不了页、拖不动」在那一格里当场复发，
+    /// 而且只在拖过的那台机器上复发，是最难被发现的那一类回归。
+    ///
+    /// 因此在布局差分这一层把它换掉：孩子、选中页与尺寸原样搬过去，用户看不出发生过什么。
+    /// </summary>
+    private bool UpgradeStockDocumentPanes()
+    {
+        var stock = _manager.Layout.RootPanel.Descendents()
+            .OfType<LayoutDocumentPane>()
+            .Where(pane => pane is not CenterDocumentPane && !IsInsideFloatingWindow(pane))
+            .ToList();
+        if (stock.Count == 0)
+            return false;
+
+        foreach (var pane in stock)
+        {
+            if (pane.Parent is not ILayoutContainer container)
+                continue;
+
+            var replacement = new CenterDocumentPane
+            {
+                ShowHeader = pane.ShowHeader,
+                DockWidth = pane.DockWidth,
+                DockHeight = pane.DockHeight,
+                DockMinWidth = pane.DockMinWidth,
+                DockMinHeight = pane.DockMinHeight,
+            };
+            // 原装窗格的选中下标多半已经被那个 -1 写坏了，而**被点的那一页自己**
+            // 的 IsSelected 仍是 true（回写发生在它之后）。因此选中页先看窗格，
+            // 再退回去问内容——否则升级完这一格会莫名其妙跳回第一页。
+            var selected = pane.SelectedContent
+                           ?? pane.Children.FirstOrDefault(child => child.IsSelected);
+            foreach (var child in pane.Children.ToList())
+            {
+                pane.Children.Remove(child);
+                replacement.Children.Add(child);
+            }
+
+            container.ReplaceChild(pane, replacement);
+            if (selected != null)
+                replacement.SelectedContentIndex = replacement.Children.IndexOf(selected);
+        }
+
+        _manager.Layout.CollectGarbage();
+        _log.Info(LayoutSource, $"{stock.Count} 个中央文档窗格已换成认得工具页下标的实现");
+        return true;
     }
 
     /// <summary>
@@ -256,8 +320,10 @@ internal sealed partial class DockingHost
         if (_maximizedId != null)
             return false;
 
+        var upgraded = UpgradeStockDocumentPanes();
+
         if (!_byId.TryGetValue(StandardWindowIds.Mcp, out var descriptor))
-            return false;
+            return upgraded;
 
         var existing = FindCenterDocument(StandardWindowIds.Mcp);
         var repaired = existing == null || existing.Parent is not LayoutDocumentPane || IsFloating(existing);
@@ -265,7 +331,7 @@ internal sealed partial class DockingHost
         {
             NormalizeMainDocumentSizing((LayoutDocumentPane)existing!.Parent!);
             ScheduleCenterDocumentPresentation();
-            return false;
+            return upgraded;
         }
 
         ShowCenterDocument(MoveToCenterDocument(descriptor));

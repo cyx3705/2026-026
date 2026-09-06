@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using AvalonDock.Layout;
@@ -205,7 +205,7 @@ internal sealed partial class DockingHost
         DockLayoutNodeSnapshot snapshot,
         HashSet<string> seen)
     {
-        var pane = new LayoutDocumentPane { ShowHeader = snapshot.ShowHeader };
+        var pane = new CenterDocumentPane { ShowHeader = snapshot.ShowHeader };
         foreach (var content in snapshot.Contents)
         {
             if (RestoreContent(content, documentPane: true, seen) is { } restored)

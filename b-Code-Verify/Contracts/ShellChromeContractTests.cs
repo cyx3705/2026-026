@@ -526,6 +526,144 @@ public sealed class ShellChromeContractTests
         }
     }
 
+    /// <summary>
+    /// REQ-UI-083：中央区里**工具身份**的页签，点一下要换到那一页。
+    ///
+    /// 这一半此前是坏的，而且只坏一半——同一排页签里，文档身份的命令集换页、拖动都正常，
+    /// 工具身份的那些（Aurora 的中央页几乎全是这一种）换不了页也拖不动。
+    /// 根子是 <c>LayoutDocumentPane</c> 的 <c>ILayoutContentSelector.IndexOf</c>
+    /// 只认 <c>LayoutDocument</c>，对 anchorable 返回 -1。
+    /// </summary>
+    [Fact]
+    public void CenterToolTabPressSelectsThatPage()
+    {
+        RunShell(window =>
+        {
+            // 中央区凑两页：mcp 是文档身份，commanddetail 被停到中央区，是工具身份。
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
+                .First(item => item.Model?.ContentId == StandardWindowIds.CommandDetail);
+            var anchorable = Assert.IsType<LayoutAnchorable>(tab.Model);
+            var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(anchorable.Parent);
+
+            // 换页的两条路都要通：模型层的 IsSelected，以及窗格自己的选中下标。
+            // 1.18.0 之前两条都落在 -1 上——「有页签、没内容」。
+            anchorable.IsSelected = true;
+            Assert.Equal(pane.Children.IndexOf(anchorable), pane.SelectedContentIndex);
+            Assert.Same(anchorable, pane.SelectedContent);
+
+            pane.SelectedContentIndex = 0;
+            Assert.NotSame(anchorable, pane.SelectedContent);
+            pane.SelectedContentIndex = pane.Children.IndexOf(anchorable);
+            Assert.Same(anchorable, pane.SelectedContent);
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-083：<c>aurora.ui.show</c> 之后，**屏幕上**也要换到那一页。
+    ///
+    /// 这条是真机先发现、门禁后补的：模型层修对之后，快照里 <c>selectedContentId</c>
+    /// 已经是被点的那一页，而窗格控件仍停在原处——中央区换页的那一跳会先经过一个 -1，
+    /// 控件在那一下之后不跟了（2026-09-07）。因此这条断言的是**控件**，不是模型。
+    /// </summary>
+    [Fact]
+    public void ShowMovesThePaneControlNotJustTheModel()
+    {
+        RunShell(window =>
+        {
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            var control = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
+            var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(((ILayoutControl)control).Model);
+
+            window.Docking.Show(StandardWindowIds.Mcp);
+            UiTestHost.Pump();
+            Assert.Equal(StandardWindowIds.Mcp, ((LayoutContent?)control.SelectedItem)?.ContentId);
+
+            window.Docking.Show(StandardWindowIds.CommandDetail);
+            UiTestHost.Pump();
+            Assert.Equal(
+                StandardWindowIds.CommandDetail,
+                ((LayoutContent?)control.SelectedItem)?.ContentId);
+            Assert.Equal(StandardWindowIds.CommandDetail, pane.SelectedContent?.ContentId);
+        });
+    }
+
+    /// <summary>
+    /// 页签的左键仍然**整个交给 AvalonDock**（REQ-UI-082 不被本轮推翻）：
+    /// 下标修对之后它自己那条路就是通的，Aurora 不再需要在手势层拦任何一半。
+    /// 本条守的是「别又去抢按下事件」——1.17.2/1.17.5 各试过一次，两次都把换页弄坏了。
+    /// </summary>
+    [Fact]
+    public void NeitherCenterTabKindIsInterceptedOnPress()
+    {
+        RunShell(window =>
+        {
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            foreach (var id in new[] { StandardWindowIds.Mcp, StandardWindowIds.CommandDetail })
+            {
+                var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
+                    .First(item => item.Model?.ContentId == id);
+                Assert.False(Press(tab).Handled, $"{id} 的页签左键不该被 Aurora 判定 Handled");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 上面两条的模型层证据：原装的 <see cref="LayoutDocumentPane"/> 选不中 anchorable，
+    /// 而 Aurora 的中央窗格能。这条不测产品流程，只把「为什么必须换一个窗格类型」
+    /// 钉在门禁里——回滚那个子类，它会立刻红。
+    /// </summary>
+    [Fact]
+    public void StockDocumentPaneCannotSelectAnAnchorableButAuroraCenterPaneCan()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var stock = new LayoutDocumentPane(new LayoutDocument { ContentId = "mcp" });
+            var strayInStock = new LayoutAnchorable { ContentId = "overview" };
+            stock.Children.Add(strayInStock);
+            strayInStock.IsSelected = true;
+            Assert.Equal(-1, stock.SelectedContentIndex);
+
+            var center = new CenterDocumentPane(new LayoutDocument { ContentId = "mcp" });
+            var anchorable = new LayoutAnchorable { ContentId = "overview" };
+            center.Children.Add(anchorable);
+            anchorable.IsSelected = true;
+            Assert.Equal(1, center.SelectedContentIndex);
+            Assert.Same(anchorable, center.SelectedContent);
+        });
+    }
+
+    /// <summary>
+    /// 发一次左键按下。**必须发 <c>MouseLeftButtonDownEvent</c>**：手工 <c>RaiseEvent</c>
+    /// 不会像输入管线那样把 <c>MouseDown</c> 升发成它，只发 <c>MouseDown</c> 的用例
+    /// 看不见任何类处理器（1.17.5 就是这样绿着上线的）。
+    /// </summary>
+    private static MouseButtonEventArgs Press(FrameworkElement tab)
+    {
+        var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+        {
+            RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+            Source = tab,
+        };
+        try
+        {
+            tab.RaiseEvent(args);
+            UiTestHost.Pump();
+        }
+        finally
+        {
+            Mouse.Capture(null);
+        }
+
+        return args;
+    }
+
     [Fact]
     public void CentralTabsUseOneVisualSelectionSource()
     {

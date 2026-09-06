@@ -1,3 +1,5 @@
+﻿using AvalonDock.Layout;
+
 namespace HistoryAurora.Shell.Base.Docking;
 
 /// <summary>某个工具窗口的当前状态快照。</summary>
@@ -79,6 +81,41 @@ internal sealed class ToolWindowDescriptor
     public bool IsSingleton { get; init; } = true;
 
     public Func<object>? ContentFactory { get; init; }
+}
+
+/// <summary>
+/// 中央区的文档窗格。与 <see cref="AvalonDock.Layout.LayoutDocumentPane"/> 的唯一区别，
+/// 是它**认得工具页的下标**（REQ-UI-083）。
+///
+/// 中央区是一排页签，里面混着两种身份：命令集是 <c>LayoutDocument</c>，其余中央页
+/// （模块页与 Aurora 自持的几页）都是 <c>LayoutAnchorable</c>。而
+/// <c>LayoutDocumentPane</c> 的 <c>ILayoutContentSelector.IndexOf</c> 只认前者，
+/// 对后者一律返回 -1。这一个 -1 顺着 AvalonDock 的实现扩散成两个用户可见的故障：
+///
+///   * **换不了页**：<c>LayoutContent.IsSelected</c> 的 setter 回写
+///     <c>Parent.SelectedContentIndex = Parent.IndexOf(this)</c>，写进去的是 -1，
+///     窗格于是「什么都不选」——页签照画、内容整片空白，而 <c>aurora.ui.show</c>
+///     还会报成功；
+///   * **拖不动**：AvalonDock 自己那条页签拖拽同样按这个下标记住来处
+///     （<c>PreviousContainerIndex</c>），-1 让整条拖拽起不来。
+///     真机症状是「Janus 的项目总览拖不动，旁边的命令集拖得动」（2026-09-07）。
+///
+/// 派生类重新实现该接口，接口映射就指向这里——一处改对，换页、拖动、快照恢复
+/// 三条路径同时正确，不必在手势层拦截，也不必把中央区拆成两块。
+/// **Aurora 建的每一个中央文档窗格都必须是这个类型。**
+/// </summary>
+internal sealed class CenterDocumentPane : LayoutDocumentPane, ILayoutContentSelector
+{
+    public CenterDocumentPane()
+    {
+    }
+
+    public CenterDocumentPane(LayoutContent firstChild)
+        : base(firstChild)
+    {
+    }
+
+    int ILayoutContentSelector.IndexOf(LayoutContent content) => Children.IndexOf(content);
 }
 
 internal static class StandardWindowIds

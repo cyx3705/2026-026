@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -21,7 +21,7 @@ internal sealed partial class DockingHost
         _preserveDefaultRatioOnSeed.Clear();
         _centerDocuments.Clear();
         _hiddenCenterIds.Clear();
-        var docPane = new LayoutDocumentPane();
+        var docPane = new CenterDocumentPane();
 
         // 中央主区使用 AvalonDock 原生文档窗格。命令集保留文档身份；模块和消费方
         // 的 Center 窗口以工具窗口身份挂入同一主区，避免退役的文档页注册语义回流。
@@ -523,20 +523,48 @@ internal sealed partial class DockingHost
     /// </summary>
     private void RepairDocumentPaneSelection()
     {
-        var broken = _manager.Layout.Descendents()
+        var panes = _manager.Layout.Descendents()
             .OfType<LayoutDocumentPane>()
-            .Where(pane => pane.Children.Count > 0 &&
-                           (pane.SelectedContentIndex < 0 ||
-                            pane.SelectedContentIndex >= pane.Children.Count))
+            .Where(pane => pane.Children.Count > 0)
             .ToList();
-        if (broken.Count == 0)
+        if (panes.Count == 0)
             return;
 
         using (Suppress())
         {
-            foreach (var pane in broken)
-                pane.SelectedContentIndex = 0;
+            foreach (var pane in panes)
+            {
+                if (pane.SelectedContentIndex < 0 || pane.SelectedContentIndex >= pane.Children.Count)
+                    pane.SelectedContentIndex = 0;
+
+                SyncPaneControlSelection(pane);
+            }
         }
+    }
+
+    /// <summary>
+    /// 窗格控件要跟上模型的选中页（REQ-UI-083）。
+    ///
+    /// 模型改对了不等于屏幕上换了页：`LayoutDocumentPaneControl` 是个 `TabControl`，
+    /// 它跟随模型靠的是 `SelectedContentIndex` 的属性变更通知，而中央区里
+    /// **换页的那一跳会先经过一个 -1**（被取消选中的那一页会把窗格的下标写成 -1，
+    /// 见 `CenterDocumentPane`）。控件看到 -1 时无页可选，等到最终值再来时
+    /// 它有可能已经不跟了——真机症状是 `aurora.ui.show` 报成功、快照里
+    /// `selectedContentId` 也对，而屏幕上仍停在原来那一页（2026-09-07）。
+    ///
+    /// 因此在同一轮呈现里把控件按模型对齐一次。两边一致时什么都不做，
+    /// 不会打断用户自己点出来的选中。
+    /// </summary>
+    private void SyncPaneControlSelection(LayoutDocumentPane pane)
+    {
+        if (pane.SelectedContent is not { } selected)
+            return;
+        if (FindControlFor(pane) is not System.Windows.Controls.Primitives.Selector control)
+            return;
+        if (ReferenceEquals(control.SelectedItem, selected))
+            return;
+
+        control.SelectedItem = selected;
     }
 
     private void EnsureRegistered(string id)
