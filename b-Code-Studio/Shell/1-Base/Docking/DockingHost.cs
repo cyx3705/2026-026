@@ -308,6 +308,16 @@ internal sealed partial class DockingHost : IDockingService
 
     public void Float(string id)
     {
+        // 命令集是主命令页,任何身份下都不浮动。只在文档分支里拦是不够的:
+        // 它一旦以工具窗口身份落在中央区,就会走到下面 anchorable.Float(),
+        // 而 AvalonDock 在那条路上会去改窗格控件的 ItemsPanel.Children,
+        // 直接抛「无法显式修改 Panel 的 Children 集合」(真机 2026-09-06)。
+        if (IsPrimaryCommandDocument(id))
+        {
+            _log.Warn(LayoutSource, "命令集是主窗口，不能浮动");
+            return;
+        }
+
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())

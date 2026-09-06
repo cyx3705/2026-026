@@ -572,6 +572,72 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// 回归(2026-09-06 真机):只在隧道阶段判定 Handled 拦不住 AvalonDock。
+    /// WPF 在冒泡阶段仍会把 MouseDown 就地升发成 MouseLeftButtonDown,
+    /// <c>LayoutDocumentTabItem.OnMouseLeftButtonDown</c> 照跑——那次它对一个刚被换页回收掉的
+    /// 页签解引用 <c>Model</c>,抛 <c>NullReferenceException</c>,整条路由中断:
+    /// 页换不成,捕获又留在原地,于是「点页签变成拖窗口」。
+    /// 所以必须用**类处理器**在这两个页签类型上判定 Handled,把它那条实现整条断掉。
+    /// </summary>
+    [Fact]
+    public void AvalonDockOwnTabPressImplementationIsCutOffOnTheBubblingRoute()
+    {
+        RunShell(window =>
+        {
+            var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
+                .First(item => item.Model is { ContentId: { Length: > 0 } });
+
+            var bubbled = new MouseButtonEventArgs(
+                Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+                Source = tab,
+            };
+            tab.RaiseEvent(bubbled);
+
+            Assert.True(
+                bubbled.Handled,
+                "AvalonDock 自带的页签左键实现必须被类处理器断掉，否则它会和 Aurora 抢同一个手势");
+        });
+    }
+
+    /// <summary>
+    /// 命令集是主命令页,浮不出去。因此按下它的页签不得起拖动会话——起了就会去等一个
+    /// 永远不会出现的浮窗宿主,2 秒后报「未创建页面 mcp 的浮窗宿主」(真机 2026-09-06)。
+    /// </summary>
+    [Fact]
+    public void PressingTheCommandCatalogTabStartsNoDragSession()
+    {
+        var relay = new RelayLog();
+        RunShell(window =>
+        {
+            var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
+                .First(item => item.Model?.ContentId == StandardWindowIds.Mcp);
+
+            var press = new MouseButtonEventArgs(
+                Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.PreviewMouseDownEvent,
+                Source = tab,
+            };
+            tab.RaiseEvent(press);
+            UiTestHost.Pump();
+
+            try
+            {
+                Assert.True(press.Handled);
+                Assert.DoesNotContain(
+                    relay.Snapshot(),
+                    entry => entry.Message.Contains("按下页面 mcp", StringComparison.Ordinal));
+            }
+            finally
+            {
+                Mouse.Capture(null);
+            }
+        }, log: relay);
+    }
+
     [Fact]
     public void CentralTabsUseOneVisualSelectionSource()
     {
