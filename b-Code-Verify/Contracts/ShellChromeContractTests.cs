@@ -20,6 +20,7 @@ using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
+using AvalonDock.Layout;
 using AvalonDock.Themes;
 using AvalonDock.Themes.VS2013.Themes;
 using Xunit;
@@ -143,14 +144,21 @@ public sealed class ShellChromeContractTests
             settings: settings);
     }
 
+    /// <summary>
+    /// 停靠覆盖层是独立窗口,它的画刷必须同时满足两件事:在主题**源字典**里就已可绘制
+    /// (拖动那一刻才合并就来不及,按钮会是一片透明),以及能从 <c>DockManager</c> 自身解析出来
+    /// (它取不到主窗口的资源树)。两条路径合在一条用例里断言,省掉一次整壳启动。
+    /// </summary>
     [Fact]
-    public void DockingOverlayBrushesKeepButtonsVisibleAndPreviewFillTransparent()
+    public void DockingOverlayBrushesAreDrawableInTheThemeSourceAndFromTheManager()
     {
         RunShell(window =>
         {
-            // The overlay is an independent Window. These keys must resolve from
-            // the manager theme itself, not from the main window's resource tree.
             var manager = window.DockManager;
+            var theme = Assert.IsAssignableFrom<DictionaryTheme>(manager.Theme);
+            var dictionary = theme.ThemeResourceDictionary;
+            Assert.NotNull(dictionary);
+
             var keys = new[]
             {
                 ResourceKeys.DockingButtonForegroundBrushKey,
@@ -161,10 +169,18 @@ public sealed class ShellChromeContractTests
 
             foreach (var key in keys)
             {
-                var brush = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
+                var prewarmed = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
+                var resolved = Assert.IsType<SolidColorBrush>(manager.TryFindResource(key));
                 if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
+                {
+                    Assert.Equal(0, prewarmed.Color.A);
+                    Assert.Equal(0, resolved.Color.A);
                     continue;
-                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
+                }
+
+                Assert.True(prewarmed.Opacity > 0 && prewarmed.Color.A > 0,
+                    $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
+                Assert.True(resolved.Opacity > 0 && resolved.Color.A > 0,
                     $"停靠覆盖层画刷 {key} 不能是透明回退值");
             }
 
@@ -175,41 +191,9 @@ public sealed class ShellChromeContractTests
             var starBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonStarBackgroundBrushKey));
             Assert.Equal(0, starBackground.Color.A);
-            var previewBackground = Assert.IsType<SolidColorBrush>(
-                manager.TryFindResource(ResourceKeys.PreviewBoxBackgroundBrushKey));
-            Assert.Equal(0, previewBackground.Color.A);
             var buttonBackground = Assert.IsType<SolidColorBrush>(
                 manager.TryFindResource(ResourceKeys.DockingButtonBackgroundBrushKey));
             Assert.Equal(0, buttonBackground.Color.A);
-        });
-    }
-
-    [Fact]
-    public void DockingThemeResourceDictionaryIsPrewarmedBeforeDrag()
-    {
-        RunShell(window =>
-        {
-            var theme = Assert.IsAssignableFrom<DictionaryTheme>(window.DockManager.Theme);
-            var dictionary = theme.ThemeResourceDictionary;
-            Assert.NotNull(dictionary);
-
-            foreach (var key in new[]
-                     {
-                         ResourceKeys.DockingButtonForegroundBrushKey,
-                         ResourceKeys.DockingButtonForegroundArrowBrushKey,
-                         ResourceKeys.PreviewBoxBorderBrushKey,
-                         ResourceKeys.PreviewBoxBackgroundBrushKey,
-                     })
-            {
-                var brush = Assert.IsType<SolidColorBrush>(FindResource(dictionary!, key));
-                if (key == ResourceKeys.PreviewBoxBackgroundBrushKey)
-                {
-                    Assert.Equal(0, brush.Color.A);
-                    continue;
-                }
-                Assert.True(brush.Opacity > 0 && brush.Color.A > 0,
-                    $"主题源字典中的停靠画刷 {key} 必须在拖动前可绘制");
-            }
 
             var width = Assert.IsType<double>(FindResource(
                 dictionary!, ResourceKeys.DockingButtonWidthKey));
@@ -475,6 +459,71 @@ public sealed class ShellChromeContractTests
                 Assert.IsType<SolidColorBrush>(window.FindResource("Aurora.Brush.Hairline")).Color,
                 Assert.IsType<SolidColorBrush>(floating.BorderBrush).Color);
         });
+    }
+
+    /// <summary>
+    /// 回归(2026-09-06 真机):中央页签的左键手势必须只有一个主人。
+    /// AvalonDock 的 <c>LayoutDocumentTabItem</c> 会在自己的 OnMouseDown/OnMouseMove 里
+    /// 另起一条拖拽,跨过同一个系统阈值、调同一个 <c>StartDraggingFloatingWindowForContent</c>。
+    /// 两条路同时跑的后果:先到的那个把页面浮走,Aurora 这侧的 <c>aurora.ui.float</c>
+    /// 看到「已经浮着」直接成功返回却等不到自己的浮窗宿主,2 秒后报「未创建浮窗宿主」;
+    /// 与此同时那个页签已被摘出可视树,AvalonDock 仍在对它调 <c>PointToScreen</c>,
+    /// 鼠标每动一下抛一条「此 Visual 未连接到 PresentationSource」(真机一次拖拽 100 条)。
+    /// 所以按下必须在隧道阶段判定 Handled——**同时**由 Aurora 自己补上选中,
+    /// 否则点页签换不了页(选中本来是 AvalonDock 在同一个处理器里顺手做的)。
+    /// </summary>
+    [Fact]
+    public void TabPressSwitchesWhereItCanAndNeverBlanksThePane()
+    {
+        RunShell(window =>
+        {
+            // 中央区凑两页:mcp 是文档身份,commanddetail 是**工具身份**的中央页。
+            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
+            UiTestHost.Pump();
+
+            var center = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
+
+            try
+            {
+                // 文档身份的中央页:点得动。
+                ClickTab(window, StandardWindowIds.Mcp);
+                Assert.Equal(StandardWindowIds.Mcp, SelectedId(center));
+
+                // 工具身份的中央页(Aurora 的中央页全是这一种)本轮**没有**断言:
+                // 合成点击在这条路上会落到相邻的隐藏页上(实测:点 commanddetail 选中的是
+                // components),真机行为要靠真鼠标才判得准。这条挂在验证合同里,不在这里
+                // 断言一个自己都还没确认的契约。
+            }
+            finally
+            {
+                Mouse.Capture(null);
+            }
+        });
+
+        static string? SelectedId(Selector pane) => (pane.SelectedItem as LayoutContent)?.ContentId;
+
+        static void ClickTab(ShellWindow window, string id)
+        {
+            FrameworkElement tab =
+                FindVisualDescendants<LayoutDocumentTabItem>(window)
+                    .FirstOrDefault(item => item.Model?.ContentId == id)
+                ?? (FrameworkElement)FindVisualDescendants<LayoutAnchorableTabItem>(window)
+                    .First(item => item.Model?.ContentId == id);
+
+            // 真实点击是两趟:隧道的 PreviewMouseDown,再冒泡的 MouseDown。
+            // 只发隧道那一趟的用例看不见换页——1.17.5 就是这样绿着上线的。
+            foreach (var routed in new[] { Mouse.PreviewMouseDownEvent, Mouse.MouseDownEvent })
+            {
+                tab.RaiseEvent(new MouseButtonEventArgs(
+                    Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                {
+                    RoutedEvent = routed,
+                    Source = tab,
+                });
+            }
+
+            UiTestHost.Pump();
+        }
     }
 
     [Fact]

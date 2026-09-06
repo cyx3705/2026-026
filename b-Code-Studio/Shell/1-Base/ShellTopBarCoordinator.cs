@@ -201,6 +201,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return false;
         }
 
+        // **换页归 AvalonDock**。这里既不判 Handled 也不自己写选中——两条都试过,两条都错:
+        // 判了 Handled,容器 TabItem 收不到冒泡的按下,页就换不了(1.17.5 真机);
+        // 自己写选中,要么把窗格的选中下标反向写成 -1(模型层:LayoutDocumentPane.IndexOf
+        // 不认 LayoutAnchorable,而中央页全是 anchorable),要么因为文档区里混着隐藏页
+        // 而错位一格(控件层)。两种都实测过。
+        //
+        // Aurora 只负责拖:按下起会话、越过阈值再浮出去,而浮之前先放掉捕获
+        // (见 RestoreAndFloatAsync)。AvalonDock 那条并行拖拽之所以会闹,
+        // 根子在「页签被摘走时捕获还在它身上」——放掉捕获就够了,不必去抢按下事件。
         var floating = FindFloatingWindow(id);
         if (floating != null)
         {
@@ -402,10 +411,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         false,
         false);
         _dragSession = session;
-        var captured = tab.CaptureMouse();
-        _log.Info(
-            ChromeLogSource,
-            $"拖动会话 {session.Id} 按下页面 {id} capture={captured} start=({Math.Round(start.X)},{Math.Round(start.Y)})");
+        tab.CaptureMouse();
     }
 
     private void StartFloatingTabSession(
@@ -435,10 +441,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             IsFloatingTab = true,
         };
         _dragSession = session;
-        var captured = tab.CaptureMouse();
-        _log.Info(
-            ChromeLogSource,
-            $"拖动会话 {session.Id} 按下浮窗页面 {id} capture={captured} start=({Math.Round(session.Start.X)},{Math.Round(session.Start.Y)})");
+        tab.CaptureMouse();
     }
 
     private async Task RestoreAndFloatAsync(DockingDragSession session)
@@ -473,6 +476,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         };
         if (!session.TryTransition(DockingDragState.FloatRequested))
             return;
+
+        // 浮出去会把这个页签从可视树上摘掉。摘之前必须先放掉捕获:捕获还在的话,
+        // 后续鼠标移动仍旧送到那个已经断开 PresentationSource 的页签上。
+        // 拖动的接力从这里起就交给 WindowDragDriver(见 OnFloatingWindowCreated),
+        // 不再需要页签持有捕获。
+        WindowDragDriver.ReleaseMouseCapture(session.Surface);
         session.LastScreenPoint = context.PointerPixels;
         ApplyFloatingModelGeometry(context, FindLayoutContent(context.PageId));
         var completion = new TaskCompletionSource<bool>(
@@ -577,7 +586,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
             if (!session.TryTransition(DockingDragState.WindowMoving))
                 return;
-            _windowDragDriver.Start(floating, _manager, _log, ChromeLogSource);
+            _windowDragDriver.Start(floating);
             CompleteDragSession(session, "floating window drag ended");
         });
 
@@ -657,10 +666,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             hostWindow.WindowState == WindowState.Maximized,
             false);
         _dragSession = session;
-        var captured = surface.CaptureMouse();
-        _log.Info(
-            ChromeLogSource,
-            $"拖动会话 {session.Id} 按下窗口 {target} capture={captured} start=({Math.Round(session.Start.X)},{Math.Round(session.Start.Y)})");
+        surface.CaptureMouse();
         e.Handled = true;
     }
 
@@ -688,9 +694,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             _doubleClick.Cancel(session.Target);
         if (shouldStart)
         {
-            _log.Info(
-                ChromeLogSource,
-                $"拖动会话 {session.Id} 窗口越过阈值 current=({Math.Round(current.X)},{Math.Round(current.Y)})");
             StartPendingHostDrag(session, current);
             e.Handled = true;
         }
@@ -743,7 +746,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        _windowDragDriver.Start(hostWindow, _manager, _log, ChromeLogSource);
+        _windowDragDriver.Start(hostWindow);
         CompleteDragSession(session, "window drag ended");
     }
 
@@ -775,9 +778,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (!session.TryTransition(DockingDragState.ThresholdReached))
             return;
         session.LastScreenPoint = context.PointerPixels;
-        _log.Info(
-            ChromeLogSource,
-            $"拖动会话 {session.Id} 页面越过阈值 current=({Math.Round(current.X)},{Math.Round(current.Y)})");
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
         // Do not rely on AvalonDock's tab template to start its internal drag
         // service. The Aurora tab template is intentionally replaced, so the
@@ -851,7 +851,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
                         ReferenceEquals(current.HostWindow, hostWindow) &&
                         current.IsLeftButtonDown)
                     {
-                        _windowDragDriver.Start(hostWindow, _manager, _log, ChromeLogSource);
+                        _windowDragDriver.Start(hostWindow);
                         CompleteDragSession(current, "restored window drag ended");
                     }
                 });
@@ -899,7 +899,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         session.Completion = null;
         if (ReferenceEquals(_dragSession, session))
             _dragSession = null;
-        _log.Info(ChromeLogSource, $"拖动会话 {session.Id} {session.State}: {reason}");
     }
 
     private Size ResolveEmbeddedPaneSize(string id)
