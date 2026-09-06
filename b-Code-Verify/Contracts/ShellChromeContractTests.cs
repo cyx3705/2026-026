@@ -516,6 +516,45 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// 回归(2026-09-06 真机):只在隧道阶段判定 Handled 拦不住 AvalonDock。
+    /// WPF 在冒泡阶段仍会把 MouseDown 就地升发成 MouseLeftButtonDown,
+    /// <c>LayoutDocumentTabItem.OnMouseLeftButtonDown</c> 照跑——那次它对一个刚被换页回收掉的
+    /// 页签解引用 <c>Model</c>,抛 <c>NullReferenceException</c>,整条路由中断:
+    /// 页换不成,捕获又留在原地,于是「点页签变成拖窗口」。
+    /// **中央页与工具页两种页签都会中招**,所以两种类型都要断。
+    /// </summary>
+    [Fact]
+    public void AvalonDockOwnTabPressImplementationIsCutOffOnBothTabKinds()
+    {
+        RunShell(window =>
+        {
+            FrameworkElement[] tabs =
+            [
+                FindVisualDescendants<LayoutDocumentTabItem>(window)
+                    .First(item => item.Model is { ContentId.Length: > 0 }),
+                FindVisualDescendants<LayoutAnchorableTabItem>(window)
+                    .First(item => item.Model is { ContentId.Length: > 0 }),
+            ];
+
+            foreach (var tab in tabs)
+            {
+                var bubbled = new MouseButtonEventArgs(
+                    Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                {
+                    RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+                    Source = tab,
+                };
+                tab.RaiseEvent(bubbled);
+
+                Assert.True(
+                    bubbled.Handled,
+                    $"{tab.GetType().Name}：AvalonDock 自带的页签左键实现必须被类处理器断掉，" +
+                    "否则它会和 Aurora 抢同一个手势");
+            }
+        });
+    }
+
     [Fact]
     public void CentralTabsUseOneVisualSelectionSource()
     {
