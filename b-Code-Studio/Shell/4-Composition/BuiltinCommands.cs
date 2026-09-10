@@ -59,6 +59,9 @@ internal sealed class ShellCommandServices
     /// 在那里把它做成必填只会逼出一个假实例。
     /// </summary>
     public Neutral.CommandSurface.LocalCommandCatalogSession? Catalog { get; init; }
+
+    /// <summary>场景（REQ-UI-084）；null 时 aurora.scene.* 照样登记，执行时报「场景未启用」。</summary>
+    public Components.Scenes.SceneManager? Scenes { get; init; }
 }
 /// <summary>
 /// 框架内置指令组(§5.3 / 附录 B):help / history / run /
@@ -73,6 +76,7 @@ internal static partial class BuiltinCommands
         RegisterLog(r, s);
         RegisterWin(r, s);
         RegisterLayout(r, s);
+        RegisterScenes(r, s);
         RegisterDialog(r, s);
         // 组件测试页的取数指令必须在这里就登记好。
         //

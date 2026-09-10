@@ -59,6 +59,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>列序台账（REQ-UI-062）；自持页与模块页共用一本。</summary>
     private readonly Components.Table.ColumnOrderStore _columnOrder;
 
+    /// <summary>场景（REQ-UI-084）与使用频次台账（REQ-UI-089），导航器与场景指令共用。</summary>
+    private readonly Components.Scenes.SceneManager _scenes;
+
+    private readonly Components.Scenes.UsageLedger _usage;
+
     /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
     private readonly bool _hostedModulesPage;
     private readonly Components.Modules.ShellUiRegistrar _shellUi;
@@ -229,6 +234,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
         _docking = new DockingHost(DockManager, config.ToolWindows, layoutStore, log, settings);
         _docking.Initialize();
+
+        // 场景要在停靠层恢复完上次布局之后建：它记下此刻已有的窗口，之后新登记的页
+        // 才按当前场景决定露不露面。上次退出时的布局本来就是当前场景的样子，这里不再切一次。
+        _usage = new Components.Scenes.UsageLedger(settings, log);
+        _scenes = new Components.Scenes.SceneManager(_docking, settings, _usage, log);
         ConfigureCommandCompletionRouting(
             () => _docking.MaximizedId?.Equals(
                 StandardWindowIds.Console,
@@ -296,6 +306,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             // R4-3:刚拖出来的浮动窗口带的是自己那份浅色令牌,补一次主题
             ApplyThemeToFloatingWindows();
             _topBar.Refresh();
+
+            // 新登记的页不属于当前场景就藏起来（Janus 热重载不能挤进 Minerva 场景）；
+            // 左栏跟着页数与专注态重画。
+            _scenes.OnWindowsChanged();
+            RefreshNavigatorRail();
         });
 
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
@@ -321,6 +336,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             DataRefresher = _dataRefresher,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
+            Scenes = _scenes,
 
             // 命令目录会话（REQ-UI-057）。**漏掉这一行的代价是三页一起空白**：
             // 1.9.0 把命令集、指令详情两页改成描述式，取数从视图里的私有状态换成了
@@ -402,6 +418,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         BuildMenus();
         UpdateLayoutIndicator();
         ApplyFocusChrome();
+        InitializeNavigator();
 
         Closing += OnShellClosing;
         Closed += OnShellClosed;
@@ -517,6 +534,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             var report = await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
                 await _annotationClaimer.ClaimAsync().ConfigureAwait(true);
+
+            // 导航器热键挂在发现这一轮，不挂在 aurora.host.ready：单独热重载 Aurora 时
+            // 宿主不会再发就绪通知（1.19.0 真机实测：装上了，Mercury 那边一条都没有）。
+            // 发现是冷启动与热重载都会走的那条路，此刻 Mercury 的指令也一定进了注册表。
+            await RegisterNavigatorHotkeyAsync().ConfigureAwait(true);
             return report;
         }
         catch (Exception ex)
@@ -739,6 +761,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _chromeUpkeep.Stop();
         _discoverDebounce.Stop();
         SaveWindowBounds();
+        // 先写回当前场景：下次切回来是离开时的样子。layout.v1.json 照旧另存一份供启动恢复。
+        _scenes.SaveActiveLayout();
         _docking.SaveCurrentLayout();
 
         // Shell 自建的能力由 Shell 自己收尾：模块宿主握着文件监听与防抖定时器，

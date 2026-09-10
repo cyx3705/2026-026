@@ -57,7 +57,14 @@
     <!-- RootBorder:窗体最大化时由代码补偿 WindowChrome 溢出(UI-02.5) -->
     <Border x:Name="RootBorder" Background="{DynamicResource Aurora.Brush.Canvas}">
         <Grid x:Name="RootGrid">
+            <!-- 第 0 列是导航器左栏（REQ-UI-088），停靠区与窗口按钮组都在第 1 列 -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
             <ad:DockingManager x:Name="DockManager"
+                               Grid.Column="1"
                                Background="{DynamicResource Aurora.Brush.Canvas}" />
 
             <!--
@@ -66,6 +73,7 @@
                 本层右上角。这样工具窗格的动作栏不会再与窗口控制栏共用一个位置。
             -->
             <StackPanel x:Name="ChromeBar"
+                        Grid.Column="1"
                         Height="{DynamicResource Aurora.Size.Tab}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
@@ -123,6 +131,62 @@
                           StrokeThickness="1.2" />
                 </Button>
             </StackPanel>
+
+            <!--
+                导航器左栏(REQ-UI-088):「全部」+ 常用场景 + 当前场景,按标题排。
+                空白处可拖动窗口、双击最大化。按钮与内容由 ShellWindow.Navigator.cs 填。
+            -->
+            <Border x:Name="NavRail"
+                    Grid.Column="0"
+                    Width="128"
+                    Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
+                    BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <Button x:Name="NavSearchButton"
+                            DockPanel.Dock="Top"
+                            Margin="6,6,6,6"
+                            Style="{StaticResource Aurora.Button.Base}"
+                            HorizontalContentAlignment="Left"
+                            Content="搜索…" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="NavRailItems" Margin="6,0,6,6" />
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- 导航器搜索浮层(REQ-UI-089):盖住整个窗体,点底板或 Esc 关闭 -->
+            <Grid x:Name="NavOverlay"
+                  Grid.ColumnSpan="2"
+                  Panel.ZIndex="100"
+                  Visibility="Collapsed">
+                <Border x:Name="NavBackdrop"
+                        Background="{DynamicResource Aurora.Brush.Canvas}"
+                        Opacity="0.6" />
+                <Border x:Name="NavCard"
+                        Width="620"
+                        Margin="0,72,0,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource Aurora.Suggest.Surface}">
+                    <DockPanel Margin="{DynamicResource Aurora.Space.PadTight}">
+                        <TextBox x:Name="NavQuery"
+                                 DockPanel.Dock="Top"
+                                 Style="{StaticResource Aurora.Segment.TextBox}" />
+                        <TextBlock x:Name="NavHint"
+                                   DockPanel.Dock="Bottom"
+                                   Margin="4,6,4,0"
+                                   Style="{StaticResource Aurora.Suggest.Hint}" />
+                        <ListBox x:Name="NavResults"
+                                 Margin="0,6,0,0"
+                                 MaxHeight="420"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                    </DockPanel>
+                </Border>
+            </Grid>
 
         </Grid>
     </Border>

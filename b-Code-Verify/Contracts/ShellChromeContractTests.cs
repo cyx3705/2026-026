@@ -1150,7 +1150,8 @@ public sealed class ShellChromeContractTests
                 var menu = RequireButton(window, "MenuButton").ContextMenu;
                 Assert.NotNull(menu);
                 var headers = menu!.Items.OfType<MenuItem>().Select(item => item.Header.ToString()).ToList();
-                Assert.Equal(["\u6587\u4ef6(_F)", "\u7f16\u8f91(_E)", "\u89c6\u56fe(_V)", "\u5de5\u5177(_T)", "\u5e2e\u52a9(_H)"], headers);
+                // 1.19.0 \u8d77\u591a\u4e00\u7ec4\u300c\u573a\u666f\u300d\uff08REQ-UI-085\uff09\uff0c\u5939\u5728\u89c6\u56fe\u4e0e\u5de5\u5177\u4e4b\u95f4\u3002
+                Assert.Equal(["\u6587\u4ef6(_F)", "\u7f16\u8f91(_E)", "\u89c6\u56fe(_V)", "\u573a\u666f(_S)", "\u5de5\u5177(_T)", "\u5e2e\u52a9(_H)"], headers);
 
                 var tools = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "\u5de5\u5177(_T)"));
                 Assert.Contains(
