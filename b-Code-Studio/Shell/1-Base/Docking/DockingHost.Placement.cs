@@ -20,7 +20,16 @@ internal sealed partial class DockingHost
 {
     // ---------------------------------------------------------------- 布局树操作
 
-    private void PlaceAtSide(LayoutAnchorable a, DockSide side, double ratio, string? targetId)
+    /// <summary>
+    /// 把一页放到某个方位（REQ-UI-100 一格一页）。那个方位已经有一格时放进那一格：
+    /// <paramref name="takeSeat"/> 为 true 顶掉原来那一页，为 false（登记、恢复、摆回默认位置）新来的藏着。
+    /// 同一侧不会为了多放一页再切出一块侧栏。
+    ///
+    /// <see cref="DockSide.Tab"/> 只来自页面声明（Janus 的「图」声明 <c>side=tab tabTarget=console</c>）：
+    /// 1.20.2 起没有标签组，它的意思是「与目标页同一个位置」——目标此刻停在哪一格就进哪一格，
+    /// 目标没露面就按目标的默认方位。
+    /// </summary>
+    private void PlaceAtSide(LayoutAnchorable a, DockSide side, double ratio, string? targetId, bool takeSeat)
     {
         var root = _manager.Layout;
         ToolWindowDescriptor? descriptor = null;
@@ -29,49 +38,62 @@ internal sealed partial class DockingHost
         var fallbackRatio = descriptor?.DefaultRatio ?? 0.25;
         ratio = NormalizeRatio(ratio, fallbackRatio);
 
-        if (side == DockSide.Center)
-        {
-            if (descriptor == null)
-                throw new InvalidOperationException("未注册的窗口不能进入中央主区");
-            if (UsesDocumentIdentity(descriptor))
-                ShowCenterDocument(MoveToCenterDocument(descriptor));
-            else
-                ShowAnchorableAsCenterPage(MoveToAnchorable(descriptor));
-            return;
-        }
-
-        Detach(a);
-
         if (side == DockSide.Tab)
         {
             var target = targetId != null ? FindAnchorable(targetId) : null;
-            if (target?.Parent is LayoutAnchorablePane targetPane)
+            if (target is { IsHidden: false } &&
+                !ReferenceEquals(target, a) &&
+                !IsFloating(target) &&
+                target.Parent is LayoutAnchorablePane or LayoutDocumentPane)
             {
-                a.CanAutoHide = true;
-                targetPane.Children.Add(a);
-                targetPane.SelectedContentIndex = targetPane.Children.Count - 1;
+                PutInPane((ILayoutContainer)target.Parent, a, takeSeat);
                 root.CollectGarbage();
                 return;
             }
 
-            _log.Warn(LayoutSource, $"标签组目标 {targetId ?? "(空)"} 不可用,改为右侧停靠");
-            side = DockSide.Right;
+            // 目标藏着（常见的是刚被顶掉）：它的位置是它上次露面的方位——隐藏前记下的那一条，不是它的默认方位。
+            // 1.20.2 首版只认露着的目标，台账恢复时跟随页于是落到目标的默认方位去了。
+            if (targetId != null &&
+                _lastVisiblePlacements.TryGetValue(targetId, out var last) &&
+                Enum.IsDefined(last.Side) && last.Side != DockSide.Tab)
+            {
+                side = last.Side;
+            }
+            else
+            {
+                side = targetId != null && _byId.TryGetValue(targetId, out var targetDescriptor) &&
+                       targetDescriptor.DefaultSide != DockSide.Tab
+                    ? targetDescriptor.DefaultSide
+                    : DockSide.Right;
+            }
+
+            _log.Info(LayoutSource, $"窗口 {a.ContentId} 跟随的 {targetId ?? "(空)"} 此刻不在任何一格，按它的方位 {SideText(side)} 放");
         }
 
-        // 默认布局会把同一侧的窗口合并成一个标签组；运行期模块注册也必须遵守
-        // 相同拓扑，避免每注册一个右侧窗口就额外切出一块嵌套侧栏。
+        if (side == DockSide.Center)
+        {
+            if (descriptor == null)
+                throw new InvalidOperationException("未注册的窗口不能进入中央主区");
+            var main = FindMainDocumentPane();
+            PutInPane(main, a, takeSeat);
+            a.CanDockAsTabbedDocument = true;
+            NormalizeMainDocumentSizing(main);
+            ScheduleCenterDocumentPresentation();
+            root.CollectGarbage();
+            return;
+        }
+
         var existingPane = FindSidePane(side, a);
         if (existingPane != null)
         {
-            a.CanAutoHide = true;
-            existingPane.Children.Add(a);
-            existingPane.SelectedContentIndex = existingPane.Children.Count - 1;
+            PutInPane(existingPane, a, takeSeat);
             if (a.ContentId != null)
                 _ratios[a.ContentId] = ratio;
             root.CollectGarbage();
             return;
         }
 
+        Detach(a);
         var pane = new LayoutAnchorablePane(a);
         a.CanAutoHide = true;
 
@@ -106,49 +128,6 @@ internal sealed partial class DockingHost
         root.CollectGarbage();
     }
 
-    private void ResolvePendingTabTargets(string targetId)
-    {
-        foreach (var (id, pendingTarget) in _pendingTabTargets
-                     .Where(item => item.Value.Equals(targetId, StringComparison.OrdinalIgnoreCase))
-                     .ToArray())
-        {
-            if (!_byId.TryGetValue(id, out var descriptor) ||
-                !TryPlaceAtTabTarget(descriptor, pendingTarget))
-                continue;
-
-            _pendingTabTargets.Remove(id);
-            _log.Info(LayoutSource, $"窗口 {id} 已挂入延迟可用的标签组 {pendingTarget}");
-        }
-    }
-
-    private bool TryPlaceAtTabTarget(ToolWindowDescriptor descriptor, string targetId)
-    {
-        if (IsCenterTabTarget(targetId))
-        {
-            var anchorable = MoveToAnchorable(descriptor);
-            var hidden = anchorable.IsHidden;
-            ShowAnchorableAsCenterPage(anchorable);
-            if (hidden)
-                anchorable.Hide();
-            return true;
-        }
-
-        var target = FindAnchorable(targetId);
-        if (target?.Parent is not LayoutAnchorablePane pane)
-            return false;
-
-        var item = MoveToAnchorable(descriptor);
-        var wasHidden = item.IsHidden;
-        Detach(item);
-        pane.Children.Add(item);
-        if (wasHidden)
-            item.Hide();
-        else
-            pane.SelectedContentIndex = pane.Children.Count - 1;
-        _manager.Layout.CollectGarbage();
-        return true;
-    }
-
     private LayoutAnchorablePane? FindSidePane(DockSide side, LayoutAnchorable excluded)
         => _manager.Layout.Descendents()
             .OfType<LayoutAnchorable>()
@@ -158,36 +137,6 @@ internal sealed partial class DockingHost
                            && !IsFloating(item))
             .FirstOrDefault(item => DetectSide(item) == side)
             ?.Parent as LayoutAnchorablePane;
-
-    private void ConsolidateSidePanes()
-    {
-        foreach (var side in new[] { DockSide.Left, DockSide.Right, DockSide.Top, DockSide.Bottom })
-        {
-            var panes = _manager.Layout.Descendents()
-                .OfType<LayoutAnchorable>()
-                .Where(item => !item.IsHidden && !IsFloating(item) && DetectSide(item) == side)
-                .Select(item => item.Parent)
-                .OfType<LayoutAnchorablePane>()
-                .Distinct()
-                .ToList();
-            if (panes.Count < 2)
-                continue;
-
-            var target = panes
-                .OrderByDescending(pane => pane.Children.Count)
-                .First();
-            foreach (var source in panes.Where(pane => !ReferenceEquals(pane, target)))
-            {
-                foreach (var item in source.Children.ToArray())
-                {
-                    source.Children.Remove(item);
-                    target.Children.Add(item);
-                }
-            }
-        }
-
-        _manager.Layout.CollectGarbage();
-    }
 
     /// <summary>找到包含主文档区的中央列;若中央区不是垂直面板,则就地包一层。</summary>
     private LayoutPanel EnsureCenterColumn()

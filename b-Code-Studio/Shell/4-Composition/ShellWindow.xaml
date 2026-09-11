@@ -10,11 +10,9 @@
         Background="{DynamicResource Aurora.Brush.Canvas}">
 
     <!--
-        3.1 外壳(UI-02 / UI-03 / UI-04 / UI-05):
-        没有独立标题栏那一层 —— 停靠区从窗体顶端起算,窗口按钮组浮在右上角,
-        与最上一排页签同处一行(高度都是 Aurora.Size.Tab)。页签之外的空白
-        属于 WindowChrome 的标题区,因此仍可拖动、双击最大化和贴边分屏;
-        页签本身在 AuroraDocking.xaml 里声明为 IsHitTestVisibleInChrome,可正常点击。
+        外壳(UI-02 / UI-03 / UI-04 / UI-05):
+        没有标题栏、也没有顶栏(1.20.2 顶栏删除,REQ-UI-101)—— 停靠区从窗体顶端起算,
+        窗格没有页签行。窗口按钮组在右栏顶部,右栏空白处拖动窗口、双击最大化。
 
         WindowChrome 的装配与降级在 ShellWindow.xaml.cs 的 SourceInitialized 完成
         (消费方可能在构造之后才改 WindowStyle,构造期判定会误判)。
@@ -50,7 +48,6 @@
             <Geometry x:Key="Aurora.Icon.Restore">M 0,2.5 H 7.5 V 10 H 0 Z M 2.5,2.5 V 0 H 10 V 7.5 H 7.5</Geometry>
             <Geometry x:Key="Aurora.Icon.Close">M 0,0 L 10,10 M 10,0 L 0,10</Geometry>
             <Geometry x:Key="Aurora.Icon.ExitFocus">M 0,4 H 4 V 0 M 12,0 V 4 H 16 M 16,8 H 12 V 12 M 4,12 V 8 H 0</Geometry>
-            <RoutedCommand x:Key="Aurora.Command.PageAction" />
         </ResourceDictionary>
     </Window.Resources>
 
@@ -88,22 +85,15 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!--
-                        窗口控制组的常规落点。专注态右栏让位,ChromeBar 被挪到专注页的页头上
-                        (ShellWindow.Chrome.cs 的 PlaceChromeBar)。
-                    -->
+                    <!-- 窗口控制组的唯一落点。专注态右栏也在,它不再搬家。 -->
                     <ContentControl x:Name="NavChromeHost"
                                     Grid.Row="0"
                                     Height="{DynamicResource Aurora.Size.Tab}"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top"
                                     Focusable="False">
-            <!--
-                UI-02.3:菜单 + 最小化 + 最大化还原 + 关闭,次序固定、任何形态都不删减。
-                Grid.Column 只在回退时用得上:两处落点都找不到时挂回停靠区右上角。
-            -->
+            <!-- UI-02.3:菜单 + 最小化 + 最大化还原 + 关闭,次序固定、任何形态都不删减。 -->
             <StackPanel x:Name="ChromeBar"
-                        Grid.Column="0"
                         Height="{DynamicResource Aurora.Size.Tab}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
@@ -180,7 +170,7 @@
                         <StackPanel x:Name="NavRailItems" Margin="6,0,6,6" />
                     </ScrollViewer>
 
-                    <!-- 常用页面(REQ-UI-099):点一下在当前场景打开,按住拖出来落到蓝色停靠点上嵌入 -->
+                    <!-- 常用页面(REQ-UI-099):胶囊只用来拖,按住拖出来落到蓝色停靠点上嵌入;点一下什么都不做 -->
                     <Border Grid.Row="3"
                             Margin="6,0,6,0"
                             Padding="2,6,0,4"
@@ -191,7 +181,7 @@
                                    FontFamily="{DynamicResource Aurora.Font.Family}"
                                    FontSize="{DynamicResource Aurora.Font.Small}"
                                    Foreground="{DynamicResource Aurora.Brush.TextSecondary}"
-                                   ToolTip="没打开的页都在这里,按用得多少排。点一下在当前场景打开;按住拖出来,落到蓝色停靠点上嵌入" />
+                                   ToolTip="没打开的页都在这里,按用得多少排。按住拖出来,落到蓝色停靠点上嵌入" />
                     </Border>
 
                     <ScrollViewer Grid.Row="4"

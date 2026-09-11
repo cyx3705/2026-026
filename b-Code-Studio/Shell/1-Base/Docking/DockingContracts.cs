@@ -60,6 +60,11 @@ internal enum DockSide
     Right = 1,
     Top = 2,
     Bottom = 3,
+
+    /// <summary>
+    /// 只用于页面声明（<c>side=tab tabTarget=…</c>）：与目标页同一个位置。
+    /// 1.20.2 起没有标签组、一格一页（REQ-UI-100），<c>aurora.ui.dock</c> 也不再接受 <c>pos=tab</c>。
+    /// </summary>
     Tab = 4,
     Center = 5,
 }
@@ -87,8 +92,7 @@ internal sealed class ToolWindowDescriptor
 /// 中央区的文档窗格。与 <see cref="AvalonDock.Layout.LayoutDocumentPane"/> 的唯一区别，
 /// 是它**认得工具页的下标**（REQ-UI-083）。
 ///
-/// 中央区是一排页签，里面混着两种身份：命令集是 <c>LayoutDocument</c>，其余中央页
-/// （模块页与 Aurora 自持的几页）都是 <c>LayoutAnchorable</c>。而
+/// 中央区里的页全是 <c>LayoutAnchorable</c>（1.20.2 起命令集也不再是 <c>LayoutDocument</c>）。而
 /// <c>LayoutDocumentPane</c> 的 <c>ILayoutContentSelector.IndexOf</c> 只认前者，
 /// 对后者一律返回 -1。这一个 -1 顺着 AvalonDock 的实现扩散成两个用户可见的故障：
 ///

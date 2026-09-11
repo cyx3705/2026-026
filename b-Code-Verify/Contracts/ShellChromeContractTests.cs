@@ -57,23 +57,6 @@ public sealed class ShellChromeContractTests
         });
     }
 
-    [Fact]
-    public void ChromeBarReservesRoomSoTabsNeverHideUnderTheButtons()
-    {
-        RunShell(window =>
-        {
-            var chromeBar = RequireElement<FrameworkElement>(window, "ChromeBar");
-            var panel = FindVisualDescendants<AvalonDock.Controls.DocumentPaneTabPanel>(window)
-                .Single(item => item.IsVisible);
-
-            // ?????????????,?????????????
-            var panelRight = panel.TransformToAncestor(window).Transform(new Point(panel.ActualWidth, 0)).X;
-            var chromeLeft = chromeBar.TransformToAncestor(window).Transform(new Point(0, 0)).X;
-            Assert.True(panelRight <= chromeLeft + 0.5,
-                $"tab panel right={panelRight} overlaps chrome bar left={chromeLeft}");
-        });
-    }
-
     /// <summary>
     /// REQ-UI-099：窗口控制组搬到右栏顶部——仍是整个窗体的右上角，但不再挂在任何窗格上。
     /// 1.19.0 及以前它挂在主文档区的页签行上，命令集因此得常驻当锚点（REQ-UI-095 解开）。
@@ -102,8 +85,12 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// 主窗体的系统标题栏高度保持 0（整窗都是客户区，右栏空白处自己拖窗口）。
+    /// 1.20.2 起工具页也没有页头动作位（REQ-UI-101）：可见的 <see cref="AnchorablePaneTitle"/> 一个都不该有。
+    /// </summary>
     [Fact]
-    public void InvisibleCaptionDoesNotCoverToolPaneControls()
+    public void InvisibleCaptionStaysZeroAndNoPaneDrawsATitle()
     {
         RunShell(window =>
         {
@@ -111,11 +98,7 @@ public sealed class ShellChromeContractTests
             Assert.NotNull(chrome);
             Assert.Equal(0, chrome.CaptionHeight);
 
-            var actions = FindVisualDescendants<AnchorablePaneTitle>(window)
-                .First(item => item.IsVisible);
-            Assert.All(
-                FindVisualDescendants<ButtonBase>(actions),
-                button => Assert.True(button.IsHitTestVisible));
+            Assert.DoesNotContain(FindVisualDescendants<AnchorablePaneTitle>(window), item => item.IsVisible);
         });
     }
 
@@ -505,63 +488,47 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// 页签的左键仍然**整个交给 AvalonDock**（REQ-UI-082）：Aurora 不判 Handled——
-    /// 1.17.2/1.17.5 各试过一次，两次都把换页弄坏了。
-    ///
-    /// 1.20.0 起页面拖动不附着在页签上（REQ-UI-097）：平时按页签连拖动会话都不起，
-    /// Ctrl 标签态才起。两种身份的中央页各按一次。
+    /// REQ-UI-097 / 101：页面拖动只从 Ctrl 标签态的页名标签起手（顶栏删除后没有页签可按）。
+    /// 常态下按在窗格内容上不起拖动会话——页面内容自己的点击不被抢；标签态下按在标签上才起。
     /// </summary>
     [Fact]
-    public void CenterTabPressIsNeverHandledAndDragsOnlyInLabelMode()
+    public void PageDragStartsOnlyFromTheLabelInLabelMode()
     {
         RunShell(window =>
         {
-            var topBar = GetPrivateField(window, "_topBar")!;
-
-            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
-            UiTestHost.Pump();
-            AssertPressIsQuiet(StandardWindowIds.CommandDetail);
-
+            var pageDrag = GetPrivateField(window, "_pageDrag")!;
             window.Docking.Show(StandardWindowIds.Mcp);
             UiTestHost.Pump();
-            AssertPressIsQuiet(StandardWindowIds.Mcp);
 
-            // 越过 250ms 的双击窗口：同一页签连按两下是专注，不是拖动。
-            UiTestHost.PumpFor(300);
+            var content = FindVisualDescendants<ContentPresenter>(window)
+                .First(item => item.IsVisible && item.Name == "PART_SelectedContentHost");
+            PressPreview(content);
+            Assert.Null(GetPrivateField(pageDrag, "_dragSession"));
+
             window.SetLabelMode(true);
-            var labelTab = CenterTab(StandardWindowIds.Mcp);
+            UiTestHost.Pump();
+            var label = FindVisualDescendants<Border>(window)
+                .First(item => item.IsVisible && Equals(item.Tag, "PageLabelCover"));
             try
             {
                 // 按下之后立刻看、不泵消息：合成按下会捕获鼠标，WPF 随即补发一次合成移动，
                 // 没有真鼠标时那一下可能越过阈值、把页浮出去再当场收尾——查的就不再是「起没起会话」了。
-                labelTab.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                label.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
                 {
                     RoutedEvent = Mouse.PreviewMouseDownEvent,
-                    Source = labelTab,
+                    Source = label,
                 });
-                Assert.NotNull(GetPrivateField(topBar, "_dragSession"));
+                Assert.NotNull(GetPrivateField(pageDrag, "_dragSession"));
             }
             finally
             {
-                // 没有真鼠标时这次按下可能已经被合成移动推过了阈值，抬起取消不了它；
-                // 直接收掉会话，排队中的浮出见会话已换就不会动命令集。
-                topBar.GetType()
+                // 直接收掉会话，排队中的浮出见会话已换就不会动页面。
+                pageDrag.GetType()
                     .GetMethod("CancelDragSession", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-                    .Invoke(topBar, ["test finished"]);
+                    .Invoke(pageDrag, ["test finished"]);
                 Mouse.Capture(null);
                 window.SetLabelMode(false);
             }
-
-            void AssertPressIsQuiet(string id)
-            {
-                var tab = CenterTab(id);
-                Assert.False(Press(tab).Handled, $"{id} 的页签左键不该被 Aurora 判定 Handled");
-                PressPreview(tab);
-                Assert.Null(GetPrivateField(topBar, "_dragSession"));
-            }
-
-            FrameworkElement CenterTab(string id)
-                => FindVisualDescendants<LayoutDocumentTabItem>(window).First(item => item.Model?.ContentId == id);
         });
 
         // 必须发隧道的 PreviewMouseDown：PreviewMouseLeftButtonDown 是直达事件，手工 RaiseEvent
@@ -634,106 +601,44 @@ public sealed class ShellChromeContractTests
         return args;
     }
 
+    /// <summary>
+    /// REQ-UI-101 第 3 条：专注态右栏不让位，窗口控制组一直在右栏顶部；专注的那一页没有页签行，内容铺满窗格。
+    /// 退出专注后「退出聚焦」按钮收起。取代 1.20.1 及以前「控制组搬进专注页页头」的三条用例。
+    /// </summary>
     [Fact]
-    public void CentralTabsUseOneVisualSelectionSource()
+    public void FocusedPageKeepsTheWindowChromeInTheRightRail()
     {
         RunShell(
             window =>
             {
-                window.Docking.Show("center.one");
-                window.Docking.Show("center.two");
-                UiTestHost.Pump();
+                var exitFocus = RequireButton(window, "ExitFocusButton");
+                Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
 
-                var accent = ((SolidColorBrush)window.FindResource("Aurora.Brush.AccentSoft")).Color;
-                var active = FindVisualDescendants<LayoutDocumentTabItem>(window)
-                    .Where(item => item.IsVisible)
-                    .Where(item => FindVisualDescendants<Border>(item)
-                        .Any(border => border.Background is SolidColorBrush brush && brush.Color == accent))
-                    .ToList();
-
-                Assert.Single(active);
-            },
-            configure: config =>
-            {
-                config.ToolWindows.Add(new ToolWindowDescriptor
-                {
-                    Id = "center.one",
-                    Title = "Center One",
-                    DefaultSide = DockSide.Center,
-                    DefaultRatio = 1,
-                    ContentFactory = () => new Border(),
-                });
-                config.ToolWindows.Add(new ToolWindowDescriptor
-                {
-                    Id = "center.two",
-                    Title = "Center Two",
-                    DefaultSide = DockSide.Center,
-                    DefaultRatio = 1,
-                    ContentFactory = () => new Border(),
-                });
-            });
-    }
-
-    [Fact]
-    public void FocusedToolUsesTheSingleMainWindowChromeRow()
-    {
-        RunShell(
-            window =>
-            {
                 var result = window.Commands.ExecuteAsync("aurora.ui.max name=focus.tool", "test")
                     .GetAwaiter().GetResult();
                 Assert.True(result.Success, result.Message);
                 UiTestHost.Pump();
 
-                var focusedHeader = FindVisualDescendants<Grid>(window)
-                    .SingleOrDefault(item => item.IsVisible && Equals(item.Tag, "FocusedShellPaneHeader"));
-                Assert.NotNull(focusedHeader);
-                var tab = Assert.Single(FindVisualDescendants<LayoutAnchorableTabItem>(focusedHeader!));
-                Assert.Equal("focus.tool", tab.Model.ContentId);
-                Assert.DoesNotContain(
-                    FindVisualDescendants<Button>(focusedHeader!),
-                    button => Equals(button.CommandParameter, "restore") && button.IsVisible);
-
+                var rail = RequireElement<FrameworkElement>(window, "NavRail");
                 var chromeBar = RequireElement<Panel>(window, "ChromeBar");
-                Assert.NotNull(VisualTreeHelper.GetParent(chromeBar));
-                Assert.Equal(Visibility.Visible, RequireButton(window, "ExitFocusButton").Visibility);
+                Assert.True(rail.IsVisible, "专注态右栏不该让位");
+                Assert.True(chromeBar.IsDescendantOf(rail));
+                Assert.Single(FindVisualDescendants<Panel>(window), panel => panel.Name == "ChromeBar");
+                Assert.Equal(Visibility.Visible, exitFocus.Visibility);
                 Assert.All(
                     new[] { "MenuButton", "MinimizeButton", "MaximizeButton", "CloseButton" },
                     name => Assert.Equal(Visibility.Visible, RequireButton(window, name).Visibility));
-            },
-            configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
-            {
-                Id = "focus.tool",
-                Title = "Focus Tool",
-                DefaultSide = DockSide.Right,
-                DefaultRatio = 0.3,
-                ContentFactory = () => new Border(),
-            }));
-    }
 
-    [Fact]
-    public void FocusedToolContentStartsBelowItsChromeRow()
-    {
-        RunShell(
-            window =>
-            {
-                var result = window.Commands.ExecuteAsync("aurora.ui.max name=focus.tool", "test")
-                    .GetAwaiter().GetResult();
-                Assert.True(result.Success, result.Message);
-                UiTestHost.Pump();
-
-                var header = FindVisualDescendants<Grid>(window)
-                    .Single(item => item.IsVisible && Equals(item.Tag, "FocusedShellPaneHeader"));
+                Assert.DoesNotContain(FindVisualDescendants<LayoutAnchorableTabItem>(window), item => item.IsVisible);
                 var content = FindVisualDescendants<ContentPresenter>(window)
                     .Single(item => item.IsVisible && item.Name == "PART_SelectedContentHost");
-                var root = Assert.IsType<Grid>(VisualTreeHelper.GetParent(header));
-
-                Assert.Same(root, VisualTreeHelper.GetParent(content));
-                Assert.Equal(2, root.RowDefinitions.Count);
-                Assert.Equal(0, Grid.GetRow(header));
-                Assert.Equal(1, Grid.GetRow(content));
                 Assert.NotNull(content.Content);
                 Assert.True(content.ActualHeight > 0, $"focused content height={content.ActualHeight}");
+
+                Assert.True(window.Commands.ExecuteAsync("aurora.ui.restore", "test").GetAwaiter().GetResult().Success);
+                UiTestHost.Pump();
+                Assert.Null(window.Docking.MaximizedId);
+                Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
             },
             configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
             {
@@ -751,10 +656,6 @@ public sealed class ShellChromeContractTests
         RunShell(window =>
         {
             var content = Assert.Single(FindVisualDescendants<ConsoleView>(window));
-            var actions = FindVisualDescendants<AnchorablePaneTitle>(window)
-                .Single(item => item.Model.ContentId == StandardWindowIds.Console);
-            var paneHeader = FindAncestor<Grid>(actions, item => Equals(item.Tag, "ShellPaneHeader"));
-            Assert.NotNull(paneHeader);
 
             window.Docking.Float(StandardWindowIds.Console);
             UiTestHost.PumpFor(900);
@@ -780,7 +681,6 @@ public sealed class ShellChromeContractTests
                 FindVisualDescendants<FrameworkElement>(floating),
                 item => Equals(item.Tag, "FloatingShellPaneHeader"));
             Assert.Equal("FloatingWindowContentHost", floating.Content.GetType().Name);
-            Assert.True(paneHeader!.IsVisible);
             Assert.True(content.IsVisible);
             Assert.NotNull(PresentationSource.FromVisual(content));
             Assert.NotSame(PresentationSource.FromVisual(floating), PresentationSource.FromVisual(content));
@@ -795,73 +695,38 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-101 第 2 条：浮窗页头的最大化按钮随顶栏删除，主窗体与浮窗里都不再有。
+    /// 浮窗的最大化 / 还原只走 <c>aurora.ui.floatstate</c>（见 <c>FloatingDocumentWindowStateIsOwnedByCommandBus</c>）。
+    /// </summary>
     [Fact]
-    public void ToolPaneHasNoFloatingMaximizeButtonButDocumentPaneKeepsItsOwn()
+    public void NoWindowDrawsAFloatingMaximizeButton()
     {
         RunShell(window =>
         {
-            var actions = FindVisualDescendants<AnchorablePaneTitle>(window)
-                .Single(item => item.Model.ContentId == StandardWindowIds.Console);
-            Assert.DoesNotContain(
-                FindVisualDescendants<Button>(actions),
-                button => Equals(button.Tag, "FloatingMaxRestore"));
+            window.Docking.Float(StandardWindowIds.Console);
+            UiTestHost.PumpFor(900);
 
-            var documentMaxRestore = FindVisualDescendants<Button>(window)
-                .Single(button => button.Name == "FloatingDocumentMaxRestore");
-            Assert.Equal("toggle-floating", documentMaxRestore.CommandParameter);
-            Assert.Equal("FloatingMaxRestore", documentMaxRestore.Tag);
+            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
+            foreach (var host in manager.FloatingWindows.Cast<DependencyObject>().Prepend(window))
+            {
+                Assert.DoesNotContain(
+                    FindVisualDescendants<Button>(host),
+                    button => Equals(button.Tag, "FloatingMaxRestore") || button.Name == "FloatingDocumentMaxRestore");
+            }
         });
     }
 
     /// <summary>
-    /// 主窗口标题栏必须能拖动。
-    ///
-    /// 1.8.9 的实测故障：为了让页面里的 AuroraOptionBox（继承 Selector）被认成可交互件，
-    /// 命中判据从 ComboBox 放宽成 Selector；而 AvalonDock 的窗格控件本身就是 TabControl，
-    /// 也就是 Selector，于是标题栏上任何一点向上走都会撞见它，整条标题栏被判成
-    /// 「点在控件上」，主窗口从此拖不动。断言分两截，坏掉时能直接看出是哪一截：
-    /// 先钉住「窗格确实是 Selector」这个前提，再钉住「标题栏照样起手势」。
+    /// 两种窗格控件都把按下、移动、抬起、丢捕获交给页面拖动协调器——标签态的标签拖动与单页浮窗的移动都靠这四条。
+    /// 1.20.1 及以前这里还钉着「主文档区页头、专注页页头是拖动主窗口的落点」，随顶栏删除（REQ-UI-101）。
     /// </summary>
     [Fact]
-    public void MainChromeHeaderStartsAWindowGestureEvenThoughThePaneIsASelector()
-    {
-        RunShell(window =>
-        {
-            var surface = Assert.IsAssignableFrom<FrameworkElement>(
-                GetPrivateField(window, "_chromeDragSurface"));
-
-            // 前提：标题栏的祖先里确实有一个 Selector（窗格控件）。
-            Assert.NotNull(FindAncestor<System.Windows.Controls.Primitives.Selector>(surface, _ => true));
-
-            // 判据是「这一下被标题栏收下了」。手势收下后会把事件标成已处理；
-            // 判成「点在控件上」时会原样放行，Handled 保持 false。
-            // 不查 _dragSession：那一步还要 CaptureMouse，而测试里没有真实鼠标，
-            // 捕获失败会立刻反手清空手势，查它等于在查捕获而不是在查命中判定。
-            var press = new MouseButtonEventArgs(
-                Mouse.PrimaryDevice,
-                Environment.TickCount,
-                MouseButton.Left)
-            {
-                RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
-                Source = surface,
-            };
-            surface.RaiseEvent(press);
-            UiTestHost.Pump();
-
-            Assert.True(press.Handled, "主窗口标题栏没有接下这一次按下，窗口将拖不动");
-        });
-    }
-
-    [Fact]
-    public void EmbeddedMainAndToolHeadersShareTheMainWindowGesturePipeline()
+    public void EveryPaneRoutesPointerInputToThePageDragCoordinator()
     {
         RunShell(
             window =>
             {
-                var mainSurface = Assert.IsAssignableFrom<FrameworkElement>(
-                    GetPrivateField(window, "_chromeDragSurface"));
-                Assert.NotNull(FindAncestor<LayoutDocumentPaneControl>(mainSurface, _ => true));
-
                 var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
                 var toolEvents = manager.AnchorablePaneControlStyle.Setters.OfType<EventSetter>().ToList();
                 Assert.Contains(toolEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonDownEvent);
@@ -874,18 +739,6 @@ public sealed class ShellChromeContractTests
                 Assert.Contains(documentEvents, setter => setter.Event == UIElement.PreviewMouseMoveEvent);
                 Assert.Contains(documentEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonUpEvent);
                 Assert.Contains(documentEvents, setter => setter.Event == Mouse.LostMouseCaptureEvent);
-
-                var result = window.Commands.ExecuteAsync("aurora.ui.max name=focus.tool", "test")
-                    .GetAwaiter().GetResult();
-                Assert.True(result.Success, result.Message);
-                UiTestHost.Pump();
-
-                var focusedSurface = Assert.IsAssignableFrom<FrameworkElement>(
-                    GetPrivateField(window, "_chromeDragSurface"));
-                var focusedHeader = FindVisualDescendants<FrameworkElement>(window)
-                    .Single(element => element.IsVisible && Equals(element.Tag, "FocusedShellPaneHeader"));
-                Assert.Same(focusedHeader, focusedSurface);
-                Assert.NotNull(FindAncestor<LayoutAnchorablePaneControl>(focusedHeader, _ => true));
             },
             configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
             {
@@ -987,33 +840,6 @@ public sealed class ShellChromeContractTests
         }));
     }
 
-    /// <summary>
-    /// REQ-UI-099\uff1a\u9876\u680f\u9000\u5f79\u7684\u7b2c\u4e00\u6279\u5220\u9664\u9879\u2014\u2014\u5de5\u5177\u9875\u53f3\u4fa7\u7684 \u25bc \u83dc\u5355\u4e0e \u2715 \u9690\u85cf\u3002
-    /// \u9875\u5934\u52a8\u4f5c\u4f4d\u8fd8\u5728\u9875\u7b7e\u884c\u91cc\uff0c\u53ea\u5269\u4e13\u6ce8\u6001\u7684\u300c\u6062\u590d\u9875\u9762\u300d\uff1b\u62d6\u51fa\u53bb\u6ca1\u843d\u5230\u505c\u9760\u70b9\u5c31\u662f\u9690\u85cf\uff08REQ-UI-098\uff09\u3002
-    /// </summary>
-    [Fact]
-    public void ToolPaneHeaderKeepsOnlyTheFocusRestoreAction()
-    {
-        RunShell(window =>
-        {
-            var actions = FindVisualDescendants<AnchorablePaneTitle>(window).First(item => item.IsVisible);
-
-            // R4-1:\u52a8\u4f5c\u4f4d\u4e0e\u9875\u7b7e\u540c\u6392
-            var header = FindAncestor<Grid>(actions, grid => grid.Tag as string == "ShellPaneHeader");
-            Assert.NotNull(header);
-
-            var buttons = FindVisualDescendants<ButtonBase>(actions).ToList();
-            Assert.Empty(buttons.OfType<ToggleButton>());
-            var restore = Assert.IsType<Button>(Assert.Single(buttons));
-            Assert.Equal("restore", restore.CommandParameter);
-
-            // \u8fde\u6a21\u677f\u91cc\u7684\u5f39\u51fa\u83dc\u5355\u4e00\u8d77\u6ca1\u4e86\uff0c\u4e0d\u662f\u85cf\u8d77\u6765\u3002
-            var declared = (FrameworkElement)actions.Template.LoadContent();
-            Assert.Empty(FindLogicalDescendants<MenuItem>(declared));
-            Assert.Empty(FindLogicalDescendants<Popup>(declared));
-        });
-    }
-
     /// <summary>REQ-UI-097\uff1aCtrl \u6807\u7b7e\u6001\u4e0b\u6bcf\u4e00\u683c\u7a97\u683c\u7684\u5185\u5bb9\u6362\u6210\u5199\u7740\u9875\u540d\u7684\u5927\u6807\u7b7e\uff1b\u9000\u51fa\u5373\u6062\u590d\u3002</summary>
     [Fact]
     public void LabelModeCoversEveryPaneWithItsPageTitle()
@@ -1046,47 +872,32 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// REQ-UI-098 第 2 条（1.20.1）：AvalonDock 页签自带的拖动一律卸掉。按下照常归 AvalonDock（换页、激活），
-    /// 冒泡回到停靠管理器时把它刚上的膛退掉——否则顶栏页签按住拖出去就是一个不收起的悬浮窗（真机问题 3）。
-    /// 先把膛手工上好再按：只有 Aurora 的处理器真跑了，它才会变回 false，免得白绿。
-    /// 字段名按 AvalonDock 4.72.1 取，升级 AvalonDock 时这条先红。
+    /// REQ-UI-101（1.20.2）：顶栏整个删掉。每一格窗格都没有页签行——页签面板还在（窗格是 TabControl，
+    /// 靠生成出来的页签容器才产出 SelectedContent），但所在的那一行高 0、不可见；模板里不再有页头标记，
+    /// 窗口控制组也没有第二个落点。页面内容照常画出来。
     /// </summary>
     [Fact]
-    public void NativeTabDragIsDisarmedOnEveryPress()
+    public void PanesHaveNoTabRow()
     {
-        Assert.True(HistoryAurora.Shell.Base.ShellTopBarCoordinator.NativeTabDragHooksResolved);
         RunShell(window =>
         {
-            var flags = System.Reflection.BindingFlags.NonPublic;
-            var dragging = typeof(LayoutAnchorableTabItem)
-                .GetField("_draggingItem", flags | System.Reflection.BindingFlags.Static)!;
-            var tabs = new FrameworkElement[]
+            var panels = FindVisualDescendants<Panel>(window)
+                .Where(panel => panel is DocumentPaneTabPanel or AnchorablePaneTabPanel)
+                .ToList();
+            Assert.NotEmpty(panels);
+            Assert.All(panels, panel =>
             {
-                FindVisualDescendants<LayoutDocumentTabItem>(window).First(),
-                FindVisualDescendants<LayoutAnchorableTabItem>(window).First(),
-            };
-            foreach (var tab in tabs)
-            {
-                var armed = tab.GetType().GetField("_isMouseDown", flags | System.Reflection.BindingFlags.Instance)!;
-                armed.SetValue(tab, true);
-                if (tab is LayoutAnchorableTabItem)
-                    dragging.SetValue(null, tab);
-                try
-                {
-                    tab.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
-                    {
-                        RoutedEvent = Mouse.MouseDownEvent,
-                        Source = tab,
-                    });
-                    Assert.False((bool)armed.GetValue(tab)!, $"{tab.GetType().Name} 的原生拖动没有被卸掉");
-                }
-                finally
-                {
-                    Mouse.Capture(null);
-                }
-            }
+                Assert.False(panel.IsVisible, "页签面板仍然可见");
+                var row = Assert.IsAssignableFrom<FrameworkElement>(VisualTreeHelper.GetParent(panel));
+                Assert.Equal(0, row.ActualHeight, 3);
+            });
 
-            Assert.Null(dragging.GetValue(null));
+            foreach (var tag in new[] { "ShellPaneHeader", "FocusedShellPaneHeader", "ShellChromeHost", "FocusedShellChromeHost" })
+                Assert.DoesNotContain(FindVisualDescendants<FrameworkElement>(window), element => Equals(element.Tag, tag));
+
+            Assert.Contains(
+                FindVisualDescendants<ContentPresenter>(window),
+                presenter => presenter.Name == "PART_SelectedContentHost" && presenter.Content != null);
         });
     }
 
@@ -1228,49 +1039,6 @@ public sealed class ShellChromeContractTests
                     item => Equals(item.Header, "\u6d4b\u8bd5\u52a8\u4f5c"));
             },
             configure: config => config.ToolMenuActions.Add(new ShellMenuAction("\u6d4b\u8bd5\u52a8\u4f5c", "aurora.app.about")));
-    }
-
-    [Fact]
-    public void MaximizedPageMovesTheSingleMainChromeIntoTheFocusedHeader()
-    {
-        RunShell(window =>
-        {
-            // 1.7.0 起命令集由 Aurora 自建（REQ-UI-014），不再需要补一个等价的中央页。
-            // 断言的仍然是聚焦头与共享 chrome 的归属。
-            window.Docking.Show(StandardWindowIds.Mcp);
-            UiTestHost.Pump();
-
-            var exitFocus = RequireButton(window, "ExitFocusButton");
-            Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
-            Assert.Equal(
-                Visibility.Visible,
-                Assert.Single(FindVisualDescendants<DocumentPaneTabPanel>(window)).Visibility);
-
-            // Focused pages keep their real tab and host the one shared main-window chrome.
-            window.Docking.MaximizeWindow(StandardWindowIds.Mcp);
-            UiTestHost.Pump();
-
-            Assert.Equal(
-                Visibility.Visible,
-                Assert.Single(FindVisualDescendants<DocumentPaneTabPanel>(window)).Visibility);
-            Assert.Empty(FindVisualDescendants<AnchorablePaneTitle>(window));
-            Assert.Equal(Visibility.Visible, exitFocus.Visibility);
-            var chromeBar = RequireElement<Panel>(window, "ChromeBar");
-            Assert.NotNull(VisualTreeHelper.GetParent(chromeBar));
-            Assert.Single(FindVisualDescendants<Panel>(window), panel => panel.Name == "ChromeBar");
-            Assert.All(
-                new[] { "MenuButton", "MinimizeButton", "MaximizeButton", "CloseButton" },
-                name => Assert.Equal(Visibility.Visible, RequireButton(window, name).Visibility));
-
-            Assert.True(window.Commands.ExecuteAsync("aurora.ui.restore", "Test").GetAwaiter().GetResult().Success);
-            UiTestHost.Pump();
-
-            Assert.Null(window.Docking.MaximizedId);
-            Assert.Equal(
-                Visibility.Visible,
-                Assert.Single(FindVisualDescendants<DocumentPaneTabPanel>(window)).Visibility);
-            Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
-        });
     }
 
     [Fact]

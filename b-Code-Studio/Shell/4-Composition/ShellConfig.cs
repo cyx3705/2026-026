@@ -69,9 +69,6 @@ internal sealed class ShellConfig
     /// </summary>
     public bool RequireConfirmedModuleSources { get; set; }
 
-    /// <summary>双击工具窗口标题条时切换窗口最大化。</summary>
-    public bool EnableMaximizeOnDoubleClick { get; set; } = true;
-
     /// <summary>
     /// 客户端模式下只创建命令集、指令详情和模块管理视图，不在本进程创建 MCP 或 ModuleHost。
     /// 视图经 CommandBus.RemoteExecutor 读取服务端结构化结果。

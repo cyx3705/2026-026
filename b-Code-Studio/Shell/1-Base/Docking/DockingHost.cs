@@ -35,8 +35,6 @@ internal sealed partial class DockingHost : IDockingService
     private readonly Dictionary<string, ToolWindowDescriptor> _byId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, object> _contents = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _owners = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _pendingTabTargets = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, LayoutDocument> _centerDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _hiddenCenterIds = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, DockPlacementSnapshot> _orphanPlacements = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DockPlacementSnapshot> _lastVisiblePlacements = new(StringComparer.OrdinalIgnoreCase);
@@ -102,6 +100,7 @@ internal sealed partial class DockingHost : IDockingService
         };
 
         _manager.Loaded += (_, _) => RebaseSoon();
+        _manager.LayoutFloatingWindowControlCreated += OnFloatingWindowControlCreated;
 
         // 主窗体缩放 → 按记录的百分比重算各停靠区尺寸(W-05)
         _resizeDebounce = new DispatcherTimer(DispatcherPriority.Background)
@@ -198,13 +197,12 @@ internal sealed partial class DockingHost : IDockingService
                 ApplyPlacementFallback();
             }
 
-            ApplyStoredCenterVisibility();
             EnsureCentralWorkspace();
             AttachLayout();
         }
 
-        // 1.20.0 及以前存下的布局里一格可能有好几页（顶栏、侧边标签组）：每格只留上次选中的那一页。
-        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
+        // 1.20.1 及以前存下的布局里一格可能有好几页（顶栏、侧边标签组）：每格只留选中的那一页。
+        EvictExtraPages();
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -248,69 +246,55 @@ internal sealed partial class DockingHost : IDockingService
             })
             .ToList();
 
-    /// <summary>显示一页。它落进的那一格原来那一页被顶掉（REQ-UI-096 / 100）。</summary>
+    /// <summary>显示一页：它回到它的位置，那一格原来那一页被藏起来（REQ-UI-100）。</summary>
     public void Show(string id)
-    {
-        _waitingForSeat.Remove(id);
-        ShowCore(id);
-        EnforceSinglePagePerPane(id);
-    }
-
-    private void ShowCore(string id)
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
-            var document = FindCenterDocument(id);
-            if (document != null)
-            {
-                ShowCenterDocument(document);
-            }
-            else
-            {
-                var anchorable = FindRequiredAnchorable(id);
-                RevealAnchorable(anchorable, id);
-                anchorable.IsSelected = true;
-                anchorable.IsActive = true;
-            }
+            var anchorable = FindRequiredAnchorable(id);
+            RevealAnchorable(anchorable, id, takeSeat: true);
+            anchorable.IsSelected = true;
+            anchorable.IsActive = true;
             EnsureCentralWorkspace();
             ReapplyRatios();
         }
     }
 
-    /// <summary>明确隐藏一页。它若占着别的页登记时想要的位子，那一页回到这个位子（见 <c>_waitingForSeat</c>）。</summary>
-    public void Hide(string id)
+    /// <summary>
+    /// 显示一页但不顶掉任何一页：它的位置空着才露面，否则保持隐藏。
+    /// 场景按初值定显隐时用（REQ-UI-094）：切场景，以及当前场景里新登记的页（外来页先被场景藏掉，位置才空出来）。
+    /// 这不是等位：只在调用这一刻看一次位置，之后谁让位都不会把它拽出来。
+    /// </summary>
+    public void ShowIfSeatFree(string id)
     {
-        HideCore(id);
-        _waitingForSeat.Remove(id);
-        ReturnSeatsOf(id);
+        if (!_byId.TryGetValue(id, out var descriptor) || !descriptor.DefaultVisible)
+            return;
+        RestoreLayoutFromMaximized();
+        using (Suppress())
+        {
+            EnsureRegistered(id);
+            var anchorable = FindRequiredAnchorable(id);
+            RevealAnchorable(anchorable, id, takeSeat: false);
+            if (anchorable.Parent is ILayoutContainer pane &&
+                PagesIn(pane).Any(other => !ReferenceEquals(other, anchorable)))
+            {
+                HidePage(anchorable);
+            }
+
+            EnsureCentralWorkspace();
+        }
     }
 
-    private void HideCore(string id)
+    /// <summary>明确隐藏一页。它的位置就空着，不会有别的页自己补进来。</summary>
+    public void Hide(string id)
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
-        RememberCurrentPlacement(id);
         using (Suppress())
         {
-            var document = FindCenterDocument(id);
-            if (document != null)
-            {
-                // 1.20.0 起命令集不再是主文档区的锚点（REQ-UI-095），与别的页一样可以隐藏。
-                DetachDocument(document);
-                _hiddenCenterIds.Add(id);
-                ScheduleCenterDocumentPresentation();
-            }
-            else
-            {
-                var anchorable = FindRequiredAnchorable(id);
-                var wasCenter = IsHostedInDocumentPane(anchorable);
-                if (!anchorable.IsHidden)
-                    anchorable.Hide();
-                if (wasCenter)
-                    _hiddenCenterIds.Add(id);
-            }
+            HidePage(FindRequiredAnchorable(id));
             EnsureCentralWorkspace();
         }
     }
@@ -321,21 +305,11 @@ internal sealed partial class DockingHost : IDockingService
         EnsureRegistered(id);
         using (Suppress())
         {
-            var document = FindCenterDocument(id);
-            if (document != null)
-            {
-                // 命令集也能浮出：Ctrl 标签态把它拖出去、没落到停靠点，它就隐藏（REQ-UI-098）。
-                ShowCenterDocument(document);
-                if (!IsFloating(document))
-                    document.Float();
-            }
-            else
-            {
-                var anchorable = FindRequiredAnchorable(id);
-                RevealAnchorable(anchorable, id);
-                if (!IsFloating(anchorable))
-                    anchorable.Float();
-            }
+            // 浮出不经过任何一格：藏着的页露面时不顶掉它原来位置上的页（REQ-UI-100）。
+            var anchorable = FindRequiredAnchorable(id);
+            RevealAnchorable(anchorable, id, takeSeat: false);
+            if (!IsFloating(anchorable))
+                anchorable.Float();
             EnsureCentralWorkspace();
         }
     }
@@ -346,11 +320,8 @@ internal sealed partial class DockingHost : IDockingService
         EnsureRegistered(id);
         using (Suppress())
         {
-            if (FindCenterDocument(id) != null)
-                throw new InvalidOperationException($"窗口 {id} 是文档页，不支持自动隐藏");
-
             var anchorable = FindRequiredAnchorable(id);
-            RevealAnchorable(anchorable, id);
+            RevealAnchorable(anchorable, id, takeSeat: false);
             anchorable.ToggleAutoHide();
             EnsureCentralWorkspace();
         }
@@ -366,42 +337,15 @@ internal sealed partial class DockingHost : IDockingService
         {
             throw new ArgumentOutOfRangeException(nameof(ratio), "比例须严格位于 (0,1)");
         }
-        _pendingTabTargets.Remove(id);
-        _waitingForSeat.Remove(id);
         using (Suppress())
         {
-            // 明确停到某处的页就是露面的页：它若曾被顶栏顶掉，那笔「中央区隐藏」得先勾掉。
+            // 明确停到某处的页就是露面的页，那一格原来那一页被藏起来（REQ-UI-100）。
             _hiddenCenterIds.Remove(id);
-            if (side == DockSide.Center ||
-                side == DockSide.Tab && targetId != null && IsCenterContent(targetId))
-            {
-                if (UsesDocumentIdentity(descriptor))
-                {
-                    ShowCenterDocument(MoveToCenterDocument(descriptor));
-                }
-                else
-                {
-                    ShowAnchorableAsCenterPage(MoveToAnchorable(descriptor));
-                }
-            }
-            else
-            {
-                if (IsPrimaryCommandDocument(id))
-                {
-                    _log.Warn(LayoutSource, "命令集是文档身份，只能停靠在中央主区");
-                    ShowCenterDocument(MoveToCenterDocument(descriptor));
-                }
-                else
-                {
-                    var anchorable = MoveToAnchorable(descriptor);
-                    PlaceAtSide(anchorable, side, ratio ?? descriptor.DefaultRatio, targetId);
-                    anchorable.IsSelected = true;
-                }
-            }
+            var anchorable = MoveToAnchorable(descriptor);
+            PlaceAtSide(anchorable, side, ratio ?? descriptor.DefaultRatio, targetId, takeSeat: true);
+            anchorable.IsSelected = true;
             EnsureCentralWorkspace();
         }
-
-        EnforceSinglePagePerPane(id);
     }
 
     public void SetRatio(string id, double ratio)
@@ -409,12 +353,6 @@ internal sealed partial class DockingHost : IDockingService
         RestoreLayoutFromMaximized();
         if (!double.IsFinite(ratio) || ratio is <= 0 or >= 1)
             throw new ArgumentOutOfRangeException(nameof(ratio), "比例须严格位于 (0,1)");
-
-        if (FindCenterDocument(id) != null)
-        {
-            _log.Warn(LayoutSource, $"窗口 {id} 位于中央主区，不支持比例调整");
-            return;
-        }
 
         var a = FindRequiredAnchorable(id);
         var side = DetectSide(a);
@@ -431,35 +369,15 @@ internal sealed partial class DockingHost : IDockingService
         }
     }
 
+    /// <summary>把一页摆回登记时的默认位置并露面，那一格原来那一页被藏起来。</summary>
     public void ResetWindow(string id)
-    {
-        _waitingForSeat.Remove(id);
-        ResetWindowCore(id);
-        EnforceSinglePagePerPane(id);
-    }
-
-    private void ResetWindowCore(string id)
     {
         RestoreLayoutFromMaximized();
         var d = _byId[id];
         using (Suppress())
         {
             _hiddenCenterIds.Remove(id);
-            if (UsesDocumentIdentity(d))
-            {
-                ShowCenterDocument(MoveToCenterDocument(d));
-            }
-            else if (d.DefaultSide == DockSide.Tab && d.DefaultTabTarget != null &&
-                     FindCenterDocument(d.DefaultTabTarget) != null)
-            {
-                ShowAnchorableAsCenterPage(MoveToAnchorable(d));
-            }
-            else
-            {
-                var anchorable = MoveToAnchorable(d);
-                PlaceAtSide(anchorable, d.DefaultSide, d.DefaultRatio, d.DefaultTabTarget);
-                anchorable.IsSelected = true;
-            }
+            PlaceAtDefault(MoveToAnchorable(d), takeSeat: true);
             EnsureCentralWorkspace();
         }
     }
@@ -467,7 +385,6 @@ internal sealed partial class DockingHost : IDockingService
     public void ResetLayout()
     {
         RestoreLayoutFromMaximized();
-        _waitingForSeat.Clear();
         using (Suppress())
         {
             BuildDefaultLayout();
@@ -479,7 +396,6 @@ internal sealed partial class DockingHost : IDockingService
                 _ratios[d.Id] = NormalizeRatio(d.DefaultRatio, 0.25);
         }
 
-        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -511,7 +427,6 @@ internal sealed partial class DockingHost : IDockingService
             return false;
         }
 
-        _waitingForSeat.Clear();
         try
         {
             using (Suppress())
@@ -526,7 +441,7 @@ internal sealed partial class DockingHost : IDockingService
                 _seedRatiosFromLayout = true;
             }
 
-            EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
+            EvictExtraPages();
             RebaseSoon();
             return true;
         }
@@ -559,74 +474,30 @@ internal sealed partial class DockingHost : IDockingService
 
         RestoreLayoutFromMaximized();
 
-        // 新登记的中央页不抢顶栏：主文档区里已经有页就留原来那一页，空着才轮到它。
-        // 不看位置台账里的「上次选中」：台账是全局的、不分场景，拿它去抢会把当前场景的页顶掉，
-        // 随后场景又把这个外来页藏起来，顶栏落得一页不剩（1.20.0 首次热装真机撞到）。
-        var previousCenter = CurrentCenterId();
+        // 新登记的页不抢位（REQ-UI-100）：它的位置上已经有页，就留原来那一页，新来的藏着——
+        // 不记账、不等位，要它露面走右栏常用页面或 aurora.ui.show。
+        // 不看位置台账里的「上次选中」：台账是全局的、不分场景，拿它去抢会把当前场景的页顶掉
+        // （1.20.0 首次热装真机撞到）。
         using (Suppress())
         {
             _descriptors.Add(descriptor);
             _byId.Add(descriptor.Id, descriptor);
             _owners[descriptor.Id] = owner;
             var placement = TakeOrphanPlacement(descriptor.Id);
-            var side = placement?.Side ?? descriptor.DefaultSide;
-            var target = placement?.TabTarget ?? descriptor.DefaultTabTarget;
             var hidden = placement?.Hidden ??
                          (_hiddenCenterIds.Contains(descriptor.Id) || !descriptor.DefaultVisible);
-            if (side == DockSide.Center ||
-                side == DockSide.Tab && IsCenterTabTarget(target))
-            {
-                var select = placement?.Selected ?? true;
-                if (UsesDocumentIdentity(descriptor))
-                {
-                    var document = MoveToCenterDocument(descriptor);
-                    if (hidden)
-                    {
-                        DetachDocument(document);
-                        _hiddenCenterIds.Add(descriptor.Id);
-                    }
-                    else
-                    {
-                        ShowCenterDocument(document, placement?.CenterIndex, select);
-                    }
-                }
-                else
-                {
-                    var anchorable = MoveToAnchorable(descriptor);
-                    ShowAnchorableAsCenterPage(anchorable, placement?.CenterIndex, select);
-                    if (hidden)
-                        anchorable.Hide();
-                }
-            }
-            else
-            {
-                var anchorable = MoveToAnchorable(descriptor);
-                var targetPending = side == DockSide.Tab && target != null &&
-                                    !IsCenterTabTarget(target) &&
-                                    FindAnchorable(target)?.Parent is not LayoutAnchorablePane;
-                if (targetPending)
-                {
-                    _pendingTabTargets[descriptor.Id] = target!;
-                    _log.Info(LayoutSource, $"窗口 {descriptor.Id} 的标签组目标 {target} 尚未注册，暂时右侧停靠");
-                }
-                PlaceAtSide(
-                    anchorable,
-                    targetPending ? DockSide.Right : side,
-                    placement?.Ratio ?? descriptor.DefaultRatio,
-                    targetPending ? null : target);
-                if (hidden)
-                    anchorable.Hide();
-            }
+            var anchorable = MoveToAnchorable(descriptor);
+            PlaceAtSide(
+                anchorable,
+                placement?.Side ?? descriptor.DefaultSide,
+                placement?.Ratio ?? descriptor.DefaultRatio,
+                placement?.TabTarget ?? descriptor.DefaultTabTarget,
+                takeSeat: false);
+            if (hidden)
+                HidePage(anchorable);
             EnsureCentralWorkspace();
-            ResolvePendingTabTargets(descriptor.Id);
         }
 
-        // 侧边、底边同理（REQ-UI-100）：新登记的页落进一格已经有页的窗格，留原来那一页，新来的藏着等位。
-        foreach (var (hidden, kept) in EnforceSinglePagePerPane(previousCenter, newcomersWin: false))
-        {
-            if (hidden.Equals(descriptor.Id, StringComparison.OrdinalIgnoreCase))
-                _waitingForSeat[hidden] = kept;
-        }
         ScheduleReapplyRatios();
         WindowsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -645,15 +516,6 @@ internal sealed partial class DockingHost : IDockingService
                 Detach(anchorable);
                 anchorable.Content = null;
             }
-            var document = FindCenterDocument(id);
-            if (document != null)
-            {
-                DetachDocument(document);
-                document.Content = null;
-                _centerDocuments.Remove(id);
-                _hiddenCenterIds.Remove(id);
-                ScheduleCenterDocumentPresentation();
-            }
 
             _descriptors.Remove(descriptor);
             _byId.Remove(id);
@@ -661,16 +523,7 @@ internal sealed partial class DockingHost : IDockingService
             _baseline.Remove(id);
             _preserveDefaultRatioOnSeed.Remove(id);
             _owners.Remove(id);
-            _pendingTabTargets.Remove(id);
-            _pagePanes.Remove(id);
-            _waitingForSeat.Remove(id);
-            foreach (var waiting in _waitingForSeat
-                         .Where(pair => pair.Value.Equals(id, StringComparison.OrdinalIgnoreCase))
-                         .Select(pair => pair.Key)
-                         .ToArray())
-            {
-                _waitingForSeat.Remove(waiting);
-            }
+            _hiddenCenterIds.Remove(id);
             if (_contents.Remove(id, out var content))
                 TryDispose(content, id);
             _manager.Layout.CollectGarbage();
@@ -752,7 +605,7 @@ internal sealed partial class DockingHost : IDockingService
             _seedRatiosFromLayout = true;
         }
 
-        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
+        EvictExtraPages();
         WindowsChanged?.Invoke(this, EventArgs.Empty);
         RebaseSoon();
     }
@@ -824,13 +677,10 @@ internal sealed partial class DockingHost : IDockingService
             if (cur.Floating || cur.Side == null)
                 continue;
 
-            var dockChanged = was.Floating || was.Side != cur.Side ||
-                              !string.Equals(was.TabTarget, cur.TabTarget, StringComparison.OrdinalIgnoreCase);
+            var dockChanged = was.Floating || was.Side != cur.Side;
             if (dockChanged)
             {
-                Emit(cur.TabTarget != null
-                    ? $"aurora.ui.dock name={d.Id} pos=tab target={cur.TabTarget}"
-                    : cur.Side == DockSide.Center
+                Emit(cur.Side == DockSide.Center
                         ? $"aurora.ui.dock name={d.Id} pos=center"
                         : $"aurora.ui.dock name={d.Id} pos={SideText(cur.Side.Value)} ratio={FormatRatio(cur.Ratio)}");
             }
@@ -879,7 +729,11 @@ internal sealed partial class DockingHost : IDockingService
     private void RebaseSoon()
         => _manager.Dispatcher.BeginInvoke(
             DispatcherPriority.ApplicationIdle, // 渲染完成后再取快照,保证比例已可测量
-            () => _baseline = ComputeAllStates());
+            () =>
+            {
+                _baseline = ComputeAllStates();
+                RecordFloatingPages();
+            });
 
     private sealed class SuppressScope : IDisposable
     {
@@ -927,8 +781,7 @@ internal sealed partial class DockingHost : IDockingService
         DockSide.Right => "right",
         DockSide.Top => "top",
         DockSide.Bottom => "bottom",
-        DockSide.Center => "center",
-        _ => "tab",
+        _ => "center",
     };
 
     private static double NormalizeRatio(double ratio, double fallback)

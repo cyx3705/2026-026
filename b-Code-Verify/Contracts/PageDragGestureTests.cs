@@ -2,13 +2,12 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using HistoryAurora.Shell.Base.Docking;
-using HistoryAurora.Shell.Composition;
 using Xunit;
 using HistoryAurora.Shell.Base;
 
 namespace HistoryAurora.Verify;
 
-public sealed class ShellTopBarGestureTests
+public sealed class PageDragGestureTests
 {
     [Fact]
     public void DockingDragSessionAllowsOnlyTheDeterministicLifecycle()
@@ -23,7 +22,7 @@ public sealed class ShellTopBarGestureTests
                 new Point(12, 8),
                 "modules",
                 null,
-                "tab:modules",
+                "label:modules",
                 false,
                 false);
 
@@ -49,7 +48,7 @@ public sealed class ShellTopBarGestureTests
                 new Point(12, 8),
                 "modules",
                 null,
-                "tab:modules",
+                "label:modules",
                 false,
                 false);
 
@@ -91,7 +90,7 @@ public sealed class ShellTopBarGestureTests
     {
         var root = FindSourceRoot();
         var coordinator = File.ReadAllText(
-            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "ShellTopBarCoordinator.cs"));
+            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "PageDragCoordinator.cs"));
         var driver = File.ReadAllText(
             Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "Docking", "WindowDragDriver.cs"));
 
@@ -103,16 +102,29 @@ public sealed class ShellTopBarGestureTests
         Assert.Contains("ReleaseCapture(", driver, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// REQ-UI-101：顶栏整个删掉。拖动协调器里不再有页签按下、双击专注、页头拖窗口、
+    /// AvalonDock 原生页签拖动这几条路——页面只剩 Ctrl 标签与右栏胶囊两种拖法。
+    /// </summary>
     [Fact]
-    public void TopBarUsesOneThresholdPathWithoutHoldTimerOrSecondTabRoute()
+    public void TopBarGesturesAreGoneFromTheDragCoordinator()
     {
         var root = FindSourceRoot();
-        var coordinator = File.ReadAllText(
-            Path.Combine(root, "b-Code-Studio", "Shell", "1-Base", "ShellTopBarCoordinator.cs"));
+        var baseDir = Path.Combine(root, "b-Code-Studio", "Shell", "1-Base");
+        Assert.False(File.Exists(Path.Combine(baseDir, "ShellTopBarCoordinator.cs")));
+        Assert.False(File.Exists(Path.Combine(baseDir, "ShellTopBarCoordinator.NativeTabDrag.cs")));
 
-        Assert.DoesNotContain("DispatcherTimer", coordinator, StringComparison.Ordinal);
-        Assert.DoesNotContain("_hostDrag", coordinator, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (e.Handled)\n            return false;", coordinator, StringComparison.Ordinal);
+        var coordinator = File.ReadAllText(Path.Combine(baseDir, "PageDragCoordinator.cs"))
+                          + File.ReadAllText(Path.Combine(baseDir, "PageDragCoordinator.VisualTree.cs"));
+        foreach (var gone in new[]
+                 {
+                     "DoubleClick", "aurora.ui.max", "PreviewMouseLeftButtonDownEvent", "ShellPaneHeader",
+                     "_isMouseDown", "HandleDockTab", "HandleMain", "DispatcherTimer",
+                 })
+        {
+            Assert.DoesNotContain(gone, coordinator, StringComparison.Ordinal);
+        }
+
         Assert.Contains("FloatingWindowGeometry.GetCursorPosition()", coordinator, StringComparison.Ordinal);
     }
 
@@ -122,97 +134,16 @@ public sealed class ShellTopBarGestureTests
         var startScreen = new Point(1_000, 700);
         var currentScreen = new Point(1_014, 700);
 
-        Assert.True(ShellTopBarCoordinator.HasReachedDragThreshold(
+        Assert.True(PageDragCoordinator.HasReachedDragThreshold(
             startScreen,
             currentScreen,
             horizontalThreshold: 4,
             verticalThreshold: 4));
-        Assert.False(ShellTopBarCoordinator.HasReachedDragThreshold(
+        Assert.False(PageDragCoordinator.HasReachedDragThreshold(
             startScreen,
             new Point(1_003.99, 700),
             horizontalThreshold: 4,
             verticalThreshold: 4));
-    }
-
-    [Theory]
-    [InlineData(true, true, true)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(false, false, false)]
-    public void FloatingTabHeaderCanStartWindowDragOnlyInsideAFloatingWindow(
-        bool isFloatingWindow,
-        bool sourceIsTabItem,
-        bool expected)
-        => Assert.Equal(
-            expected,
-            ShellTopBarCoordinator.ShouldAllowFloatingTabWindowDrag(
-                isFloatingWindow,
-                sourceIsTabItem));
-
-    [Theory]
-    [InlineData(false, true, false, false)]
-    [InlineData(false, false, false, true)]
-    [InlineData(true, true, false, true)]
-    [InlineData(true, false, false, true)]
-    [InlineData(true, true, true, false)]
-    [InlineData(true, false, true, false)]
-    public void PaneHeaderControlsNeverBecomeDragGestures(
-        bool isFloatingWindow,
-        bool sourceIsTabItem,
-        bool sourceIsInteractiveControl,
-        bool expected)
-        => Assert.Equal(
-            expected,
-            ShellTopBarCoordinator.ShouldHandlePaneHeaderInput(
-                isFloatingWindow,
-                sourceIsTabItem,
-                sourceIsInteractiveControl));
-
-    [Fact]
-    public void FastDoubleClickAcceptsExactlyTwoHundredFiftyMilliseconds()
-    {
-        var gesture = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-
-        Assert.False(gesture.RegisterPress("header:console", 1_000, new Point(10, 10), 4, 4));
-        Assert.True(gesture.RegisterPress("header:console", 1_250, new Point(14, 14), 4, 4));
-    }
-
-    [Fact]
-    public void FastDoubleClickRejectsTwoHundredFiftyOneMilliseconds()
-    {
-        var gesture = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-
-        Assert.False(gesture.RegisterPress("header:console", 1_000, new Point(10, 10), 4, 4));
-        Assert.False(gesture.RegisterPress("header:console", 1_251, new Point(10, 10), 4, 4));
-    }
-
-    [Fact]
-    public void FastDoubleClickRequiresTheSameTarget()
-    {
-        var gesture = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-
-        Assert.False(gesture.RegisterPress("header:console", 1_000, new Point(10, 10), 4, 4));
-        Assert.False(gesture.RegisterPress("header:modules", 1_100, new Point(10, 10), 4, 4));
-        Assert.True(gesture.RegisterPress("header:modules", 1_200, new Point(10, 10), 4, 4));
-    }
-
-    [Fact]
-    public void FastDoubleClickRejectsMovementOutsideTheConfiguredRange()
-    {
-        var gesture = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-
-        Assert.False(gesture.RegisterPress("header:console", 1_000, new Point(10, 10), 4, 4));
-        Assert.False(gesture.RegisterPress("header:console", 1_100, new Point(14.1, 10), 4, 4));
-    }
-
-    [Fact]
-    public void DraggingCancelsThePendingDoubleClick()
-    {
-        var gesture = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-
-        Assert.False(gesture.RegisterPress("header:console", 1_000, new Point(10, 10), 4, 4));
-        gesture.Cancel("header:console");
-        Assert.False(gesture.RegisterPress("header:console", 1_100, new Point(10, 10), 4, 4));
     }
 
     [Fact]
@@ -220,26 +151,13 @@ public sealed class ShellTopBarGestureTests
     {
         var start = new Point(10, 10);
 
-        Assert.False(ShellTopBarCoordinator.HasReachedDragThreshold(
+        Assert.False(PageDragCoordinator.HasReachedDragThreshold(
             start, new Point(17.99, 10), 4, 4, multiplier: 2));
-        Assert.True(ShellTopBarCoordinator.HasReachedDragThreshold(
+        Assert.True(PageDragCoordinator.HasReachedDragThreshold(
             start, new Point(18, 10), 4, 4, multiplier: 2));
-        Assert.True(ShellTopBarCoordinator.HasReachedDragThreshold(
+        Assert.True(PageDragCoordinator.HasReachedDragThreshold(
             start, new Point(10, 18), 4, 4, multiplier: 2));
     }
-
-    [Theory]
-    [InlineData(true, WindowState.Normal, false)]
-    [InlineData(true, WindowState.Maximized, true)]
-    [InlineData(false, WindowState.Normal, true)]
-    [InlineData(false, WindowState.Maximized, true)]
-    public void OnlyNormalMainWindowSkipsTheTopBarHold(
-        bool isMainWindow,
-        WindowState state,
-        bool expected)
-        => Assert.Equal(
-            expected,
-            ShellTopBarCoordinator.ShouldDelayHostDrag(isMainWindow, state));
 
     [Fact]
     public void DelayedDragRejectsOneHundredNineteenMilliseconds()
@@ -297,21 +215,6 @@ public sealed class ShellTopBarGestureTests
         Assert.False(gesture.TryActivate(1_120));
     }
 
-    [Fact]
-    public void MovementBeforeTheHoldExpiresInvalidatesThePreviousClick()
-    {
-        var doubleClick = new FastDoubleClickGesture(TimeSpan.FromMilliseconds(250));
-        var drag = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        Assert.False(doubleClick.RegisterPress("header:main", 1_000, new Point(10, 10), 4, 4));
-        drag.Begin(1_000, new Point(10, 10), 4, 4);
-
-        Assert.False(drag.Update(1_050, new Point(18, 10)));
-        Assert.True(drag.HasReachedThreshold);
-        doubleClick.Cancel("header:main");
-
-        Assert.False(doubleClick.RegisterPress("header:main", 1_100, new Point(10, 10), 4, 4));
-    }
-
     [Theory]
     [InlineData(WindowState.Normal, WindowState.Maximized)]
     [InlineData(WindowState.Maximized, WindowState.Normal)]
@@ -319,7 +222,7 @@ public sealed class ShellTopBarGestureTests
     public void FloatingWindowToggleHasOneDeterministicTarget(
         WindowState current,
         WindowState expected)
-        => Assert.Equal(expected, ShellTopBarCoordinator.GetToggledWindowState(current));
+        => Assert.Equal(expected, PageDragCoordinator.GetToggledWindowState(current));
 
     [Theory]
     [InlineData(96, 720, 520)]
@@ -343,7 +246,7 @@ public sealed class ShellTopBarGestureTests
     }
 
     [Fact]
-    public void FloatingPlacementKeepsPointerAtTheOriginalTabAnchor()
+    public void FloatingPlacementKeepsPointerAtTheOriginalAnchor()
     {
         var placement = FloatingWindowGeometry.CalculatePlacement(
             new Point(1_000, 500),

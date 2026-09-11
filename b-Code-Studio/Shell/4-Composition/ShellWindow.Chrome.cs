@@ -1,23 +1,12 @@
-using System.ComponentModel;
-using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shell;
 using System.Windows.Threading;
-using HistoryVulcan.Core.Commands;
-using HistoryAurora.Shell.Base.Docking;
-using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
-using HistoryAurora.Shell.HostedPages.Console;
-using HistoryAurora.Shell.Components.Themes;
-using AvalonDock.Controls;
-using AvalonDock.Layout;
-using AvalonDock.Themes;
 using HistoryAurora.Shell.Base;
+using HistoryAurora.Shell.Components.Themes;
+using HistoryVulcan.Core.Logging;
+using AvalonDock.Themes;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -96,8 +85,7 @@ internal partial class ShellWindow
     /// 主题按**实例**下发（REQ-UI-029），这里直接拿那一份，不再按 URI 重新解析。
     /// "按 URI 重解析"仓里原本有两处：AvalonDock 给覆盖窗的那处，和这里。前者让覆盖窗
     /// 拿不到画刷、蓝色方位指示一个像素都不画；后者一旦失效，窗格样式整个退回
-    /// AvalonDock 默认外观——页头布局跟着变，连按钮位置都不一样了。改主题下发方式时
-    /// 只改了前一处，后一处当场挂掉 9 条窗格契约测试。**同一个毛病要一次找全。**
+    /// AvalonDock 默认外观。**同一个毛病要一次找全。**
     /// </summary>
     private void LoadThemeResources()
     {
@@ -119,10 +107,10 @@ internal partial class ShellWindow
     }
 
     /// <summary>
-    /// 窗格外观下发(W-04 标签条置顶 + UI-01 卡片化 + UI-04 专注形态)。
+    /// 窗格外观下发(UI-01 卡片化 + UI-04 专注形态)。1.20.2 起窗格没有页签行（REQ-UI-101，顶栏删除）。
     /// 必须经 DockingManager.AnchorablePaneControlStyle / DocumentPaneControlStyle 属性下发:
     /// 主题字典里的隐式 Style 不会命中窗格控件,浮动窗口也走这两个属性。
-    /// 以主题内置窗格样式为基底(继承 ItemContainerStyle 等),只覆盖标签位置与模板。
+    /// 以主题内置窗格样式为基底(继承 ItemContainerStyle 等),只覆盖模板。
     /// v5 迁移注意:基底样式的资源键随主题版本变化,需同步调整。
     /// </summary>
     private void ApplyPaneStyles(bool chromeless)
@@ -147,7 +135,7 @@ internal partial class ShellWindow
             DockManager.DocumentPaneControlStyle = documentStyle;
         }
 
-        ScheduleChromeReserve();
+        ScheduleFloatingTheme();
     }
 
     private Style? BuildPaneStyle(
@@ -172,8 +160,8 @@ internal partial class ShellWindow
         style.Setters.Add(new Setter(Control.PaddingProperty, default(Thickness)));
         style.Setters.Add(new Setter(Control.TemplateProperty, template));
 
-        // 窗格样式同时应用到 AvalonDock 的独立内容宿主。事件必须随样式下发，
-        // 不能只扫描主 DockingManager 的视觉树，否则浮窗页头收不到拖动输入。
+        // 窗格样式同时应用到 AvalonDock 的独立内容宿主。Ctrl 标签态的按下与拖动必须随样式下发，
+        // 不能只扫描主 DockingManager 的视觉树，否则浮窗里的页名标签收不到输入。
         style.Setters.Add(new EventSetter(
             UIElement.PreviewMouseLeftButtonDownEvent,
             new MouseButtonEventHandler(OnPanePreviewMouseLeftButtonDown))
@@ -198,11 +186,8 @@ internal partial class ShellWindow
         {
             HandledEventsToo = true,
         });
-        style.Setters.Add(new EventSetter(
-            FrameworkElement.LoadedEvent,
-            new RoutedEventHandler(OnPaneLoaded)));
 
-        // UI-06:页签容器样式随窗格样式下发(同心圆角 + 主题色选中态)
+        // 页签行不画了，但页签容器仍要生成：TabControl 靠它产出 SelectedContent。
         if (FindInDictionary(_themeResources, tabItemStyleKey) is Style tabStyle)
             style.Setters.Add(new Setter(TabControl.ItemContainerStyleProperty, tabStyle));
         else
@@ -212,195 +197,29 @@ internal partial class ShellWindow
     }
 
     private void OnPanePreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        => _topBar.HandlePaneMouseLeftButtonDown(sender, e);
+        => _pageDrag.HandlePaneMouseLeftButtonDown(sender, e);
 
     private void OnPanePreviewMouseMove(object sender, MouseEventArgs e)
-        => _topBar.HandlePaneMouseMove(sender, e);
+        => _pageDrag.HandlePaneMouseMove(sender, e);
 
     private void OnPanePreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => _topBar.HandlePaneMouseLeftButtonUp(sender, e);
+        => _pageDrag.HandlePaneMouseLeftButtonUp(sender, e);
 
     private void OnPaneLostMouseCapture(object sender, MouseEventArgs e)
-        => _topBar.HandlePaneLostMouseCapture(sender, e);
+        => _pageDrag.HandlePaneLostMouseCapture(sender, e);
 
-    private void OnPaneLoaded(object sender, RoutedEventArgs e)
+    /// <summary>R4-3:浮动窗口是布局后才建出来的,换完窗格样式后补一次主题最稳妥。</summary>
+    private void ScheduleFloatingTheme()
     {
-        if (sender is UIElement pane)
-            _topBar.AttachPaneCommandBinding(pane);
-    }
-
-    // ---------------------------------------------------------------- 顶部按钮组占位
-
-    private void ScheduleChromeReserve()
-    {
-        if (_reservePending || _closing)
+        if (_floatingThemePending || _closing)
             return;
-        _reservePending = true;
+        _floatingThemePending = true;
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
-            _reservePending = false;
-            if (_closing)
-                return;
-            PlaceChromeBar();
-            ReserveSpaceForChromeBar();
-
-            // R4-3:浮动窗口是布局后才建出来的,在这里补主题最稳妥
-            ApplyThemeToFloatingWindows();
+            _floatingThemePending = false;
+            if (!_closing)
+                ApplyThemeToFloatingWindows();
         });
-    }
-
-    /// <summary>
-    /// 窗口按钮组与页签同处一行(3.1 修订),因此必须把最右上那一排页签的右边距撑开,
-    /// 否则页签会滑到按钮底下点不到。专注态没有页签行,不需要占位。
-    /// </summary>
-    private void ReserveSpaceForChromeBar()
-    {
-        if (!IsLoaded || ChromeBar.ActualWidth <= 0)
-            return;
-
-        // ChromeBar 已经属于中央文档窗格时，工具窗格不需要再为它让位。
-        // 仅在布局尚未生成中央宿主的回退阶段保留旧的右边距逻辑。
-        var reserve = _chromeHost == null
-            ? ChromeBar.ActualWidth
-            : 0;
-        foreach (var header in FindDescendants<Grid>(DockManager)
-                     .Where(grid => grid.Tag as string == PaneHeaderTag))
-        {
-            var wanted = IsAtWindowTopRight(header) ? reserve : 0;
-            var margin = header.Margin;
-            var target = new Thickness(margin.Left, margin.Top, BaseTabStripRight + wanted, margin.Bottom);
-            if (Math.Abs(margin.Right - target.Right) > 0.5)
-                header.Margin = target;
-        }
-    }
-
-    /// <summary>
-    /// 窗口控制组的落点（REQ-UI-099）：平时在右栏顶部——仍是整个窗体的右上角；
-    /// 专注态右栏让位，挂到专注页的页头上。两处都找不到时回退到停靠区右上角。
-    ///
-    /// 1.19.0 及以前它挂在主文档区的页签行上，命令集因此得常驻主文档区当锚点；
-    /// 搬走之后那条约束解开了（REQ-UI-095）。主文档区的页签行照旧能拖动窗口——
-    /// 顶栏这一轮只转移、不删除。浮窗是独立 Window，不会获得这组按钮。
-    /// </summary>
-    private void PlaceChromeBar()
-    {
-        if (!IsLoaded || _closing)
-            return;
-
-        var focused = _docking.MaximizedId != null;
-        ChromeBar.Visibility = Visibility.Visible;
-        SetChromeDragSurface(FindMainHeaderSurface(focused));
-
-        var host = focused
-            ? FindDescendants<ContentControl>(DockManager)
-                .FirstOrDefault(control => control.IsVisible && Equals(control.Tag, "FocusedShellChromeHost"))
-            : NavChromeHost;
-        if (host == null)
-        {
-            if (_chromeHost != null)
-            {
-                _chromeHost.Content = null;
-                _chromeHost = null;
-            }
-
-            if (!ReferenceEquals(ChromeBar.Parent, RootGrid))
-            {
-                DetachChromeBar();
-                RootGrid.Children.Add(ChromeBar);
-            }
-            return;
-        }
-
-        if (ReferenceEquals(_chromeHost, host) && ReferenceEquals(host.Content, ChromeBar))
-            return;
-
-        DetachChromeBar();
-        host.Content = ChromeBar;
-        _chromeHost = host;
-    }
-
-    private void DetachChromeBar()
-    {
-        switch (ChromeBar.Parent)
-        {
-            case ContentControl owner:
-                owner.Content = null;
-                break;
-            case Panel panel:
-                panel.Children.Remove(ChromeBar);
-                break;
-        }
-    }
-
-    /// <summary>主窗口的拖动面：常规态是主文档区的页签行，专注态是专注页的页头。</summary>
-    private FrameworkElement? FindMainHeaderSurface(bool focused)
-    {
-        var anchor = FindDescendants<ContentControl>(DockManager)
-            .FirstOrDefault(control => control.IsVisible &&
-                Equals(control.Tag, focused ? "FocusedShellChromeHost" : "ShellChromeHost"));
-        return anchor == null
-            ? null
-            : FindAncestor<FrameworkElement>(
-                anchor,
-                element => Equals(element.Tag, focused ? "FocusedShellPaneHeader" : "ShellPaneHeader"));
-    }
-
-    private void SetChromeDragSurface(FrameworkElement? surface)
-    {
-        if (ReferenceEquals(_chromeDragSurface, surface))
-            return;
-
-        if (_chromeDragSurface != null)
-        {
-            _chromeDragSurface.PreviewMouseLeftButtonDown -= OnMainChromeMouseLeftButtonDown;
-            _chromeDragSurface.PreviewMouseMove -= OnMainChromeMouseMove;
-            _chromeDragSurface.PreviewMouseLeftButtonUp -= OnMainChromeMouseLeftButtonUp;
-            _chromeDragSurface.LostMouseCapture -= OnMainChromeLostMouseCapture;
-        }
-        _chromeDragSurface = surface;
-        if (_chromeDragSurface != null)
-        {
-            _chromeDragSurface.PreviewMouseLeftButtonDown += OnMainChromeMouseLeftButtonDown;
-            _chromeDragSurface.PreviewMouseMove += OnMainChromeMouseMove;
-            _chromeDragSurface.PreviewMouseLeftButtonUp += OnMainChromeMouseLeftButtonUp;
-            _chromeDragSurface.LostMouseCapture += OnMainChromeLostMouseCapture;
-        }
-        _topBar.Refresh();
-    }
-
-    private void OnMainChromeMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        => _topBar.HandleMainMouseLeftButtonDown(sender, e);
-
-    private void OnMainChromeMouseMove(object sender, MouseEventArgs e)
-        => _topBar.HandleMainMouseMove(sender, e);
-
-    private void OnMainChromeMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => _topBar.HandleMainMouseLeftButtonUp(sender, e);
-
-    private void OnMainChromeLostMouseCapture(object sender, MouseEventArgs e)
-        => _topBar.HandleMainLostMouseCapture(sender, e);
-
-    /// <summary>窗格模板里页签行容器的标记(见 AuroraDocking.xaml)。</summary>
-    private const string PaneHeaderTag = "ShellPaneHeader";
-
-    /// <summary>页签条模板里的右边距基线(Aurora.Space.TabStrip 的右值)。</summary>
-    private const double BaseTabStripRight = 3;
-
-    private bool IsAtWindowTopRight(FrameworkElement panel)
-    {
-        if (!panel.IsVisible || !panel.IsDescendantOf(this))
-            return false;
-        try
-        {
-            var origin = panel.TransformToAncestor(this).Transform(new Point(0, 0));
-            var right = origin.X + panel.ActualWidth;
-            return origin.Y <= ChromeBar.ActualHeight && right >= ActualWidth - ChromeBar.ActualWidth - 8;
-        }
-        catch (InvalidOperationException)
-        {
-            // 元素刚从可视树摘除(拖拽停靠中),下一轮布局会再算一次
-            return false;
-        }
     }
 
     private static IEnumerable<T> FindDescendants<T>(DependencyObject parent)
@@ -417,26 +236,9 @@ internal partial class ShellWindow
         }
     }
 
-    private static T? FindAncestor<T>(DependencyObject source, Func<T, bool>? predicate = null)
-        where T : DependencyObject
-    {
-        for (DependencyObject? current = source; current != null; current = VisualTreeHelper.GetParent(current))
-        {
-            if (current is T match && (predicate == null || predicate(match)))
-                return match;
-        }
-
-        return null;
-    }
-
     // ---------------------------------------------------------------- 专注模式(UI-04)
     //
-    // 页面最大化 = 专注态:窗格去标题条与页签并铺满,顶栏只保留主窗口控制组。
+    // 页面最大化 = 专注态:窗格铺满,右栏(含窗口控制组)照常在右侧。
     // 由 DockingHost.WindowsChanged 驱动 —— MaximizeWindow 与
     // RestoreLayoutFromMaximized 都从那里出口,不需要新增公开 API。
-    //
-    // 原为 /// 文档注释但其后没有任何成员，属于悬空注释（CS1587）。
-    // App 工程不生成文档文件，因此这条一直没被发现；界面回归模块形态后
-    // （模块工程开了 GenerateDocumentationFile）立刻编译失败。
 }
-

@@ -9,28 +9,27 @@ namespace HistoryAurora.Shell.Composition;
 /// <summary>
 /// Ctrl 标签态（REQ-UI-097）。
 ///
-/// 页面拖动不附着在页签上：单独按住 Ctrl 约 0.3 秒，每一格窗格的内容隐去，正中只剩一枚写着页名的标签，
-/// 按住标签拖出去就是一个带蓝色停靠点的浮窗；松开 Ctrl 回到常态。平时按页签只换页。
+/// 页面拖动不附着在页签上（1.20.2 起窗格根本没有页签行）：单独按下 Ctrl，每一格窗格的内容隐去，
+/// 正中只剩一枚写着页名的标签，按住标签拖出去就是一个带蓝色停靠点的浮窗；松开 Ctrl 回到常态。
+/// 1.20.2 删掉了按住 0.3 秒的延迟，按下当拍就进；随后按了别的键（Ctrl+C 之类）立刻退出。
 ///
-/// 1.20.1 起按键**全靠轮询系统按键状态**，不再走 WPF 的键盘事件。1.20.0 经 <c>InputManager</c> 取按下，
-/// 真机上按住 Ctrl 什么都不发生：WPF 只有在 Aurora 的窗口拿着键盘焦点时才收得到按键，
-/// 而用户要拖页面时鼠标停在 Aurora 上、焦点多半还在别的程序里。轮询不挑焦点，
+/// 按键**全靠轮询系统按键状态**，不走 WPF 的键盘事件：WPF 只有在 Aurora 的窗口拿着键盘焦点时
+/// 才收得到按键，而用户要拖页面时鼠标停在 Aurora 上、焦点多半还在别的程序里。轮询不挑焦点，
 /// 只要 Aurora 的主窗体或浮窗在前台、或者鼠标正停在它们上面（<see cref="IsShellUnderUser"/>）。
-/// 何时算「单独按住」交给 <see cref="LabelModeHoldGate"/>。
+/// 何时算「单独按下」交给 <see cref="LabelModeGate"/>。
 ///
 /// 退出同样看轮询：拖动时系统移动循环接管了消息，Ctrl 的抬起不一定送得到任何一个窗口。
 /// 有拖动会话在途时不退——松开 Ctrl 不该掐断正在拖的那一页。
 /// </summary>
 internal partial class ShellWindow
 {
-    private static readonly TimeSpan LabelModeHold = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan LabelModePollInterval = TimeSpan.FromMilliseconds(50);
 
     private const int VirtualKeyControl = 0x11;
     private const int VirtualKeyLeftControl = 0xA2;
     private const int VirtualKeyRightControl = 0xA3;
 
-    private readonly LabelModeHoldGate _labelGate = new(LabelModeHold);
+    private readonly LabelModeGate _labelGate = new();
     private DispatcherTimer? _labelPoll;
     private bool _labelMode;
 
@@ -45,7 +44,7 @@ internal partial class ShellWindow
         _labelPoll.Tick += (_, _) => PollLabelMode();
         Loaded += (_, _) => _labelPoll.Start();
 
-        _topBar.DragFinished += OnLabelDragFinished;
+        _pageDrag.DragFinished += OnLabelDragFinished;
         DockManager.LayoutFloatingWindowControlCreated += OnLabelFloatingWindowCreated;
     }
 
@@ -53,7 +52,7 @@ internal partial class ShellWindow
     {
         _labelPoll?.Stop();
         DockManager.LayoutFloatingWindowControlCreated -= OnLabelFloatingWindowCreated;
-        _topBar.DragFinished -= OnLabelDragFinished;
+        _pageDrag.DragFinished -= OnLabelDragFinished;
     }
 
     private void PollLabelMode()
@@ -62,18 +61,18 @@ internal partial class ShellWindow
             return;
 
         var ctrl = IsKeyDown(VirtualKeyControl);
-        var now = Environment.TickCount64;
         if (_labelMode)
         {
-            // 闸门也要看见这一拍：松开 Ctrl 才算这次按住结束，下次按住才能再进。
-            _labelGate.Update(ctrl, otherKeyDown: false, shellInFront: false, now);
-            if (_labelFollowsCtrl && !ctrl && !_topBar.IsDragging)
+            // 闸门也要看见这一拍：松开 Ctrl 才算这次按下结束，下次按下才能再进。
+            var otherKey = ctrl && IsAnyOtherKeyDown(includeMouse: false);
+            _labelGate.Update(ctrl, otherKey, shellInFront: false);
+            if (_labelFollowsCtrl && (!ctrl || otherKey) && !_pageDrag.IsDragging)
                 SetLabelMode(false);
             return;
         }
 
         // 只有 Ctrl 按着时才去扫别的键、问前台窗口：平时每一拍只读一个键。
-        if (_labelGate.Update(ctrl, ctrl && IsAnyOtherKeyDown(), ctrl && IsShellUnderUser(), now))
+        if (_labelGate.Update(ctrl, ctrl && IsAnyOtherKeyDown(includeMouse: true), ctrl && IsShellUnderUser()))
             SetLabelMode(true, followCtrl: true);
     }
 
@@ -94,7 +93,7 @@ internal partial class ShellWindow
             return;
 
         _labelMode = active;
-        _topBar.LabelMode = active;
+        _pageDrag.LabelMode = active;
         PageLabelMode.SetIsActive(this, active);
         ApplyLabelModeToFloatingWindows();
     }
@@ -152,12 +151,17 @@ internal partial class ShellWindow
         return handles;
     }
 
-    /// <summary>除 Ctrl 以外的任何键或鼠标键此刻按着。</summary>
-    private static bool IsAnyOtherKeyDown()
+    /// <summary>
+    /// 除 Ctrl 以外的任何键此刻按着。<paramref name="includeMouse"/> 为 false 时不看鼠标键——
+    /// 标签态里按住鼠标正是拖动本身，不能因此退出。
+    /// </summary>
+    private static bool IsAnyOtherKeyDown(bool includeMouse)
     {
         for (var key = 0x01; key <= 0xFE; key++)
         {
             if (key is VirtualKeyControl or VirtualKeyLeftControl or VirtualKeyRightControl)
+                continue;
+            if (!includeMouse && key is 0x01 or 0x02 or 0x04 or 0x05 or 0x06)
                 continue;
             if (IsKeyDown(key))
                 return true;

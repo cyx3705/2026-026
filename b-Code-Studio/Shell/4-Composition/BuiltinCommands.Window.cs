@@ -46,7 +46,6 @@ internal static partial class BuiltinCommands
                             DockSide.Top => "停靠·上",
                             DockSide.Bottom => "停靠·下",
                             DockSide.Center => "中央区",
-                            DockSide.Tab => "标签组",
                             _ => "停靠",
                         };
                     var ratio = w.Ratio is { } v and > 0 ? $" {v:P0}" : "";
@@ -169,7 +168,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.ui.dock",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "停靠窗口到指定方位(pos=center 占中央区，pos=tab 并入目标标签组)",
+            Summary = "停靠窗口到指定方位，那个位置原来的页被隐藏(一格一页；pos=center 占中央区)",
             Example = $"aurora.ui.dock name={StandardWindowIds.Console} pos=bottom ratio=0.3",
             RequiresUiThread = true,
             Parameters =
@@ -180,13 +179,12 @@ internal static partial class BuiltinCommands
                     Name = "pos",
                     Description = "停靠方位",
                     Required = true,
-                    AllowedValues = ["left", "right", "top", "bottom", "center", "tab"],
+                    AllowedValues = ["left", "right", "top", "bottom", "center"],
                 },
-                new ParameterSpec { Name = "target", Description = "pos=tab 时,并入哪个窗口所在的标签组" },
                 new ParameterSpec
                 {
                     Name = "ratio",
-                    Description = "四边停靠比例；提供时须严格位于 (0,1)，Center/Tab 不使用",
+                    Description = "四边停靠比例；提供时须严格位于 (0,1)，Center 不使用",
                     Type = ParamType.Double,
                 },
             ],
@@ -202,19 +200,14 @@ internal static partial class BuiltinCommands
                     (!double.IsFinite(ratioValue) || ratioValue is <= 0 or >= 1))
                     return CommandResult.Fail($"ratio 应严格位于 (0,1),实际: {ratio}");
 
-                var target = ctx.GetString("target");
-                if (side == DockSide.Tab && target == null)
-                    return CommandResult.Fail("pos=tab 时必须指定 target=(并入哪个窗口的标签组)");
-
-                s.Docking.Dock(id, side, ratio, target);
+                s.Docking.Dock(id, side, ratio);
                 var where = side switch
                 {
                     DockSide.Left => "左侧",
                     DockSide.Right => "右侧",
                     DockSide.Top => "顶部",
                     DockSide.Bottom => "底部",
-                    DockSide.Center => "中央区",
-                    _ => $"{target} 所在标签组",
+                    _ => "中央区",
                 };
                 var pct = ratio is { } rv ? $"({rv:P0})" : "";
                 return CommandResult.Ok($"{id} 已停靠至{where}{pct}");
@@ -338,8 +331,7 @@ internal static partial class BuiltinCommands
         "right" => DockSide.Right,
         "top" => DockSide.Top,
         "bottom" => DockSide.Bottom,
-        "center" => DockSide.Center,
-        _ => DockSide.Tab,
+        _ => DockSide.Center,
     };
 
     // ---------------------------------------------------------------- layout.*

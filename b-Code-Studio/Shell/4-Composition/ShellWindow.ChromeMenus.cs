@@ -38,14 +38,12 @@ internal partial class ShellWindow
         ChromeBar.Visibility = Visibility.Visible;
 
         // CaptionHeight 永久为零，避免隐藏命中区覆盖任意工具窗格顶部。
-        // 文档页头显式拖动主窗口；工具页头由协调器显式拖出工具浮窗。
+        // 顶栏已删（REQ-UI-101）：拖动主窗口走右栏空白处。
         if (WindowChrome.GetWindowChrome(this) is { } chrome)
             chrome.CaptionHeight = 0;
 
         ApplyPaneStyles(chromeless: focused);
-        ScheduleChromeReserve();
         RefreshCommandCompletionFocus();
-        _topBar.Refresh();
     }
 
     private string FindTitle(string id)

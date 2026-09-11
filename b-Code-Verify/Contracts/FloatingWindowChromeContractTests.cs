@@ -42,32 +42,6 @@ public sealed class FloatingWindowChromeContractTests
         });
     }
 
-    [Fact]
-    public void TabsAndPaneButtonsDeclareTheirChromeExemption()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var docking = DockingDictionary();
-
-            // 这几条豁免眼下不起作用（CaptionHeight 是 0，整窗都是客户区），
-            // 但它们是"页签和窗格按钮必须永远可点"这条意图的落点：
-            // 谁再想动 CaptionHeight，先会看到它们，也就会看到上面那段结论。
-            foreach (var key in new[]
-                     {
-                         "Aurora.Docking.DocumentTabItemStyle",
-                         "Aurora.Docking.AnchorableTabItemStyle",
-                         "Aurora.Docking.PaneActionButton",
-                     })
-            {
-                var style = Assert.IsType<Style>(docking[key]);
-                var setter = Assert.Single(
-                    style.Setters.OfType<Setter>(),
-                    candidate => candidate.Property == WindowChrome.IsHitTestVisibleInChromeProperty);
-                Assert.Equal(true, setter.Value);
-            }
-        });
-    }
-
     /// <summary>
     /// 按 URI 取字典要先有一次 WPF 资源上下文的初始化，否则测试进程里
     /// 第一次解析会报 NotSupportedException（"URI prefix is not recognized"）。

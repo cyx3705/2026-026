@@ -96,8 +96,8 @@ public sealed class SceneContractTests
 
     /// <summary>
     /// 在 Minerva 场景里 Janus 热重载一次，它新登记的页不得挤进来；Minerva 自己的新页照常露面。
-    /// 1.20.1 起两页落进右栏同一格：Janus 的页先占了位子、Minerva 的页登记时不抢位；
-    /// 场景把 Janus 的页藏掉之后，Minerva 的页回到这个位子（REQ-UI-100 的等位）。
+    /// 两页落进右栏同一格：Janus 的页先占了位子、Minerva 的页登记时不抢位（藏着）；场景把 Janus 的页藏掉之后，
+    /// 按场景初值再看一次位置，空着就让 Minerva 的页露面（1.20.2 起这是场景的初值规则，不是等位）。
     /// </summary>
     [Fact]
     public void PagesRegisteredWhileInAnotherSceneStayOutOfSight() => RunScene((host, scenes, _) =>

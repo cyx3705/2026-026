@@ -10,41 +10,22 @@ namespace HistoryAurora.Shell.Base.Docking;
 
 internal sealed partial class DockingHost
 {
-    private sealed record WinState(bool Visible, bool Floating, DockSide? Side, string? TabTarget, double Ratio);
+    private sealed record WinState(bool Visible, bool Floating, DockSide? Side, double Ratio);
 
     private WinState ComputeState(string id)
     {
-        var document = FindCenterDocument(id);
-        if (document != null)
-        {
-            if (_hiddenCenterIds.Contains(id) || document.Parent == null)
-                return new WinState(false, false, null, null, 0);
-            if (IsFloating(document))
-                return new WinState(true, true, null, null, 0);
-            return new WinState(true, false, DockSide.Center, null, 0);
-        }
-
         var a = FindAnchorable(id);
         if (a == null || a.IsHidden || _hiddenCenterIds.Contains(id))
-            return new WinState(false, false, null, null, 0);
+            return new WinState(false, false, null, 0);
 
         if (IsFloating(a))
-            return new WinState(true, true, null, null, 0);
+            return new WinState(true, true, null, 0);
 
         if (IsHostedInDocumentPane(a))
-            return new WinState(true, false, DockSide.Center, null, 0);
+            return new WinState(true, false, DockSide.Center, 0);
 
         var side = DetectSide(a);
-        var tabLeader = side == null
-            ? null
-            : (a.Parent as LayoutAnchorablePane)?.Children
-                .FirstOrDefault(c => c.ContentId != null && _byId.ContainsKey(c.ContentId));
-        // Normalize a tab group as one leader plus followers to keep recovery targets stable.
-        var tabTarget = tabLeader == null || ReferenceEquals(tabLeader, a)
-            ? null
-            : tabLeader.ContentId;
-
-        return new WinState(true, false, side, tabTarget, DetectRatio(a, side));
+        return new WinState(true, false, side, DetectRatio(a, side));
     }
 
     private static bool IsFloating(LayoutContent content)

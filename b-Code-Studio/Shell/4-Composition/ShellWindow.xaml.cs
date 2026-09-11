@@ -96,16 +96,14 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>弹窗与主窗体必须用同一套令牌；独立 Window 自己合并字典，但要知道此刻是哪一套。</summary>
     public bool IsDarkTheme => string.Equals(_theme, ThemeDark, StringComparison.Ordinal);
 
-    // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
+    // 浮窗主题、标签态与右栏胶囊的低频巡检
     private readonly DispatcherTimer _chromeUpkeep;
     private readonly DispatcherTimer _discoverDebounce;
     private readonly CoalescingAsyncWork<PageLoadReport?> _discover = new();
-    private bool _reservePending;
+    private bool _floatingThemePending;
     private bool _closing;
     private bool _allowClose;
-    private ContentControl? _chromeHost;
-    private FrameworkElement? _chromeDragSurface;
-    private readonly ShellTopBarCoordinator _topBar;
+    private readonly PageDragCoordinator _pageDrag;
 
     public ShellWindow(
         ShellConfig config,
@@ -247,15 +245,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             {
                 _ = ShowCommandCatalogForCompletionAsync();
             });
-        _topBar = new ShellTopBarCoordinator(
-            this,
-            DockManager,
-            _docking,
-            _bus,
-            _log,
-            (RoutedCommand)Resources["Aurora.Command.PageAction"],
-            config.EnableMaximizeOnDoubleClick);
-        // 按钮组占位与浮动窗口主题需要在「布局稳定之后」才算得准,但不能挂
+        _pageDrag = new PageDragCoordinator(this, DockManager, _docking, _bus, _log);
+        // 浮动窗口主题需要在「布局稳定之后」才补得准,但不能挂
         // LayoutUpdated:那个事件每帧都发,回调里任何写操作都会再触发一次布局,
         // 直接转成 100% CPU 的死循环(实测)。改为低频巡检 + 幂等写入。
         _chromeUpkeep = new DispatcherTimer(DispatcherPriority.Background)
@@ -266,8 +257,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             if (_closing)
                 return;
-            PlaceChromeBar();
-            ReserveSpaceForChromeBar();
             ApplyThemeToFloatingWindows();
             ApplyLabelModeToFloatingWindows();
 
@@ -303,13 +292,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             }
             UpdateLayoutIndicator();
 
-            // UI-04:页面最大化态与常规态的窗格外观、顶栏形态在此切换。
+            // UI-04:页面最大化态与常规态的窗格外观在此切换。
             // WindowsChanged 是 MaximizeWindow / RestoreLayoutFromMaximized 的共同出口。
             ApplyFocusChrome();
 
             // R4-3:刚拖出来的浮动窗口带的是自己那份浅色令牌,补一次主题
             ApplyThemeToFloatingWindows();
-            _topBar.Refresh();
 
             // 新登记的页不属于当前场景就藏起来（Janus 热重载不能挤进 Minerva 场景）；
             // 右栏（场景与常用页面胶囊）跟着页面显隐与专注态重画。
@@ -459,7 +447,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
 
         ApplyWindowStateChrome();
-        ScheduleChromeReserve();
+        ScheduleFloatingTheme();
     }
 
     /// <summary>停靠系统门面。</summary>
@@ -726,7 +714,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         => _ = _bus.ExecuteAsync("vulcan.app.hide", "UI");
 
     internal CommandResult SetFloatingWindowState(string id, string state)
-        => _topBar.SetFloatingWindowState(id, state);
+        => _pageDrag.SetFloatingWindowState(id, state);
 
     /// <summary>窗体最大化图标切换 + WindowChrome 溢出补偿(UI-02.5)。</summary>
     private void ApplyWindowStateChrome()
@@ -779,7 +767,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private void OnShellClosed(object? sender, EventArgs e)
     {
         ShutdownLabelMode();
-        _topBar.Dispose();
+        _pageDrag.Dispose();
     }
 
     private void RegisterFrontendLifecycleCommands(CommandRegistry registry)

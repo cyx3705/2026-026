@@ -91,14 +91,11 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
-    /// 注册协议给不出「主页面」：文档身份只属于 Aurora 自己的命令集，
-    /// 任何模块声明 <c>side=center</c> 拿到的都是工具窗口——位置在中央区，身份是工具页。
-    ///
-    /// 这条不是本轮新加的行为，而是把一条**一直成立、却没人守着**的约束钉进门禁：
-    /// 谁要是哪天给 <c>UsesDocumentIdentity</c> 开第二个口子，这里会红。
+    /// REQ-UI-102：页面不分主次。1.20.1 及以前命令集是整棵布局里唯一的文档（<c>LayoutDocument</c>），
+    /// 这个特例已经引出过 bug；1.20.2 起它与模块页一样是工具页，布局里一个文档都没有。
     /// </summary>
     [Fact]
-    public void RegistrationNeverProducesASecondMainDocument()
+    public void NoPageHasADocumentIdentity()
     {
         UiTestHost.RunSta(() =>
         {
@@ -114,17 +111,14 @@ public sealed class DockingContractTests
             host.Initialize();
             host.RegisterWindow(Tool("late", DockSide.Center, 1), "module:test");
 
-            // 整棵布局里只有命令集是文档；其余中央页都是工具窗口。
-            Assert.Equal(
-                [StandardWindowIds.Mcp],
-                manager.Layout.Descendents().OfType<LayoutDocument>().Select(item => item.ContentId));
-            foreach (var id in new[] { "business", "late" })
+            Assert.Empty(manager.Layout.Descendents().OfType<LayoutDocument>());
+            foreach (var id in new[] { StandardWindowIds.Mcp, "business", "late" })
             {
                 var anchorable = manager.Layout.Descendents().OfType<LayoutAnchorable>()
                     .Single(item => item.ContentId == id);
                 Assert.True(anchorable.CanDockAsTabbedDocument);
 
-                // 顶栏只留一页（REQ-UI-096）：它此刻可能被顶掉了，显示出来位置仍是中央区。
+                // 一格一页（REQ-UI-100）：它此刻可能被顶掉了，显示出来位置仍是中央区。
                 host.Show(id);
                 Assert.Equal(DockSide.Center, host.ListWindows().Single(item => item.Id == id).Side);
             }
@@ -202,11 +196,11 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
-    /// REQ-UI-095：命令集不再是主文档区的锚点。1.19.0 及以前它藏不掉、浮不出（窗口按钮栏挂在它那格上），
-    /// 现在可以隐藏、可以浮出，藏着也不会被中央区修复放回来；它仍是文档身份，停靠只认中央区。
+    /// REQ-UI-095 / 102：命令集不是主文档区的锚点，也不是主页面。可以隐藏、可以浮出，藏着也不会被中央区修复放回来；
+    /// 1.20.2 起它是普通工具页，停到哪一侧就在哪一侧（1.20.1 及以前文档身份只认中央区）。
     /// </summary>
     [Fact]
-    public void CommandCatalogIsNoLongerTheCenterAnchor()
+    public void CommandCatalogIsAnOrdinaryToolPage()
     {
         UiTestHost.RunSta(() =>
         {
@@ -232,7 +226,9 @@ public sealed class DockingContractTests
                 var docked = InfoOf(host, StandardWindowIds.Mcp);
                 Assert.True(docked.IsVisible);
                 Assert.False(docked.IsFloating);
-                Assert.Equal(DockSide.Center, docked.Side);
+                Assert.Equal(DockSide.Right, docked.Side);
+                Assert.IsType<LayoutAnchorable>(((DockingManager)window.Content).Layout.Descendents()
+                    .OfType<LayoutContent>().Single(item => item.ContentId == StandardWindowIds.Mcp));
             }
             finally
             {
@@ -281,9 +277,9 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
-    /// REQ-UI-100：每一格只留一页——侧边、底边与主文档区一个规矩。程序停靠进标签组，原来那一页藏掉；
-    /// 用户把一页拖进某一格（这里直接改模型、不经抑制，等价于 AvalonDock 落停靠），那一格留拖进来的页。
-    /// 1.20.0 真机缺陷：不是登记在中央的工具页拖进主窗口，只有顶栏会顶掉旧页，侧边窗格照样攒多页。
+    /// REQ-UI-100：任何时刻一格只放一页——侧边、底边与主文档区一个规矩。程序放进目标页那一格，原来那一页藏掉；
+    /// 用户把一页拖进某一格，那一格留拖进来的页。AvalonDock 的拖动一律是「先浮出、再落停靠」，
+    /// 这里照着造：先浮出，再直接改模型把它从浮窗挪进那一格（不经抑制，等价于落在「放进这一格」停靠点上）。
     /// </summary>
     [Fact]
     public void EveryPaneKeepsOnlyTheLastPageIn()
@@ -309,39 +305,59 @@ public sealed class DockingContractTests
                 Assert.False(InfoOf(host, "console").IsVisible);
                 Assert.Equal(DockSide.Bottom, InfoOf(host, "details").Side);
 
-                // 用户把左侧的工具页拖进主文档区：它不是登记在中央的页，照样顶掉顶栏原来那一页。
+                // 用户把左侧的工具页拖进主文档区：它不是登记在中央的页，照样顶掉主文档区原来那一页。
                 var tool = manager.Layout.Descendents().OfType<LayoutAnchorable>()
                     .Single(item => item.ContentId == "tool");
-                ((ILayoutContainer)tool.Parent!).RemoveChild(tool);
-                manager.Layout.Descendents().OfType<LayoutDocumentPane>().First().Children.Add(tool);
-                tool.IsSelected = true;
-                UiTestHost.PumpFor(150);
+                DropFromFloating(tool, manager.Layout.Descendents().OfType<LayoutDocumentPane>().First());
                 Assert.Equal(["tool"], VisibleCenterIds(host));
                 Assert.False(InfoOf(host, StandardWindowIds.Mcp).IsVisible);
 
                 // 再从主文档区拖进底边那一格：留拖进来的页。
                 var bottom = (LayoutAnchorablePane)manager.Layout.Descendents().OfType<LayoutAnchorable>()
                     .Single(item => item.ContentId == "details").Parent!;
-                ((ILayoutContainer)tool.Parent!).RemoveChild(tool);
-                bottom.Children.Add(tool);
-                UiTestHost.PumpFor(150);
+                DropFromFloating(tool, bottom);
                 Assert.Equal(["tool"], bottom.Children.Select(item => item.ContentId));
                 Assert.False(InfoOf(host, "details").IsVisible);
                 Assert.Equal(DockSide.Bottom, InfoOf(host, "tool").Side);
+
+                // 被顶掉的页不会自己回来：隐藏占位页，那一格空着（没有等位，1.20.1 的循环抢占就出在这里）。
+                host.Hide("tool");
+                UiTestHost.PumpFor(150);
+                Assert.False(InfoOf(host, "details").IsVisible);
+                Assert.False(InfoOf(host, "console").IsVisible);
             }
             finally
             {
                 window.Close();
             }
+
+            void DropFromFloating(LayoutAnchorable page, ILayoutContainer target)
+            {
+                host.Float(page.ContentId!);
+                UiTestHost.PumpFor(150);
+                ((ILayoutContainer)page.Parent!).RemoveChild(page);
+                switch (target)
+                {
+                    case LayoutAnchorablePane anchorablePane:
+                        anchorablePane.Children.Add(page);
+                        break;
+                    case LayoutDocumentPane documentPane:
+                        documentPane.Children.Add(page);
+                        break;
+                }
+
+                page.IsSelected = true;
+                UiTestHost.PumpFor(150);
+            }
         });
     }
 
     /// <summary>
-    /// REQ-UI-100：登记时落进一格已经有页的窗格，新来的不抢位、藏着等位；占位的页被明确隐藏后，它回到这个位子。
-    /// 只等一次——位子让出过一回，之后再隐藏谁都不会把它拽出来。
+    /// REQ-UI-100（1.20.2 改写）：登记时落进一格已经有页的窗格，新来的直接藏起来——不记账、不等位。
+    /// 占位页后来被隐藏，那一格就空着；1.20.1 的等位会把它拽出来，几页之间于是来回抢位。要它露面只能明确显示。
     /// </summary>
     [Fact]
-    public void PageRegisteredIntoAnOccupiedPaneTakesTheSeatWhenItFreesUp()
+    public void PageRegisteredIntoAnOccupiedPaneStaysHiddenWithoutWaiting()
     {
         UiTestHost.RunSta(() =>
         {
@@ -357,6 +373,9 @@ public sealed class DockingContractTests
             Assert.False(InfoOf(host, "second").IsVisible);
 
             host.Hide("first");
+            Assert.False(InfoOf(host, "second").IsVisible);
+
+            host.Show("second");
             var second = InfoOf(host, "second");
             Assert.True(second.IsVisible);
             Assert.Equal(DockSide.Right, second.Side);
@@ -418,12 +437,12 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
-    /// REQ-UI-096：新登记的中央页不抢顶栏，哪怕位置台账说它上次是选中的那一页。
+    /// REQ-UI-100：新登记的中央页不抢主文档区，哪怕位置台账说它上次是选中的那一页。
     /// 台账是全局的、不分场景——1.20.0 首次热装时 1.19.0 台账里「上次选中」的模块页把命令集顶掉，
-    /// 随后场景又把这个外来页藏起来，顶栏一页不剩。主文档区空着时，新来的页才留下。
+    /// 随后场景又把这个外来页藏起来，主文档区一页不剩。主文档区空着时，新来的页才留下。
     /// </summary>
     [Fact]
-    public void RegisteredCenterPageNeverTakesTheTopBarFromAPageAlreadyThere()
+    public void RegisteredCenterPageNeverTakesTheCenterFromAPageAlreadyThere()
     {
         UiTestHost.RunSta(() =>
         {
@@ -444,12 +463,12 @@ public sealed class DockingContractTests
             host.RegisterWindow(Tool("module.page", DockSide.Center, 1), "module:test");
             Assert.Equal([StandardWindowIds.Mcp], VisibleCenterIds(host));
 
-            // 命令集被明确隐藏：登记时等它位子的 module.page 回到顶栏（REQ-UI-100 的等位），顶栏不会空。
+            // 命令集被明确隐藏：主文档区空着，module.page 不会自己补进来（1.20.2 起没有等位）。
             host.Hide(StandardWindowIds.Mcp);
-            Assert.Equal(["module.page"], VisibleCenterIds(host));
+            Assert.Empty(VisibleCenterIds(host));
+            Assert.False(InfoOf(host, "module.page").IsVisible);
 
             // 主文档区空着时，新来的页才留下。
-            host.Hide("module.page");
             host.RegisterWindow(Tool("module.late", DockSide.Center, 1), "module:test");
             Assert.Equal(["module.late"], VisibleCenterIds(host));
         });
@@ -507,13 +526,12 @@ public sealed class DockingContractTests
             Assert.Equal(DockSide.Center, windows[StandardWindowIds.Mcp].Side);
             Assert.Equal(DockSide.Right, windows["details"].Side);
             Assert.Equal(DockSide.Bottom, windows["console"].Side);
+            // REQ-UI-102：补进来的命令集是工具页，落在主文档区。
             var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
             Assert.Equal(
                 StandardWindowIds.Mcp,
-                Assert.Single(pane.Children.OfType<LayoutDocument>()).ContentId);
-            Assert.DoesNotContain(
-                manager.Layout.Descendents().OfType<LayoutAnchorable>(),
-                item => item.ContentId == StandardWindowIds.Mcp);
+                Assert.Single(pane.Children.OfType<LayoutAnchorable>()).ContentId);
+            Assert.Empty(manager.Layout.Descendents().OfType<LayoutDocument>());
         });
     }
 
@@ -613,6 +631,9 @@ public sealed class DockingContractTests
                 .Single(item => item.ContentId == "details");
             Assert.True(details.CanDockAsTabbedDocument);
 
+            // 拖动一律先浮出、再落停靠：从浮窗落进主文档区，留拖进来的页（REQ-UI-100）。
+            host.Float("details");
+            UiTestHost.Pump();
             ((ILayoutContainer)details.Parent!).RemoveChild(details);
             pane.Children.Add(details);
             manager.Layout.CollectGarbage();
@@ -782,7 +803,7 @@ public sealed class DockingContractTests
             var window = ShowHost(descriptors, store, out var host);
             try
             {
-                // 命令集留在顶栏，business 此刻被顶掉藏着：从藏着的状态直接浮出，也得报「浮着」。
+                // 命令集留在主文档区，business 此刻被顶掉藏着：从藏着的状态直接浮出，也得报「浮着」。
                 host.Show(StandardWindowIds.Mcp);
                 host.Float("business");
                 UiTestHost.Pump();
@@ -808,7 +829,7 @@ public sealed class DockingContractTests
             var mainPane = Assert.Single(
                 recoveredManager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>());
             Assert.Contains(
-                mainPane.Children.OfType<LayoutDocument>(),
+                mainPane.Children.OfType<LayoutAnchorable>(),
                 item => item.ContentId == StandardWindowIds.Mcp);
         });
     }
@@ -932,11 +953,10 @@ public sealed class DockingContractTests
             try
             {
                 var manager = (DockingManager)first.Content;
-                var command = manager.Layout.Descendents().OfType<LayoutDocument>()
-                    .Single(item => item.ContentId == StandardWindowIds.Mcp);
                 var anchorables = manager.Layout.Descendents().OfType<LayoutAnchorable>()
                     .ToDictionary(item => item.ContentId!);
-                foreach (var item in anchorables.Values.Cast<LayoutContent>().Append(command))
+                var command = anchorables[StandardWindowIds.Mcp];
+                foreach (var item in anchorables.Values)
                     ((ILayoutContainer)item.Parent!).RemoveChild(item);
 
                 var leftTop = new LayoutAnchorablePane(anchorables["left.top"])
@@ -1151,7 +1171,8 @@ public sealed class DockingContractTests
 
             host.Initialize();
 
-            // 每格只留一页（REQ-UI-100）：台账把 leader 与 follower 并进同一个标签组，那一格只露其中一页，位置照样是右侧。
+            // 一格一页（REQ-UI-100）：台账说 follower、hidden 都与 leader 同一个位置，那一格只露其中一页，位置照样是右侧。
+            // hidden 落位时 leader 已被 follower 顶掉——「同一个位置」认的是 leader 露面时回去的那一格，不是它的默认方位。
             var shown = Assert.Single(
                 new[] { "right.leader", "right.follower" }.Select(id => InfoOf(host, id)),
                 item => item.IsVisible);
@@ -1419,8 +1440,12 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-100 第 4 条：跟随页（<c>side=tab</c>）登记时目标还没登记，就按兜底方位放，之后不再追着目标挪位。
+    /// 1.20.1 及以前记着一份「延迟标签组目标」，目标一登记就把跟随页并过去——那是一格多页整条链的一部分，已删除。
+    /// </summary>
     [Fact]
-    public void RuntimeRegistrationResolvesTabTargetDeclaredAfterFollower()
+    public void FollowerRegisteredBeforeItsTargetKeepsItsFallbackPlace()
     {
         UiTestHost.RunSta(() =>
         {
@@ -1440,9 +1465,9 @@ public sealed class DockingContractTests
 
             host.RegisterWindow(Tool(StandardWindowIds.Mcp, DockSide.Center, 1), "HistoryMercury");
 
-            // 目标到了，跟随页并入中央区；顶栏只留一页，显示出来验。
             host.Show("overview");
-            AssertCenterTool(manager, "overview");
+            Assert.Equal(DockSide.Right, host.ListWindows().Single(item => item.Id == "overview").Side);
+            Assert.True(host.ListWindows().Single(item => item.Id == StandardWindowIds.Mcp).IsVisible);
         });
     }
 

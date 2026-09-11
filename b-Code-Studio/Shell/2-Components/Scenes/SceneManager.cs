@@ -306,6 +306,20 @@ internal sealed class SceneManager
                     _log.Warn(LogSource, $"新登记的页面 {window.Id} 不在当前场景的初值里，隐藏失败: {ex.Message}");
                 }
             }
+
+            // 登记不抢位（REQ-UI-100）：本场景的新页登记时，位置可能正被一个外来页占着，上面刚把外来页藏掉。
+            // 按场景初值再看一次位置——空着就露面。只看这一次，不是等位。
+            foreach (var window in fresh.Where(w => !w.IsVisible && IsSeeded(active, w)))
+            {
+                try
+                {
+                    _docking.ShowIfSeatFree(window.Id);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn(LogSource, $"新登记的页面 {window.Id} 按场景初值露面失败: {ex.Message}");
+                }
+            }
         }
 
         Changed?.Invoke(this, EventArgs.Empty);

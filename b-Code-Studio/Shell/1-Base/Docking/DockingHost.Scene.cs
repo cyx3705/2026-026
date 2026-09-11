@@ -16,6 +16,9 @@ internal interface ISceneDocking
 
     void Hide(string id);
 
+    /// <summary>按场景初值露面：位置空着才露面，不顶掉任何一页；默认就不显示的页不动。</summary>
+    void ShowIfSeatFree(string id);
+
     void SaveLayout(string name);
 
     void ApplyScene(
@@ -39,8 +42,9 @@ internal sealed partial class DockingHost : ISceneDocking
     ///   <item>存有同名命名布局：恢复它，显隐就是它记着的样子。存下之后才登记的页这个场景没见过，按初值定；</item>
     ///   <item>都没有：保留当前布局树，按初值定显隐。</item>
     /// </list>
-    /// 最后每格只留一页（REQ-UI-096 / 100）：同一格里挤着两页时，<paramref name="prefer"/> 里的页优先——
-    /// 模块场景传的是该模块自己的页，于是 Janus 的「图」与常驻的控制台同一格时，进 Janus 留「图」。
+    /// 一格一页（REQ-UI-100）：按初值露面的页不顶掉任何一页，位置被占着就不露面；
+    /// 只有 <paramref name="prefer"/> 里的页（模块场景传该模块自己的页）会顶掉它位置上的页——
+    /// 于是 Janus 的「图」与常驻的控制台同一格时，进 Janus 露「图」。
     ///
     /// **页面视图不重建**：内容对象按 id 缓存在 <c>_contents</c>，恢复快照换的只是停靠模型
     /// （REQ-UI-086）。切走再切回来，页面里选好的来源、表格的选中行都还在。
@@ -56,7 +60,7 @@ internal sealed partial class DockingHost : ISceneDocking
         RestoreLayoutFromMaximized();
 
         var initial = new HashSet<string>(seed, StringComparer.OrdinalIgnoreCase);
-        _waitingForSeat.Clear();
+        var preferred = new HashSet<string>(prefer ?? [], StringComparer.OrdinalIgnoreCase);
         string? payload = null;
         if (!rebuild)
         {
@@ -81,11 +85,9 @@ internal sealed partial class DockingHost : ISceneDocking
                     if (!LayoutHasMainDocumentPane())
                         throw new InvalidOperationException("布局中缺少中央主文档区");
                     EnsureRegisteredWindows();
-                    foreach (var descriptor in _descriptors.ToArray())
-                    {
-                        if (!known.Contains(descriptor.Id))
-                            SeedVisibility(name, descriptor, initial);
-                    }
+                    // 1.20.1 及以前存下的场景布局里一格可能有好几页：每格留选中的那一页。
+                    EvictExtraPages();
+                    SeedVisibility(name, _descriptors.Where(d => !known.Contains(d.Id)).ToArray(), initial, preferred);
 
                     restored = true;
                     _seedRatiosFromLayout = true;
@@ -105,21 +107,12 @@ internal sealed partial class DockingHost : ISceneDocking
                     _ratios[d.Id] = NormalizeRatio(d.DefaultRatio, 0.25);
             }
 
-            string? keep = null;
             if (!restored)
-            {
-                foreach (var descriptor in _descriptors.ToArray())
-                    SeedVisibility(name, descriptor, initial);
-
-                // 快照里记着上次的活动页，不动它；没有快照时让场景自己的中央页顶在前面，
-                // 否则顶栏露出来的是常驻的命令集。
-                keep = seed.FirstOrDefault(IsVisibleCenterPage);
-            }
+                SeedVisibility(name, _descriptors.ToArray(), initial, preferred);
 
             EnsureCentralWorkspace();
             AttachLayout();
             CurrentLayoutName = name;
-            EnforceSinglePagePerPane(keep ?? SelectedCenterId(), newcomersWin: false, prefer);
         }
 
         ScheduleReapplyRatios();
@@ -128,35 +121,43 @@ internal sealed partial class DockingHost : ISceneDocking
     }
 
     /// <summary>
-    /// 按初值定一页的显隐：不在初值里的藏起来；在初值里、默认就该露面而此刻藏着的，重新露面。
+    /// 按初值定显隐，分三步：不在初值里的藏起来；在初值里、默认就该露面而此刻藏着的，位置空着才露面；
+    /// 最后 <paramref name="preferred"/> 里的页露面并顶掉它位置上的页。
     /// 默认就不显示的页（DefaultVisible = false）不替它做主。
     /// </summary>
-    private void SeedVisibility(string scene, ToolWindowDescriptor descriptor, HashSet<string> initial)
+    private void SeedVisibility(
+        string scene,
+        IReadOnlyList<ToolWindowDescriptor> descriptors,
+        HashSet<string> initial,
+        HashSet<string> preferred)
     {
-        var id = descriptor.Id;
+        foreach (var descriptor in descriptors.Where(d => !initial.Contains(d.Id)))
+            Seed(scene, descriptor.Id, () => HidePage(FindRequiredAnchorable(descriptor.Id)));
+
+        var shown = descriptors
+            .Where(d => initial.Contains(d.Id) && d.DefaultVisible)
+            .OrderBy(d => preferred.Contains(d.Id))
+            .ToArray();
+        foreach (var descriptor in shown)
+        {
+            var id = descriptor.Id;
+            if (preferred.Contains(id))
+                Seed(scene, id, () => Show(id));
+            else if (!ComputeState(id).Visible)
+                Seed(scene, id, () => ShowIfSeatFree(id));
+        }
+    }
+
+    private void Seed(string scene, string id, Action action)
+    {
         try
         {
-            var visible = ComputeState(id).Visible;
-            if (!initial.Contains(id))
-            {
-                if (visible)
-                    Hide(id);
-            }
-            else if (descriptor.DefaultVisible && !visible)
-            {
-                // 不走 Show：那条路每露一页就执行一次「顶栏只留一页」，
-                // 顶栏里留下的会是初值里最后一个中央页，而不是场景自己挑的那一个。
-                ShowCore(id);
-            }
+            EnsureRegistered(id);
+            action();
         }
         catch (Exception ex)
         {
             _log.Warn(LayoutSource, $"场景 {scene} 处理窗口 {id} 失败: {ex.Message}");
         }
     }
-
-    private bool IsVisibleCenterPage(string id)
-        => _byId.ContainsKey(id)
-           && !IsPrimaryCommandDocument(id)
-           && ComputeState(id) is { Visible: true, Floating: false, Side: DockSide.Center };
 }

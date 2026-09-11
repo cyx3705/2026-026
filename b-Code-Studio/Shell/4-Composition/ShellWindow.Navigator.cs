@@ -18,9 +18,9 @@ namespace HistoryAurora.Shell.Composition;
 ///
 /// **不做成停靠页面**：那样它自己要占一格，还会卷进每个场景的布局里。
 ///
-/// 1.20.0 起右栏从左侧搬到右侧，并接下两件从顶栏转过来的事：顶部的窗口控制组
-/// （见 <see cref="PlaceChromeBar"/>），和下半部分的常用页面胶囊——点一下在当前场景打开，
-/// 按住拖出来就是一个带蓝色停靠点的浮窗，落到停靠点上就嵌进场景。
+/// 1.20.0 起右栏从左侧搬到右侧，并接下两件从顶栏转过来的事：顶部的窗口控制组，
+/// 和下半部分的常用页面胶囊——按住拖出来就是一个带蓝色停靠点的浮窗，落到停靠点上就嵌进场景。
+/// 1.20.2 顶栏整个删掉（REQ-UI-101），右栏在专注态也不让位：窗口控制组一直在这里。
 ///
 /// 索引一律派生：行来自场景清单、停靠注册表、动作注册表，不落盘；
 /// 检索文本只用已声明的字段（标题、owner、动作说明），不新增要人维护的关键词——
@@ -104,8 +104,6 @@ internal partial class ShellWindow
         if (_closing)
             return;
 
-        // 专注态（F11）只看一页，右栏跟着让位；窗口控制组此时挂在专注页的页头上。
-        NavRail.Visibility = _docking.MaximizedId == null ? Visibility.Visible : Visibility.Collapsed;
         NavSearchButton.ToolTip = $"搜索场景、页面与动作（{NavigatorHotkey}）";
 
         var scenes = _scenes.List();
@@ -241,7 +239,7 @@ internal partial class ShellWindow
             Cursor = Cursors.Hand,
             ToolTip = $"{window.Title} · {SceneManager.TitleFor(window.Owner)}"
                       + (uses > 0 ? $" · 用过 {uses} 次" : "")
-                      + "\n点一下在当前场景打开；按住拖出来，落到蓝色停靠点上嵌入",
+                      + "\n按住拖出来，落到蓝色停靠点上嵌入",
         };
         capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Surface");
         capsule.SetResourceReference(Border.BorderBrushProperty, "Aurora.Brush.Hairline");
@@ -291,19 +289,21 @@ internal partial class ShellWindow
         // 先清按下状态再交出去：交接会放掉捕获，LostMouseCapture 不该再当成一次点击。
         _capsulePressed = null;
         _usage.Record(PageUsageKey(id));
-        _topBar.BeginExternalPageDrag(id, capsule, CapsuleDragAnchor);
+        _pageDrag.BeginExternalPageDrag(id, capsule, CapsuleDragAnchor);
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 胶囊只用来拖（1.20.2 用户拍板）：没越过拖动阈值就松开，什么都不做——不打开页、不换窗口里的页。
+    /// 要打开一页走搜索（导航器）或 <c>aurora.scene.open</c>。
+    /// </summary>
     private void OnCapsuleMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Border { Tag: string id } capsule || !ReferenceEquals(capsule, _capsulePressed))
+        if (sender is not Border capsule || !ReferenceEquals(capsule, _capsulePressed))
             return;
 
         _capsulePressed = null;
         capsule.ReleaseMouseCapture();
-        _usage.Record(PageUsageKey(id));
-        _ = _bus.ExecuteAsync("aurora.scene.open page=" + CommandParser.QuoteArg(id), "UI");
         e.Handled = true;
     }
 

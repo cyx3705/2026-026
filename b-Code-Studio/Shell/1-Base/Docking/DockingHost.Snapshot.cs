@@ -146,7 +146,6 @@ internal sealed partial class DockingHost
     {
         var snapshot = DockLayoutSnapshotCodec.Deserialize(payload);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        _centerDocuments.Clear();
         _hiddenCenterIds.Clear();
 
         foreach (var (id, placement) in snapshot.Placements)
@@ -271,9 +270,8 @@ internal sealed partial class DockingHost
         if (!seen.Add(snapshot.Id))
             throw new InvalidDataException($"布局快照包含重复窗口: {snapshot.Id}");
 
-        LayoutContent content = documentPane && UsesDocumentIdentity(descriptor)
-            ? CreateDocument(descriptor)
-            : CreateAnchorable(descriptor);
+        // 1.20.2 起所有页都是工具页：旧快照里命令集的文档节点在这里就地换成工具页。
+        LayoutContent content = CreateAnchorable(descriptor);
         ApplyFloatingGeometry(content, snapshot);
         return content;
     }

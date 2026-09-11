@@ -1,9 +1,5 @@
-﻿using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
@@ -15,10 +11,18 @@ using AvalonDock.Layout;
 namespace HistoryAurora.Shell.Base;
 
 /// <summary>
-/// Keeps main-window chrome and page chrome on one input and command path.
-/// Only AvalonDock public model and window APIs are used here.
+/// 页面拖动的唯一入口（1.20.2 起；前身是顶栏协调器 <c>ShellTopBarCoordinator</c>）。
+///
+/// 顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、双击页签专注、拖页签、
+/// 拖页头移动窗口一并没有了。页面只剩两种拖法，走同一条 浮出 → 系统移动循环 → 蓝色停靠点 的路：
+/// <list type="bullet">
+///   <item>Ctrl 标签态（REQ-UI-097）：按住 Ctrl，每一格窗格盖上写着页名的标签，按住标签拖走整页；
+///         浮窗里只有这一页时，拖的是那个浮窗本身；</item>
+///   <item>右栏常用页面胶囊（REQ-UI-099）：按住拖出来。</item>
+/// </list>
+/// 拖出去没落到停靠点的页隐藏（REQ-UI-098）。
 /// </summary>
-internal sealed partial class ShellTopBarCoordinator : IDisposable
+internal sealed partial class PageDragCoordinator : IDisposable
 {
     private const string ChromeLogSource = "shell.chrome";
 
@@ -27,38 +31,25 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private readonly DockingHost _docking;
     private readonly CommandBus _bus;
     private readonly IShellLog _log;
-    private readonly RoutedCommand _pageActionCommand;
-    private readonly HashSet<LayoutDocumentPaneControl> _documentPanes = [];
-    private readonly List<(UIElement Target, CommandBinding Binding)> _pageActionBindings = [];
-    private readonly FastDoubleClickGesture _doubleClick = new(TimeSpan.FromMilliseconds(250));
     private readonly WindowDragDriver _windowDragDriver = new();
-    private readonly bool _enableMaximizeOnDoubleClick;
 
     private long _dragSequence;
     private DockingDragSession? _dragSession;
     private bool _disposed;
 
-    public ShellTopBarCoordinator(
+    public PageDragCoordinator(
         Window window,
         DockingManager manager,
         DockingHost docking,
         CommandBus bus,
-        IShellLog log,
-        RoutedCommand pageActionCommand,
-        bool enableMaximizeOnDoubleClick = true)
+        IShellLog log)
     {
         _window = window;
         _manager = manager;
         _docking = docking;
         _bus = bus;
         _log = log;
-        _pageActionCommand = pageActionCommand;
-        _enableMaximizeOnDoubleClick = enableMaximizeOnDoubleClick;
         _manager.LayoutFloatingWindowControlCreated += OnFloatingWindowCreated;
-        _manager.AddHandler(
-            UIElement.PreviewMouseLeftButtonDownEvent,
-            new MouseButtonEventHandler(OnDockTabMouseLeftButtonDown),
-            handledEventsToo: true);
         _manager.AddHandler(
             UIElement.PreviewMouseMoveEvent,
             new MouseEventHandler(OnDockPreviewMouseMove),
@@ -67,17 +58,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             UIElement.PreviewMouseLeftButtonUpEvent,
             new MouseButtonEventHandler(OnDockPreviewMouseLeftButtonUp),
             handledEventsToo: true);
-        // AvalonDock 页签自带的拖动在冒泡回到这里时卸掉（见 ShellTopBarCoordinator.NativeTabDrag.cs）。
-        _manager.AddHandler(
-            UIElement.MouseDownEvent,
-            new MouseButtonEventHandler(OnDockMouseDown),
-            handledEventsToo: true);
     }
 
-    /// <summary>
-    /// Ctrl 标签态（REQ-UI-097）。页面拖动不再附着在页签上：平时按页签只换页，
-    /// 这个开关打开时，页签与盖在内容上的页名标签才起拖动会话。开关由装配根按 Ctrl 管。
-    /// </summary>
+    /// <summary>Ctrl 标签态（REQ-UI-097）。打开时，盖在窗格上的页名标签才起拖动会话。开关由装配根按 Ctrl 管。</summary>
     public bool LabelMode { get; set; }
 
     /// <summary>有一个拖动会话在途。装配根据此推迟退出标签态——松开 Ctrl 不该掐断正在拖的那一页。</summary>
@@ -96,103 +79,29 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
         _manager.LayoutFloatingWindowControlCreated -= OnFloatingWindowCreated;
         _manager.RemoveHandler(
-            UIElement.PreviewMouseLeftButtonDownEvent,
-            new MouseButtonEventHandler(OnDockTabMouseLeftButtonDown));
-        _manager.RemoveHandler(
             UIElement.PreviewMouseMoveEvent,
             new MouseEventHandler(OnDockPreviewMouseMove));
         _manager.RemoveHandler(
             UIElement.PreviewMouseLeftButtonUpEvent,
             new MouseButtonEventHandler(OnDockPreviewMouseLeftButtonUp));
-        _manager.RemoveHandler(
-            UIElement.MouseDownEvent,
-            new MouseButtonEventHandler(OnDockMouseDown));
 
         foreach (var floating in _manager.FloatingWindows.OfType<LayoutFloatingWindowControl>())
-        {
             floating.StateChanged -= OnFloatingWindowStateChanged;
-            floating.RemoveHandler(UIElement.MouseDownEvent, new MouseButtonEventHandler(OnDockMouseDown));
-        }
-        _documentPanes.Clear();
-        foreach (var (target, binding) in _pageActionBindings)
-            target.CommandBindings.Remove(binding);
-        _pageActionBindings.Clear();
     }
 
-    public void AttachPaneCommandBinding(UIElement pane)
-    {
-        AttachPageActionBinding(pane);
-        if (pane is LayoutDocumentPaneControl documentPane)
-        {
-            _documentPanes.Add(documentPane);
-            UpdateDocumentPaneChrome(documentPane);
-        }
-    }
-
-    public void Refresh()
-    {
-        foreach (var pane in _documentPanes.ToArray())
-        {
-            if (!pane.IsLoaded)
-            {
-                _documentPanes.Remove(pane);
-                continue;
-            }
-            UpdateDocumentPaneChrome(pane);
-        }
-    }
-
+    /// <summary>窗格上的按下：只认标签态下按在页名标签上的那一下，其余一律归页面内容自己。</summary>
     public void HandlePaneMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
     {
-        var source = e.OriginalSource as DependencyObject;
-        if (LabelMode &&
-            e.ChangedButton == MouseButton.Left &&
-            sender is FrameworkElement labelPane &&
-            FindAncestor<FrameworkElement>(source, IsPageLabelCover) is { } cover &&
-            TryResolvePageId(cover, out var labelId))
-        {
-            BeginLabelDrag(labelPane, cover, labelId, e);
-            return;
-        }
-
-        var floating = FindAncestor<LayoutFloatingWindowControl>(source);
-        var sourceIsTab = FindAncestor<DependencyObject>(source, item =>
-            item is LayoutAnchorableTabItem or LayoutDocumentTabItem) != null;
-        if (e.ChangedButton != MouseButton.Left ||
+        if (!LabelMode ||
+            e.ChangedButton != MouseButton.Left ||
             sender is not FrameworkElement pane ||
-            !IsPaneHeaderSource(source) ||
-            !TryResolvePageId(pane, out var id))
+            FindAncestor<FrameworkElement>(e.OriginalSource as DependencyObject, IsPageLabelCover) is not { } cover ||
+            !TryResolvePageId(cover, out var id))
         {
             return;
         }
 
-        var floatingWindow = floating ?? FindFloatingWindow(id);
-        var tab = FindAncestor<FrameworkElement>(source, IsRealPageTab);
-        if (IsInteractiveInPaneHeader(source) &&
-            !ShouldHandlePaneHeaderInput(
-                floatingWindow != null,
-                sourceIsTab,
-                IsInteractiveCommandControl(source)))
-        {
-            return;
-        }
-
-        if (floatingWindow is not null)
-        {
-            if (sourceIsTab && tab != null && CountFloatingPages(floatingWindow) > 1)
-            {
-                // 多页浮窗里的页签：平时只换页（归 AvalonDock），Ctrl 标签态才拆出去。
-                if (LabelMode)
-                    StartFloatingTabSession(tab, id, floatingWindow, e);
-            }
-            else
-            {
-                BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
-            }
-            return;
-        }
-
-        BeginHostWindowGesture(_window, pane, $"header:{id}", e);
+        BeginLabelDrag(pane, cover, id, e);
     }
 
     public void HandlePaneMouseMove(object? sender, MouseEventArgs e)
@@ -204,109 +113,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public void HandlePaneLostMouseCapture(object? sender, MouseEventArgs e)
         => ClearHostWindowGesture(sender);
 
-    public void HandleMainMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton != MouseButton.Left ||
-            IsInteractiveInPaneHeader(e.OriginalSource as DependencyObject) ||
-            sender is not FrameworkElement surface ||
-            !IsPaneHeaderSource(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
-
-        var target = TryResolvePageId(surface, out var id) ? $"header:{id}" : "header:main";
-        BeginHostWindowGesture(_window, surface, target, e);
-    }
-
-    public void HandleMainMouseMove(object? sender, MouseEventArgs e)
-        => ContinueHostWindowGesture(sender, e);
-
-    public void HandleMainMouseLeftButtonUp(object? sender, MouseButtonEventArgs e)
-        => CompleteHostWindowGesture(sender);
-
-    public void HandleMainLostMouseCapture(object? sender, MouseEventArgs e)
-        => ClearHostWindowGesture(sender);
-
-    public bool HandleDockTabMouseLeftButtonDown(MouseButtonEventArgs e)
-    {
-        var source = e.OriginalSource as DependencyObject;
-        if (e.ChangedButton != MouseButton.Left ||
-            IsInteractiveCommandControl(source) ||
-            !TryResolveTabPageId(source, out var id) ||
-            FindAncestor<FrameworkElement>(source, IsRealPageTab) is not { } tab)
-        {
-            if (e.ChangedButton == MouseButton.Left)
-                CancelDragSession("non-tab press");
-            return false;
-        }
-
-        // **换页归 AvalonDock**。这里既不判 Handled 也不自己写选中——两条都试过,两条都错:
-        // 判了 Handled,容器 TabItem 收不到冒泡的按下,页就换不了(1.17.5 真机);
-        // 自己写选中,要么把窗格的选中下标反向写成 -1(模型层:LayoutDocumentPane.IndexOf
-        // 不认 LayoutAnchorable,而中央页全是 anchorable),要么因为文档区里混着隐藏页
-        // 而错位一格(控件层)。两种都实测过。
-        //
-        // Aurora 只负责拖:按下起会话、越过阈值再浮出去,而浮之前先放掉捕获
-        // (见 RestoreAndFloatAsync)。AvalonDock 那条并行拖拽之所以会闹,
-        // 根子在「页签被摘走时捕获还在它身上」——放掉捕获就够了,不必去抢按下事件。
-        var floating = FindFloatingWindow(id);
-        if (floating != null)
-        {
-            if (!LabelMode)
-                return false;
-
-            if (_dragSession is { IsTab: true, PageId: { } currentId } active &&
-                ReferenceEquals(active.Surface, tab) &&
-                currentId.Equals(id, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (CountFloatingPages(floating) > 1)
-            {
-                StartFloatingTabSession(tab, id, floating, e);
-                return false;
-            }
-
-            return false;
-        }
-
-        var target = $"tab:{id}";
-        var screenPoint = GetScreenPoint(tab, e);
-        if (_enableMaximizeOnDoubleClick)
-        {
-            var range = GetSystemDoubleClickRange(_manager);
-            if (_doubleClick.RegisterPress(
-                    target,
-                    Environment.TickCount64,
-                    screenPoint,
-                    range.Width,
-                    range.Height))
-            {
-                CancelDragSession("double click");
-                _ = _bus.ExecuteAsync(
-                    _docking.MaximizedId?.Equals(id, StringComparison.OrdinalIgnoreCase) == true
-                        ? "aurora.ui.restore"
-                        : $"aurora.ui.max name={CommandParser.QuoteArg(id)}",
-                    "UI");
-                e.Handled = true;
-                return true;
-            }
-        }
-
-        // 页面拖动不附着在页签上（REQ-UI-097）：平时按页签只换页、双击专注，
-        // Ctrl 标签态才起拖动会话。
-        if (LabelMode)
-            StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
-        return false;
-    }
-
     /// <summary>
     /// 从主窗体之外拖一页进来——右栏的常用页面胶囊（REQ-UI-099）。
     ///
-    /// 与 Ctrl 标签态拖页签是同一条路：浮出 → 系统移动循环 → 蓝色停靠点 → 落不到停靠点就隐藏。
     /// 调用方已经判过拖动阈值，会话直接从「过阈值」起步。<paramref name="anchor"/> 是指针
-    /// 在新浮窗里的落点：给页签行上的一点，拖起来就像拎着页签。
+    /// 在新浮窗里的落点。
     /// </summary>
     public void BeginExternalPageDrag(string id, FrameworkElement surface, Point anchor)
     {
@@ -337,8 +148,8 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         => Equals(element.Tag, PageLabelMode.CoverTag);
 
     /// <summary>
-    /// 标签态下按在页名标签上：整页当成一个页签来拖。浮窗里只有这一页时拖的是那个浮窗本身。
-    /// 指针在新浮窗里的落点取它在原窗格里的位置——拎起来的就是这一页本身。
+    /// 标签态下按在页名标签上：整页拖走。浮窗里只有这一页时拖的是那个浮窗本身；
+    /// 浮窗里有好几格时把这一格拆成独立浮窗。指针在新浮窗里的落点取它在原窗格里的位置。
     /// </summary>
     private void BeginLabelDrag(FrameworkElement pane, FrameworkElement cover, string id, MouseButtonEventArgs e)
     {
@@ -346,14 +157,14 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (floating != null)
         {
             if (CountFloatingPages(floating) > 1)
-                StartFloatingTabSession(cover, id, floating, e);
+                StartPageSession(cover, id, GetScreenPoint(cover, e), e.GetPosition(pane), floating);
             else
                 BeginHostWindowGesture(floating, pane, $"floating:{id}", e);
             e.Handled = true;
             return;
         }
 
-        StartTabSession(cover, id, GetScreenPoint(cover, e), e.GetPosition(pane));
+        StartPageSession(cover, id, GetScreenPoint(cover, e), e.GetPosition(pane), null);
         e.Handled = true;
     }
 
@@ -414,25 +225,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         return CommandResult.Ok($"{id} 独立浮窗已切换为{label}状态");
     }
 
+    /// <summary>从窗格里任一点认出这一格的那一页（一格只有一页，就是窗格的选中页）。</summary>
     public bool TryResolvePageId(DependencyObject? source, out string id)
     {
         for (var current = source; current != null; current = GetParent(current))
         {
-            if (TryGetTabModel(current, out var tabModel) && TryGetContentId(tabModel, out id))
-                return true;
-
-            if (current is TabItem { DataContext: LayoutContent outerModel } &&
-                TryGetContentId(outerModel, out id))
-            {
-                return true;
-            }
-
-            if (current is AnchorablePaneTitle { Model: LayoutContent titleModel } &&
-                TryGetContentId(titleModel, out id))
-            {
-                return true;
-            }
-
             if (current is LayoutAnchorablePaneControl anchorablePane &&
                 TryResolveSelectedItem(anchorablePane.SelectedItem, out id))
             {
@@ -450,124 +247,30 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         return false;
     }
 
-    private void AttachPageActionBinding(UIElement target)
-    {
-        if (target.CommandBindings.OfType<CommandBinding>().Any(binding =>
-                ReferenceEquals(binding.Command, _pageActionCommand)))
-        {
-            return;
-        }
-
-        var binding = CreatePageActionBinding();
-        target.CommandBindings.Add(binding);
-        _pageActionBindings.Add((target, binding));
-    }
-
-    private CommandBinding CreatePageActionBinding()
-        => new(
-            _pageActionCommand,
-            OnPageActionExecuted,
-            (_, e) => e.CanExecute = e.Parameter is string);
-
-    private async void OnPageActionExecuted(object sender, ExecutedRoutedEventArgs e)
-    {
-        var action = e.Parameter as string;
-        if (action == null)
-            return;
-
-        string command;
-        if (action.Equals("restore", StringComparison.OrdinalIgnoreCase))
-        {
-            command = "aurora.ui.restore";
-        }
-        else
-        {
-            if (!TryResolvePageId(e.OriginalSource as DependencyObject, out var id) &&
-                !TryResolvePageId(e.Source as DependencyObject, out id))
-            {
-                _log.Error(ChromeLogSource, $"页面动作 {action} 无法解析页面 ID");
-                return;
-            }
-
-            var quotedId = CommandParser.QuoteArg(id);
-            if (action.Equals("toggle-floating", StringComparison.OrdinalIgnoreCase))
-                command = $"aurora.ui.floatstate name={quotedId} state=toggle";
-            else
-                command = action.ToLowerInvariant() switch
-                {
-                    "float" => $"aurora.ui.float name={quotedId}",
-                    "hide" => $"aurora.ui.hide name={quotedId}",
-                    "dock-document" => $"aurora.ui.dock name={quotedId} pos=center",
-                    "autohide" => $"aurora.ui.autohide name={quotedId}",
-                    _ => string.Empty,
-                };
-        }
-
-        if (string.IsNullOrEmpty(command))
-        {
-            _log.Error(ChromeLogSource, $"未知页面动作：{action}");
-            return;
-        }
-
-        var result = await _bus.ExecuteAsync(command, "UI").ConfigureAwait(true);
-        if (!result.Success)
-            _log.Error(ChromeLogSource, $"页面动作执行失败：{result.Message}");
-        e.Handled = true;
-    }
-
-    private void OnDockTabMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        => HandleDockTabMouseLeftButtonDown(e);
-
-    private void StartTabSession(
-        FrameworkElement tab,
+    private void StartPageSession(
+        FrameworkElement surface,
         string id,
         Point start,
-        Point anchor)
+        Point anchor,
+        LayoutFloatingWindowControl? floating)
     {
-        CancelDragSession("new tab press");
+        CancelDragSession("new page press");
         var session = new DockingDragSession(
             ++_dragSequence,
             DockingDragKind.Tab,
-            tab,
+            surface,
             start,
             anchor,
             id,
-            null,
-            $"tab:{id}",
-        false,
-        false);
-        _dragSession = session;
-        tab.CaptureMouse();
-    }
-
-    private void StartFloatingTabSession(
-        FrameworkElement tab,
-        string id,
-        LayoutFloatingWindowControl floating,
-        MouseButtonEventArgs e)
-    {
-        if (_dragSession is { IsTab: true, PageId: { } currentId } active &&
-            ReferenceEquals(active.Surface, tab) &&
-            currentId.Equals(id, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        CancelDragSession("new floating tab press");
-        var session = new DockingDragSession(
-            ++_dragSequence,
-            DockingDragKind.Tab,
-            tab,
-            GetScreenPoint(tab, e),
-            e.GetPosition(tab),
-            id,
             floating,
-            $"floating-tab:{id}",
+            $"{(floating == null ? "label" : "floating-label")}:{id}",
             false,
             false)
         {
-            IsFloatingTab = true,
+            IsFloatingTab = floating != null,
         };
         _dragSession = session;
-        tab.CaptureMouse();
+        surface.CaptureMouse();
     }
 
     private async Task RestoreAndFloatAsync(DockingDragSession session)
@@ -603,10 +306,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (!session.TryTransition(DockingDragState.FloatRequested))
             return;
 
-        // 浮出去会把这个页签从可视树上摘掉。摘之前必须先放掉捕获:捕获还在的话,
-        // 后续鼠标移动仍旧送到那个已经断开 PresentationSource 的页签上。
-        // 拖动的接力从这里起就交给 WindowDragDriver(见 OnFloatingWindowCreated),
-        // 不再需要页签持有捕获。
+        // 浮出去会把这一页从可视树上摘掉。摘之前必须先放掉捕获:捕获还在的话,
+        // 后续鼠标移动仍旧送到那个已经断开 PresentationSource 的元素上。
+        // 拖动的接力从这里起就交给 WindowDragDriver(见 OnFloatingWindowCreated)。
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
         session.LastScreenPoint = context.PointerPixels;
         ApplyFloatingModelGeometry(context, FindLayoutContent(context.PageId));
@@ -614,7 +316,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             TaskCreationOptions.RunContinuationsAsynchronously);
         session.Completion = completion;
         var floated = session.IsFloatingTab
-            ? await DetachFloatingTabAsync(session).ConfigureAwait(true)
+            ? await DetachFloatingPageAsync(session).ConfigureAwait(true)
             : await _bus.ExecuteAsync(
                 $"aurora.ui.float name={CommandParser.QuoteArg(id)}", "UI").ConfigureAwait(true);
         if (!floated.Success)
@@ -638,13 +340,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         var created = e.LayoutFloatingWindowControl;
         created.StateChanged += OnFloatingWindowStateChanged;
-        // 浮窗是另一棵可视树，停靠管理器上的处理器看不到它的页签。
-        created.AddHandler(
-            UIElement.MouseDownEvent,
-            new MouseButtonEventHandler(OnDockMouseDown),
-            handledEventsToo: true);
         ApplyFloatingWindowStateChrome(created);
-        _ = _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Refresh);
 
         if (_dragSession is not { IsTab: true, PageId: { } pageId } session ||
             session.State != DockingDragState.FloatRequested ||
@@ -685,10 +381,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private static int CountFloatingPages(LayoutFloatingWindowControl floating)
         => floating.Model.Descendents().OfType<LayoutContent>().Count();
 
-    private Task<CommandResult> DetachFloatingTabAsync(DockingDragSession session)
+    /// <summary>浮窗里有好几格时，把被拖的这一格拆成独立浮窗。</summary>
+    private Task<CommandResult> DetachFloatingPageAsync(DockingDragSession session)
     {
         if (session.PageId == null)
-            return Task.FromResult(CommandResult.Fail("浮窗页签缺少页面 ID"));
+            return Task.FromResult(CommandResult.Fail("浮窗页缺少页面 ID"));
 
         try
         {
@@ -701,12 +398,12 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             content.IsSelected = true;
             content.FloatingWidth = size.Width;
             content.FloatingHeight = size.Height;
-            _manager.CreateFloatingWindow(content, content is LayoutDocument);
+            _manager.CreateFloatingWindow(content, false);
             return Task.FromResult(CommandResult.Ok($"页面 {session.PageId} 已拆分为独立浮窗"));
         }
         catch (Exception ex)
         {
-            _log.Error(ChromeLogSource, $"拆分浮窗页签失败：{ex.Message}");
+            _log.Error(ChromeLogSource, $"拆分浮窗页失败：{ex.Message}");
             return Task.FromResult(CommandResult.Fail(ex.Message));
         }
     }
@@ -730,17 +427,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     private void OnFloatingWindowStateChanged(object? sender, EventArgs e)
     {
         if (sender is LayoutFloatingWindowControl floating)
-        {
             ApplyFloatingWindowStateChrome(floating);
-            foreach (var pane in _documentPanes)
-            {
-                if (pane.Model is LayoutDocumentPane { SelectedContent: LayoutContent selected } &&
-                    ModelContainsPage(floating.Model, selected.ContentId ?? string.Empty))
-                {
-                    UpdateDocumentPaneChrome(pane);
-                }
-            }
-        }
     }
 
     private static void ApplyFloatingWindowStateChrome(LayoutFloatingWindowControl floating)
@@ -748,15 +435,13 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             ? SystemParameters.WindowResizeBorderThickness
             : default;
 
+    /// <summary>单页浮窗的标签被按住：拖的是这个浮窗本身，过阈值才进系统移动循环。</summary>
     private void BeginHostWindowGesture(
         Window hostWindow,
         FrameworkElement surface,
         string target,
         MouseButtonEventArgs e)
     {
-        // The main chrome surface is nested in the pane template, so its
-        // direct handler and the pane EventSetter can observe one press.
-        // Keep the first window session and make the second route a no-op.
         if (_dragSession is
             {
                 Kind: DockingDragKind.Window,
@@ -769,28 +454,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
 
         CancelDragSession("new window press");
-        var range = GetSystemDoubleClickRange(surface);
-        if (_enableMaximizeOnDoubleClick && _doubleClick.RegisterPress(
-                target,
-                Environment.TickCount64,
-                GetScreenPoint(surface, e),
-                range.Width,
-                range.Height))
-        {
-            if (ReferenceEquals(hostWindow, _window))
-            {
-                _ = _bus.ExecuteAsync("aurora.app.window state=toggle", "UI");
-            }
-            else if (target.StartsWith("floating:", StringComparison.Ordinal))
-            {
-                var id = target["floating:".Length..];
-                _ = _bus.ExecuteAsync(
-                    $"aurora.ui.floatstate name={CommandParser.QuoteArg(id)} state=toggle", "UI");
-            }
-            e.Handled = true;
-            return;
-        }
-
         var session = new DockingDragSession(
             ++_dragSequence,
             DockingDragKind.Window,
@@ -815,25 +478,20 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        // AvalonDock may mark the original button-down handled before this
-        // manager-level handler sees the first captured move. Keep the native
-        // key-state check authoritative when available, but do not cancel a
-        // still-pressed WPF move solely because the async Win32 sample raced it.
         var current = FloatingWindowGeometry.GetCursorPosition();
         var multiplier = session.WasMaximized ? 2d : 1d;
-        var shouldStart = HasReachedDragThreshold(
-            session.Start,
-            current,
-            SystemParameters.MinimumHorizontalDragDistance,
-            SystemParameters.MinimumVerticalDragDistance,
-            multiplier);
-        if (shouldStart)
-            _doubleClick.Cancel(session.Target);
-        if (shouldStart)
+        if (!HasReachedDragThreshold(
+                session.Start,
+                current,
+                SystemParameters.MinimumHorizontalDragDistance,
+                SystemParameters.MinimumVerticalDragDistance,
+                multiplier))
         {
-            StartPendingHostDrag(session, current);
-            e.Handled = true;
+            return;
         }
+
+        StartPendingHostDrag(session, current);
+        e.Handled = true;
     }
 
     private void CompleteHostWindowGesture(object? sender)
@@ -852,9 +510,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (_dragSession is { Kind: DockingDragKind.Window } session &&
             ReferenceEquals(sender, session.Surface))
         {
-            // Threshold handling deliberately releases WPF/Win32 capture before
-            // entering the native DragMove loop. That release raises LostMouseCapture
-            // synchronously; it is not a cancellation while the session is moving.
+            // 过阈值时会主动放掉捕获再进系统移动循环；那一下的 LostMouseCapture 不是取消。
             if (session.State == DockingDragState.Pressed)
                 CompleteDragSession(session, "mouse capture lost", cancelled: true);
         }
@@ -874,7 +530,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (!session.TryTransition(DockingDragState.WindowMoving))
             return;
         session.LastScreenPoint = pointerPixels;
-        _doubleClick.Cancel(session.Target);
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
 
         if (session.WasMaximized)
@@ -902,35 +557,19 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             return;
         }
 
-        _doubleClick.Cancel(session.Target);
-        var context = new FloatingDragContext(
-            session.PageId!,
-            ResolveEmbeddedPaneSize(session.Surface),
-            session.Anchor,
-            ContinueWithDrag: true)
-        {
-            SessionId = session.Id,
-            PointerPixels = FloatingWindowGeometry.GetCursorPosition(),
-        };
         if (!session.TryTransition(DockingDragState.ThresholdReached))
             return;
-        session.LastScreenPoint = context.PointerPixels;
+        session.LastScreenPoint = current;
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
-        // Do not rely on AvalonDock's tab template to start its internal drag
-        // service. The Aurora tab template is intentionally replaced, so the
-        // threshold crossing owns the transition to a floating host. That
-        // gives the host a real DragMove loop, which is what creates the blue
-        // docking overlay and makes drop/merge deterministic.
+        // 过阈值才浮出：浮窗有了真正的系统移动循环，蓝色停靠点才会出现，落点才确定。
         QueueRestoreAndFloat(session);
         e.Handled = true;
     }
 
     private void QueueRestoreAndFloat(DockingDragSession session)
     {
-        // Let AvalonDock finish the current mouse route before changing its
-        // layout. Creating a floating window re-enters focus hooks; doing that
-        // from PreviewMouseMove can make the hook inspect a visual owned by a
-        // different dispatcher and terminate the host.
+        // 让 AvalonDock 先走完这一次鼠标路由再改布局：在 PreviewMouseMove 里直接建浮窗
+        // 会重入焦点钩子，钩子去查另一个调度器的可视元素，能把宿主整个带走。
         if (_disposed || _window.Dispatcher.HasShutdownStarted)
             return;
 
@@ -951,14 +590,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
 
     private static Point GetScreenPoint(FrameworkElement surface, MouseButtonEventArgs e)
         => surface.PointToScreen(e.GetPosition(surface));
-
-    private static Size GetSystemDoubleClickRange(Visual visual)
-    {
-        var dpi = (uint)Math.Round(96 * VisualTreeHelper.GetDpi(visual).DpiScaleX);
-        return new Size(
-            Math.Max(1, NativeMethods.GetSystemMetricsForDpi(36, dpi)),
-            Math.Max(1, NativeMethods.GetSystemMetricsForDpi(37, dpi)));
-    }
 
     private void RestoreHostWindowUnderPointer(
         Window hostWindow,
@@ -995,7 +626,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
         catch (InvalidOperationException ex)
         {
-            _log.Warn(ChromeLogSource, $"窗口最大化下拖恢复失败：{ex.Message}");
+            _log.Warn(ChromeLogSource, $"浮窗最大化下拖恢复失败：{ex.Message}");
         }
     }
 
@@ -1003,20 +634,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         => state == WindowState.Maximized
             ? WindowState.Normal
             : WindowState.Maximized;
-
-    internal static bool ShouldDelayHostDrag(bool isMainWindow, WindowState state)
-        => !isMainWindow || state == WindowState.Maximized;
-
-    internal static bool ShouldAllowFloatingTabWindowDrag(
-        bool isFloatingWindow,
-        bool sourceIsTabItem)
-        => isFloatingWindow && sourceIsTabItem;
-
-    internal static bool ShouldHandlePaneHeaderInput(
-        bool isFloatingWindow,
-        bool sourceIsTab,
-        bool sourceIsInteractiveControl)
-        => !sourceIsInteractiveControl && (isFloatingWindow || !sourceIsTab);
 
     private void CancelDragSession(string reason)
     {
@@ -1041,20 +658,14 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
     }
 
+    /// <summary>这一页此刻所在窗格的尺寸，浮出去的窗口按它开。</summary>
     private Size ResolveEmbeddedPaneSize(string id)
     {
-        var tab = FindVisualDescendants<FrameworkElement>(_manager)
-            .Where(IsRealPageTab)
-            .FirstOrDefault(candidate =>
-                TryResolveTabPageId(candidate, out var candidateId) &&
-                candidateId.Equals(id, StringComparison.OrdinalIgnoreCase));
-        return tab == null ? default : ResolveEmbeddedPaneSize(tab);
-    }
-
-    private static Size ResolveEmbeddedPaneSize(FrameworkElement tab)
-    {
-        var pane = FindAncestor<FrameworkElement>(tab, element =>
-            element is LayoutAnchorablePaneControl or LayoutDocumentPaneControl);
+        var pane = FindVisualDescendants<FrameworkElement>(_manager)
+            .FirstOrDefault(element =>
+                element is LayoutAnchorablePaneControl or LayoutDocumentPaneControl &&
+                TryResolvePageId(element, out var candidate) &&
+                candidate.Equals(id, StringComparison.OrdinalIgnoreCase));
         if (pane == null ||
             !double.IsFinite(pane.ActualWidth) || pane.ActualWidth <= 0 ||
             !double.IsFinite(pane.ActualHeight) || pane.ActualHeight <= 0)
@@ -1063,13 +674,6 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         }
 
         return new Size(pane.ActualWidth, pane.ActualHeight);
-    }
-
-    private void ApplyFloatingModelGeometry(FloatingDragContext context, DependencyObject source)
-    {
-        if (!TryResolveTabPageId(source, out var id))
-            id = context.PageId;
-        ApplyFloatingModelGeometry(context, FindLayoutContent(id));
     }
 
     private static void ApplyFloatingModelGeometry(
@@ -1087,53 +691,5 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         content.FloatingHeight = size.Height;
         content.FloatingLeft = pointer.X - context.AnchorOffset.X;
         content.FloatingTop = pointer.Y - context.AnchorOffset.Y;
-    }
-
-}
-
-internal sealed class FastDoubleClickGesture(TimeSpan interval)
-{
-    private readonly long _intervalMilliseconds = checked((long)interval.TotalMilliseconds);
-    private string? _target;
-    private long _timestamp;
-    private Point _position;
-
-    public bool RegisterPress(
-        string target,
-        long timestamp,
-        Point position,
-        double horizontalRange,
-        double verticalRange)
-    {
-        var matched = _target != null &&
-                      string.Equals(_target, target, StringComparison.Ordinal) &&
-                      timestamp >= _timestamp &&
-                      timestamp - _timestamp <= _intervalMilliseconds &&
-                      Math.Abs(position.X - _position.X) <= horizontalRange &&
-                      Math.Abs(position.Y - _position.Y) <= verticalRange;
-
-        if (matched)
-        {
-            Reset();
-            return true;
-        }
-
-        _target = target;
-        _timestamp = timestamp;
-        _position = position;
-        return false;
-    }
-
-    public void Cancel(string target)
-    {
-        if (string.Equals(_target, target, StringComparison.Ordinal))
-            Reset();
-    }
-
-    private void Reset()
-    {
-        _target = null;
-        _timestamp = 0;
-        _position = default;
     }
 }

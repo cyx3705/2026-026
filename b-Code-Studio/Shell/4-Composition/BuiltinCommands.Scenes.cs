@@ -68,7 +68,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.open",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "在当前场景里打开一页（不切场景）；落在中央区的页会顶掉顶栏原来那一页",
+            Summary = "在当前场景里打开一页（不切场景）；它回到自己的位置，那个位置原来的页被隐藏（一格一页）",
             Example = "aurora.scene.open page=graph",
             RequiresUiThread = true,
             Parameters = [PageParameter()],
