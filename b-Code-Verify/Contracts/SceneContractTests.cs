@@ -7,33 +7,34 @@ using Xunit;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 场景（REQ-UI-084 ～ 087，见 b-Office/current/场景与导航方案.md）。
+/// 场景（REQ-UI-084 ～ 086、094，见 b-Office/current/场景与导航方案.md）。
 ///
 /// 夹具照着真实的两个极端搭：Janus 三页协同（中央 + 左侧 + 并入控制台的标签组），
 /// Minerva 只有一页。命令集与控制台是常驻页。
+///
+/// 1.20.0 起场景不拥有页面：场景之间的区别只是显隐，页面集合、增补剔除与断链账整套退役。
+/// 顶栏只留一页（REQ-UI-096），所以命令集虽是常驻页，进了有自己中央页的场景就被顶掉。
 /// </summary>
 [Collection(TestCollections.Ui)]
 public sealed class SceneContractTests
 {
-    /// <summary>REQ-UI-084 / 085：每个模块自动得到一个场景，切过去只剩它的页与常驻页。</summary>
+    /// <summary>REQ-UI-084 / 094：每个模块自动得到一个场景，第一次进入露出它自己的页与常驻页。</summary>
     [Fact]
-    public void EachModuleGetsASceneAndSwitchingKeepsOnlyItsPages() => RunScene((host, scenes, _) =>
+    public void EachModuleGetsASceneWhoseFirstVisitShowsItsOwnPages() => RunScene((host, scenes, _) =>
     {
         var list = scenes.List();
-        Assert.Equal(new[] { "overview", "projops", "graph" }, list.Single(s => s.Id == "HistoryJanus").Pages);
-        Assert.Equal(new[] { "mapping" }, list.Single(s => s.Id == "HistoryMinerva").Pages);
+        Assert.Equal(SceneSource.Derived, list.Single(s => s.Id == "HistoryJanus").Source);
+        Assert.Equal(SceneSource.Derived, list.Single(s => s.Id == "HistoryMinerva").Source);
         Assert.Equal(SceneSource.All, list.Single(s => s.Id == SceneManager.AllId).Source);
         Assert.Equal(SceneManager.AllId, scenes.ActiveId);
 
+        // 命令集是常驻页，但顶栏只留一页：留的是场景自己的中央页。
         Assert.True(scenes.Go("Minerva").Ok);
-        AssertVisible(host, "mcp", "console", "mapping");
+        AssertVisible(host, "console", "mapping");
 
         Assert.True(scenes.Go("janus").Ok);
-        AssertVisible(host, "mcp", "console", "overview", "projops", "graph");
+        AssertVisible(host, "console", "overview", "projops", "graph");
         Assert.Equal("HistoryJanus", scenes.ActiveId);
-
-        Assert.True(scenes.Go(SceneManager.AllId).Ok);
-        AssertVisible(host, "mcp", "console", "overview", "projops", "graph", "mapping");
     });
 
     /// <summary>
@@ -55,7 +56,7 @@ public sealed class SceneContractTests
 
         Assert.Same(mapping, host.FindContent("mapping"));
         Assert.Same(overview, host.FindContent("overview"));
-        AssertVisible(host, "mcp", "console", "overview", "projops", "graph");
+        AssertVisible(host, "console", "overview", "projops", "graph");
     });
 
     /// <summary>REQ-UI-085：场景的布局按场景 id 存成命名布局——模块场景就是模块名。</summary>
@@ -69,6 +70,28 @@ public sealed class SceneContractTests
         Assert.Contains("HistoryMinerva", host.ListLayouts());
     });
 
+    /// <summary>
+    /// REQ-UI-094：场景之间的区别只是显隐。在一个场景里打开、隐藏的页，只记在这个场景的布局里；
+    /// 回到别的场景是它自己离开时的样子。显隐走的就是停靠层的 Show / Hide，没有另一套增删。
+    /// </summary>
+    [Fact]
+    public void ASceneRemembersWhatWasShownAndHiddenInIt() => RunScene((host, scenes, _) =>
+    {
+        scenes.Go("Minerva");
+        host.Show("graph");
+        AssertVisible(host, "console", "mapping", "graph");
+
+        scenes.Go("Janus");
+        host.Hide("projops");
+        AssertVisible(host, "console", "overview", "graph");
+
+        scenes.Go("Minerva");
+        AssertVisible(host, "console", "mapping", "graph");
+
+        scenes.Go("Janus");
+        AssertVisible(host, "console", "overview", "graph");
+    });
+
     /// <summary>在 Minerva 场景里 Janus 热重载一次，它新登记的页不得挤进来；Minerva 自己的新页照常露面。</summary>
     [Fact]
     public void PagesRegisteredWhileInAnotherSceneStayOutOfSight() => RunScene((host, scenes, _) =>
@@ -78,69 +101,57 @@ public sealed class SceneContractTests
         host.RegisterWindow(Tool("options", DockSide.Right), "HistoryMinerva");
         scenes.OnWindowsChanged();
 
-        AssertVisible(host, "mcp", "console", "mapping", "options");
-        Assert.Contains("late", scenes.Find("Janus")!.Pages);
-    });
+        AssertVisible(host, "console", "mapping", "options");
 
-    /// <summary>增删只改指定的场景；常驻页与「全部」拒绝增删。</summary>
-    [Fact]
-    public void AddAndRemoveChangeOnlyThatScene() => RunScene((host, scenes, _) =>
-    {
-        scenes.Go("Minerva");
-        Assert.True(scenes.Add("graph").Ok);
-        AssertVisible(host, "mcp", "console", "mapping", "graph");
-
+        // 第一次进 Janus：初值规则照样认得它后来登记的页。
         scenes.Go("Janus");
-        AssertVisible(host, "mcp", "console", "overview", "projops", "graph");
-        Assert.True(scenes.Remove("projops").Ok);
-        AssertVisible(host, "mcp", "console", "overview", "graph");
-
-        Assert.Equal(new[] { "mapping", "graph" }, scenes.Find("Minerva")!.Pages);
-        Assert.False(scenes.Remove("console").Ok);
-        Assert.False(scenes.Add("mapping", SceneManager.AllId).Ok);
+        Assert.Contains("late", Visible(host));
     });
 
-    /// <summary>重置丢掉增补与剔除。</summary>
+    /// <summary>重置回到第一次进入时的样子：在场景里打开的别处的页收回去。</summary>
     [Fact]
-    public void ResetDropsTheUsersChanges() => RunScene((host, scenes, _) =>
+    public void ResetBringsTheSceneBackToItsFirstVisit() => RunScene((host, scenes, _) =>
     {
         scenes.Go("Minerva");
-        scenes.Add("graph");
+        host.Show("graph");
         Assert.True(scenes.Reset().Ok);
 
-        Assert.Equal(new[] { "mapping" }, scenes.Find("Minerva")!.Pages);
-        AssertVisible(host, "mcp", "console", "mapping");
+        AssertVisible(host, "console", "mapping");
     });
 
-    /// <summary>REQ-UI-087：另存场景引用的页没了，照样能切，缺的页有名有姓地报出来。</summary>
+    /// <summary>
+    /// 另存场景就是一份命名布局。它记着的页后来没了，照样能切——没有断链账，缺的页不在树里而已。
+    /// 另存场景没有初值可回，不是当前场景时拒绝重置。
+    /// </summary>
     [Fact]
-    public void SavedSceneReportsPagesThatAreNoLongerRegistered() => RunScene((host, scenes, _) =>
+    public void SavedSceneIsJustANamedLayout() => RunScene((host, scenes, _) =>
     {
         scenes.Go("Minerva");
-        Assert.True(scenes.Add("projops").Ok);
+        host.Show("projops");
         Assert.True(scenes.Save("drawing", "出图").Ok);
         Assert.False(scenes.Save("HistoryJanus", null).Ok);
+        Assert.Equal(SceneSource.User, scenes.Find("出图")!.Source);
+
+        scenes.Go("Janus");
+        Assert.False(scenes.Reset("出图").Ok);
+        Assert.True(scenes.Go("drawing").Ok);
+        AssertVisible(host, "console", "mapping", "projops");
 
         host.UnregisterOwner("HistoryMinerva");
-        var saved = scenes.Find("出图")!;
-        Assert.Equal(SceneSource.User, saved.Source);
-        Assert.Equal(new[] { "projops" }, saved.Pages);
-        Assert.Equal(new[] { "HistoryMinerva/mapping" }, saved.Broken);
-
-        var result = scenes.Go("drawing");
-        Assert.True(result.Ok);
-        Assert.Contains("未注册", result.Message);
+        Assert.True(scenes.Go("Janus").Ok);
+        Assert.True(scenes.Go("drawing").Ok);
+        AssertVisible(host, "console", "projops");
     });
 
-    /// <summary>打开一页：当前场景没有它，就切到含它的场景。</summary>
+    /// <summary>打开一页就在当前场景里打开，不切场景；落在中央区的页顶掉顶栏原来那一页。</summary>
     [Fact]
-    public void OpeningAPageOutsideTheSceneSwitchesToTheSceneThatHasIt() => RunScene((host, scenes, _) =>
+    public void OpeningAPageShowsItInTheCurrentScene() => RunScene((host, scenes, _) =>
     {
         scenes.Go("Minerva");
-        Assert.True(scenes.Open("graph").Ok);
+        Assert.True(scenes.Open("overview").Ok);
 
-        Assert.Equal("HistoryJanus", scenes.ActiveId);
-        Assert.Contains("graph", Visible(host));
+        Assert.Equal("HistoryMinerva", scenes.ActiveId);
+        AssertVisible(host, "console", "overview");
     });
 
     /// <summary>当前场景与使用频次跨重启还在；列表按频次排。</summary>
@@ -156,6 +167,23 @@ public sealed class SceneContractTests
         Assert.Equal(2, again.Find("Janus")!.Uses);
         var order = again.List().Select(s => s.Id).ToList();
         Assert.True(order.IndexOf("HistoryJanus") < order.IndexOf("HistoryMinerva"));
+    });
+
+    /// <summary>1.19.0 的场景设置照样读得进来：有页面集的记录还是另存场景，增补剔除丢掉不报错。</summary>
+    [Fact]
+    public void LegacySceneSettingsKeepSavedScenes() => RunScene((host, _, settings) =>
+    {
+        settings.Set(SceneManager.SettingsKey,
+            """
+            {"schemaVersion":1,"active":"drawing","scenes":{
+              "drawing":{"title":"出图","pages":["HistoryJanus/projops"],"added":[],"removed":[]},
+              "HistoryMinerva":{"added":["HistoryJanus/graph"],"removed":[],"resetPending":false}}}
+            """);
+
+        var legacy = new SceneManager(host, settings, new UsageLedger(settings, new NullLog()), new NullLog());
+        Assert.Equal("drawing", legacy.ActiveId);
+        Assert.Equal(SceneSource.User, legacy.Find("出图")!.Source);
+        Assert.Equal(SceneSource.Derived, legacy.Find("Minerva")!.Source);
     });
 
     private static void RunScene(Action<DockingHost, SceneManager, MemorySettings> body)

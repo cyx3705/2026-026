@@ -178,7 +178,7 @@ internal partial class ShellWindow
             : Item("切换到深色模式", $"aurora.app.theme mode={ThemeDark}"));
         rebuilt.Add(view);
 
-        // 场景（REQ-UI-085）：与左栏同一条命令路径，菜单里列全，左栏只列常用的
+        // 场景（REQ-UI-085）：与右栏同一条命令路径，菜单里列全，右栏只列常用的
         var scenes = new MenuItem { Header = "场景(_S)" };
         foreach (var scene in _scenes.List()
                      .OrderBy(s => s.Source == SceneSource.All ? 0 : 1)

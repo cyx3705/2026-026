@@ -266,9 +266,13 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             if (_closing)
                 return;
-            AttachChromeBarToMainDocumentPane();
+            PlaceChromeBar();
             ReserveSpaceForChromeBar();
             ApplyThemeToFloatingWindows();
+            ApplyLabelModeToFloatingWindows();
+
+            // 用户拖放、隐藏都不一定发 WindowsChanged：常用页面胶囊跟着巡检对一次，没变不重画。
+            RefreshNavigatorPages();
         };
         Loaded += (_, _) => _chromeUpkeep.Start();
 
@@ -308,7 +312,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             _topBar.Refresh();
 
             // 新登记的页不属于当前场景就藏起来（Janus 热重载不能挤进 Minerva 场景）；
-            // 左栏跟着页数与专注态重画。
+            // 右栏（场景与常用页面胶囊）跟着页面显隐与专注态重画。
             _scenes.OnWindowsChanged();
             RefreshNavigatorRail();
         });
@@ -419,6 +423,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         UpdateLayoutIndicator();
         ApplyFocusChrome();
         InitializeNavigator();
+        InitializeLabelMode();
 
         Closing += OnShellClosing;
         Closed += OnShellClosed;
@@ -772,7 +777,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     }
 
     private void OnShellClosed(object? sender, EventArgs e)
-        => _topBar.Dispose();
+    {
+        ShutdownLabelMode();
+        _topBar.Dispose();
+    }
 
     private void RegisterFrontendLifecycleCommands(CommandRegistry registry)
     {

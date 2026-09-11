@@ -175,7 +175,7 @@ internal sealed partial class DockingHost
         foreach (var descriptor in _descriptors)
         {
             if (!_orphanPlacements.TryGetValue(descriptor.Id, out var placement) ||
-                !placement.Hidden || IsPrimaryCommandDocument(descriptor.Id))
+                !placement.Hidden)
             {
                 continue;
             }
@@ -248,7 +248,7 @@ internal sealed partial class DockingHost
                          || !d.DefaultVisible
                          || placement?.Hidden == true;
             var document = MoveToCenterDocument(d);
-            if (hidden && !IsPrimaryCommandDocument(d.Id))
+            if (hidden)
             {
                 DetachDocument(document);
                 _hiddenCenterIds.Add(d.Id);
@@ -335,7 +335,8 @@ internal sealed partial class DockingHost
             Title = descriptor.Title,
             Content = GetOrCreateContent(descriptor),
             CanClose = false,
-            CanFloat = !IsPrimaryCommandDocument(descriptor.Id),
+            // 1.20.0 起命令集也能浮出（REQ-UI-095）；落不到停靠点就隐藏，见 REQ-UI-098。
+            CanFloat = true,
         };
         _centerDocuments[descriptor.Id] = document;
         return document;
@@ -714,7 +715,7 @@ internal sealed partial class DockingHost
                 continue;
 
             _orphanPlacements.Remove(id);
-            if (placement.Hidden && !IsPrimaryCommandDocument(id))
+            if (placement.Hidden)
             {
                 DetachDocument(document);
                 _hiddenCenterIds.Add(id);

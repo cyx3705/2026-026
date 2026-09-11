@@ -141,7 +141,8 @@ internal sealed partial class DockingHost
         }
     }
 
-    private void ApplyLayoutSnapshot(string payload)
+    /// <summary>恢复一份快照。返回这份快照认识的页（有位置记录或在树里）——之后才登记的页不在其中。</summary>
+    private HashSet<string> ApplyLayoutSnapshot(string payload)
     {
         var snapshot = DockLayoutSnapshotCodec.Deserialize(payload);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -171,6 +172,9 @@ internal sealed partial class DockingHost
             if (active != null)
                 root.ActiveContent = active;
         }
+
+        seen.UnionWith(snapshot.Placements.Keys);
+        return seen;
     }
 
     private ILayoutPanelElement? RestoreNode(

@@ -203,6 +203,8 @@ internal sealed partial class DockingHost : IDockingService
             AttachLayout();
         }
 
+        // 1.19.0 及以前存下的布局顶栏里可能有好几页：只留上次选中的那一页。
+        EnforceSingleCenterPage(SelectedCenterId());
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -246,7 +248,14 @@ internal sealed partial class DockingHost : IDockingService
             })
             .ToList();
 
+    /// <summary>显示一页。落在中央区的页会把顶栏原来那一页顶掉（REQ-UI-096）。</summary>
     public void Show(string id)
+    {
+        ShowCore(id);
+        EnforceSingleCenterPage(id);
+    }
+
+    private void ShowCore(string id)
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
@@ -260,9 +269,7 @@ internal sealed partial class DockingHost : IDockingService
             else
             {
                 var anchorable = FindRequiredAnchorable(id);
-                if (anchorable.IsHidden)
-                    anchorable.Show();
-                _hiddenCenterIds.Remove(id);
+                RevealAnchorable(anchorable, id);
                 anchorable.IsSelected = true;
                 anchorable.IsActive = true;
             }
@@ -281,16 +288,10 @@ internal sealed partial class DockingHost : IDockingService
             var document = FindCenterDocument(id);
             if (document != null)
             {
-                if (IsPrimaryCommandDocument(id))
-                {
-                    _log.Warn(LayoutSource, "命令集是主窗口，不能隐藏");
-                }
-                else
-                {
-                    DetachDocument(document);
-                    _hiddenCenterIds.Add(id);
-                    ScheduleCenterDocumentPresentation();
-                }
+                // 1.20.0 起命令集不再是主文档区的锚点（REQ-UI-095），与别的页一样可以隐藏。
+                DetachDocument(document);
+                _hiddenCenterIds.Add(id);
+                ScheduleCenterDocumentPresentation();
             }
             else
             {
@@ -314,22 +315,15 @@ internal sealed partial class DockingHost : IDockingService
             var document = FindCenterDocument(id);
             if (document != null)
             {
-                if (IsPrimaryCommandDocument(id))
-                {
-                    _log.Warn(LayoutSource, "命令集是主窗口，不能浮动");
-                }
-                else
-                {
-                    ShowCenterDocument(document);
-                    if (!IsFloating(document))
-                        document.Float();
-                }
+                // 命令集也能浮出：Ctrl 标签态把它拖出去、没落到停靠点，它就隐藏（REQ-UI-098）。
+                ShowCenterDocument(document);
+                if (!IsFloating(document))
+                    document.Float();
             }
             else
             {
                 var anchorable = FindRequiredAnchorable(id);
-                if (anchorable.IsHidden)
-                    anchorable.Show();
+                RevealAnchorable(anchorable, id);
                 if (!IsFloating(anchorable))
                     anchorable.Float();
             }
@@ -347,8 +341,7 @@ internal sealed partial class DockingHost : IDockingService
                 throw new InvalidOperationException($"窗口 {id} 是文档页，不支持自动隐藏");
 
             var anchorable = FindRequiredAnchorable(id);
-            if (anchorable.IsHidden)
-                anchorable.Show();
+            RevealAnchorable(anchorable, id);
             anchorable.ToggleAutoHide();
             EnsureCentralWorkspace();
         }
@@ -367,6 +360,8 @@ internal sealed partial class DockingHost : IDockingService
         _pendingTabTargets.Remove(id);
         using (Suppress())
         {
+            // 明确停到某处的页就是露面的页：它若曾被顶栏顶掉，那笔「中央区隐藏」得先勾掉。
+            _hiddenCenterIds.Remove(id);
             if (side == DockSide.Center ||
                 side == DockSide.Tab && targetId != null && IsCenterContent(targetId))
             {
@@ -383,7 +378,7 @@ internal sealed partial class DockingHost : IDockingService
             {
                 if (IsPrimaryCommandDocument(id))
                 {
-                    _log.Warn(LayoutSource, "命令集是主窗口，只能停靠在中央主区");
+                    _log.Warn(LayoutSource, "命令集是文档身份，只能停靠在中央主区");
                     ShowCenterDocument(MoveToCenterDocument(descriptor));
                 }
                 else
@@ -395,6 +390,8 @@ internal sealed partial class DockingHost : IDockingService
             }
             EnsureCentralWorkspace();
         }
+
+        EnforceSingleCenterPage(id);
     }
 
     public void SetRatio(string id, double ratio)
@@ -426,10 +423,17 @@ internal sealed partial class DockingHost : IDockingService
 
     public void ResetWindow(string id)
     {
+        ResetWindowCore(id);
+        EnforceSingleCenterPage(id);
+    }
+
+    private void ResetWindowCore(string id)
+    {
         RestoreLayoutFromMaximized();
         var d = _byId[id];
         using (Suppress())
         {
+            _hiddenCenterIds.Remove(id);
             if (UsesDocumentIdentity(d))
             {
                 ShowCenterDocument(MoveToCenterDocument(d));
@@ -463,6 +467,7 @@ internal sealed partial class DockingHost : IDockingService
                 _ratios[d.Id] = NormalizeRatio(d.DefaultRatio, 0.25);
         }
 
+        EnforceSingleCenterPage(SelectedCenterId());
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -508,6 +513,7 @@ internal sealed partial class DockingHost : IDockingService
                 _seedRatiosFromLayout = true;
             }
 
+            EnforceSingleCenterPage(SelectedCenterId());
             RebaseSoon();
             return true;
         }
@@ -539,6 +545,11 @@ internal sealed partial class DockingHost : IDockingService
         }
 
         RestoreLayoutFromMaximized();
+
+        // 新登记的中央页不抢顶栏：主文档区里已经有页就留原来那一页，空着才轮到它。
+        // 不看位置台账里的「上次选中」：台账是全局的、不分场景，拿它去抢会把当前场景的页顶掉，
+        // 随后场景又把这个外来页藏起来，顶栏落得一页不剩（1.20.0 首次热装真机撞到）。
+        var previousCenter = CurrentCenterId();
         using (Suppress())
         {
             _descriptors.Add(descriptor);
@@ -556,7 +567,7 @@ internal sealed partial class DockingHost : IDockingService
                 if (UsesDocumentIdentity(descriptor))
                 {
                     var document = MoveToCenterDocument(descriptor);
-                    if (hidden && !IsPrimaryCommandDocument(descriptor.Id))
+                    if (hidden)
                     {
                         DetachDocument(document);
                         _hiddenCenterIds.Add(descriptor.Id);
@@ -597,6 +608,7 @@ internal sealed partial class DockingHost : IDockingService
             ResolvePendingTabTargets(descriptor.Id);
         }
 
+        EnforceSingleCenterPage(previousCenter ?? descriptor.Id);
         ScheduleReapplyRatios();
         WindowsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -713,6 +725,7 @@ internal sealed partial class DockingHost : IDockingService
             _seedRatiosFromLayout = true;
         }
 
+        EnforceSingleCenterPage(SelectedCenterId());
         WindowsChanged?.Invoke(this, EventArgs.Empty);
         RebaseSoon();
     }
@@ -737,6 +750,7 @@ internal sealed partial class DockingHost : IDockingService
 
         ScheduleCentralWorkspaceRepair();
         ScheduleCenterDocumentPresentation();
+        ScheduleSingleCenterCheck();
 
         // 手势进行中持续触发 → 去抖,静默 500ms 后视为动作结束
         _debounce.Stop();

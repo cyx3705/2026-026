@@ -10,23 +10,21 @@ namespace HistoryAurora.Shell.Components.Scenes;
 /// <summary>场景从哪里来（场景与导航方案 §1.1）。</summary>
 internal enum SceneSource
 {
-    /// <summary>「全部」：注册表里的每一页。升级后的默认场景，界面与升级前一致。</summary>
+    /// <summary>「全部」：第一次进入时每一页都露面。升级后的默认场景，界面与升级前一致。</summary>
     All,
 
-    /// <summary>按模块派生：该 owner 的全部页面，随模块装卸而生灭。</summary>
+    /// <summary>按模块派生：第一次进入时露出该 owner 的页，随模块装卸而生灭。</summary>
     Derived,
 
     /// <summary>用户另存的场景。</summary>
     User,
 }
 
-/// <summary>一个场景此刻的样子。页面列表只含当前注册着的页，引用不到的进 <see cref="Broken"/>。</summary>
+/// <summary>一个场景此刻的样子。场景不含页面集合（REQ-UI-094），因此这里也没有页数与断链。</summary>
 internal sealed record SceneInfo(
     string Id,
     string Title,
     SceneSource Source,
-    IReadOnlyList<string> Pages,
-    IReadOnlyList<string> Broken,
     int Uses,
     DateTimeOffset? LastUsed,
     bool Active);
@@ -39,22 +37,18 @@ internal readonly record struct SceneResult(bool Ok, string Message)
 }
 
 /// <summary>
-/// 场景（REQ-UI-084 / 085）：主页面的组织单位。切场景就是换掉整个停靠布局，
-/// 不在当前场景里的页面不出现。
+/// 场景（REQ-UI-084 / 085 / 094）：主页面的组织单位。
 ///
-/// <code>场景 = 页面集合 + 停靠布局</code>
+/// <code>场景 = 一份命名布局（哪些页露面、停在哪）</code>
 ///
-/// 三种来源进同一本账：「全部」、按模块派生、用户另存（<see cref="SceneSource"/>）。
-/// 派生规则已经覆盖 Janus（三页协同）与 Minerva（一页）这两个极端，**不需要任何模块改代码**。
+/// **场景不拥有页面**（1.20.0 用户拍板）：场景之间的区别只是页面的显示与隐藏，
+/// 不存在「这一页属于哪个场景」这件事。1.19.0 的页面集合、增补、剔除与断链账因此整套删掉，
+/// <c>aurora.scene.add / remove</c> 一并退役——显隐就是 <c>aurora.ui.show / hide</c>。
 ///
-/// 两条刻意的取舍：
-/// <list type="bullet">
-///   <item>派生场景的页面集**每次从注册表重新派生**，不缓存——与页面注册协议 §1.2
-///         「宿主不缓存」同一条理由：缓存会在模块改名、卸下之后变成幽灵。
-///         落盘的只有用户的改动（增补、剔除、另存）。</item>
-///   <item>布局存成**命名布局，名字就是场景 id**；模块场景的 id 就是模块名。
-///         于是「命名布局按模块名」与「场景各记各的布局」是同一件事，不另开一种文件。</item>
-/// </list>
+/// 按模块派生的场景第一次进入时露出该模块的页与常驻页，那只是**初值**；
+/// 之后它完全按你离开时的样子恢复，与「全部」、另存场景没有区别。
+///
+/// 布局存成**命名布局，名字就是场景 id**；模块场景的 id 就是模块名（DEC-031）。
 /// </summary>
 internal sealed class SceneManager
 {
@@ -69,10 +63,8 @@ internal sealed class SceneManager
     private const string LogSource = "scene";
 
     /// <summary>
-    /// 常驻页：每个场景自动带上，不进任何场景的页面集。
-    ///
-    /// 控制台是真常驻。命令集是**被迫**常驻：它是主文档区的锚点，窗口按钮栏也挂在那个窗格上，
-    /// 藏掉它会被中央区修复当场放回去。要到拆顶栏那一阶段（REQ-UI-091）才解得开。
+    /// 常驻页：每个场景第一次进入时都露面。之后它们的显隐同样只记在场景布局里——
+    /// 1.20.0 起命令集不再是主文档区的锚点（REQ-UI-095），可以被顶栏的新页顶掉，也可以拖出隐藏。
     /// </summary>
     public static readonly IReadOnlySet<string> Resident = new HashSet<string>(
         [StandardWindowIds.Console, StandardWindowIds.Mcp],
@@ -96,7 +88,7 @@ internal sealed class SceneManager
         RefreshKnown();
     }
 
-    /// <summary>场景集合或当前场景变了：左栏与菜单据此重画。</summary>
+    /// <summary>场景集合或当前场景变了：右栏与菜单据此重画。</summary>
     public event EventHandler? Changed;
 
     public string ActiveId => _state.Active ?? AllId;
@@ -106,55 +98,20 @@ internal sealed class SceneManager
     /// <summary>全部场景，按使用频次、最近使用、标题排序。</summary>
     public IReadOnlyList<SceneInfo> List()
     {
-        var windows = _docking.ListWindows();
-        var scenes = new List<SceneInfo>
-        {
-            Describe(AllId, "全部", SceneSource.All,
-                windows.Where(w => !Resident.Contains(w.Id)).Select(w => w.Id).ToList(), []),
-        };
+        var scenes = new List<SceneInfo> { Describe(AllId, "全部", SceneSource.All) };
 
-        foreach (var group in windows
+        foreach (var owner in _docking.ListWindows()
                      .Where(w => !Resident.Contains(w.Id))
-                     .GroupBy(w => w.Owner, StringComparer.OrdinalIgnoreCase))
+                     .Select(w => w.Owner)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var id = SceneIdFor(group.Key);
-            var pages = group.Select(w => w.Id).ToList();
-            var broken = new List<string>();
-            if (_state.Find(id) is { } record)
-            {
-                foreach (var reference in record.Added)
-                {
-                    var hit = Resolve(windows, reference);
-                    if (hit == null)
-                        broken.Add(reference);
-                    else if (!Resident.Contains(hit.Id) && !pages.Contains(hit.Id, StringComparer.OrdinalIgnoreCase))
-                        pages.Add(hit.Id);
-                }
-
-                pages.RemoveAll(page => record.Removed.Any(reference => MatchesId(reference, page)));
-            }
-
-            scenes.Add(Describe(id, TitleFor(group.Key), SceneSource.Derived, pages, broken));
+            scenes.Add(Describe(SceneIdFor(owner), TitleFor(owner), SceneSource.Derived));
         }
 
         foreach (var (id, record) in _state.Scenes)
         {
-            // 派生与「全部」的记录只存增补、剔除，没有 Pages；有 Pages 的才是另存场景。
-            if (record.Pages == null || scenes.Any(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-                continue;
-
-            var pages = new List<string>();
-            var broken = new List<string>();
-            foreach (var reference in record.Pages)
-            {
-                var hit = Resolve(windows, reference);
-                if (hit == null)
-                    broken.Add(reference);
-                else if (!Resident.Contains(hit.Id))
-                    pages.Add(hit.Id);
-            }
-
-            scenes.Add(Describe(id, record.Title ?? id, SceneSource.User, pages, broken));
+            if (record.Saved && !scenes.Any(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+                scenes.Add(Describe(id, record.Title ?? id, SceneSource.User));
         }
 
         return scenes
@@ -195,39 +152,21 @@ internal sealed class SceneManager
         Persist();
         _usage.Record(UsageKey(target.Id));
         Changed?.Invoke(this, EventArgs.Empty);
-        return SceneResult.Success(Summarize($"已切到场景 [{target.Title}]", target));
+        return SceneResult.Success($"已切到场景 [{target.Title}]：{VisibleCount()} 页露面");
     }
 
-    /// <summary>
-    /// 打开一页：当前场景里有就直接露面；没有就切到含它的、用得最多的那个场景。
-    /// 哪个场景都没有它（被各处剔除了）就退回「全部」。
-    /// </summary>
+    /// <summary>在当前场景里打开一页。场景不拥有页面，所以不存在「切到含它的场景」。</summary>
     public SceneResult Open(string? page)
     {
         var window = ResolvePage(page);
         if (window == null)
             return SceneResult.Fail($"没有页面 [{page}]（aurora.ui.windows 可查）");
 
-        var active = Find(ActiveId);
-        if (Resident.Contains(window.Id) || active?.Pages.Contains(window.Id, StringComparer.OrdinalIgnoreCase) == true)
-        {
-            _docking.Show(window.Id);
-            return SceneResult.Success($"[{window.Title}] 在当前场景里，已打开");
-        }
-
-        var scenes = List();
-        var best = scenes.FirstOrDefault(s => s.Source != SceneSource.All &&
-                                              s.Pages.Contains(window.Id, StringComparer.OrdinalIgnoreCase))
-                   ?? scenes.First(s => s.Source == SceneSource.All);
-        var result = Go(best.Id);
-        if (!result.Ok)
-            return result;
-
         _docking.Show(window.Id);
-        return SceneResult.Success($"已切到场景 [{best.Title}] 并打开 [{window.Title}]");
+        return SceneResult.Success($"[{window.Title}] 已在当前场景打开");
     }
 
-    /// <summary>把当前布局另存为用户场景，页面集取此刻露面的页。</summary>
+    /// <summary>把当前布局另存为用户场景并切到它。</summary>
     public SceneResult Save(string? id, string? title)
     {
         if (string.IsNullOrWhiteSpace(id))
@@ -246,14 +185,8 @@ internal sealed class SceneManager
         // 先把当前场景记下来：每个场景都记着你离开时的样子，另存不例外。
         SaveActiveLayout();
 
-        var pages = _docking.ListWindows()
-            .Where(w => w.IsVisible && !Resident.Contains(w.Id))
-            .Select(RefOf)
-            .ToList();
         var record = _state.GetOrAdd(id);
-        record.Pages = pages;
-        record.Added.Clear();
-        record.Removed.Clear();
+        record.Saved = true;
         record.ResetPending = false;
         record.Title = string.IsNullOrWhiteSpace(title) ? record.Title ?? id : title.Trim();
 
@@ -270,70 +203,14 @@ internal sealed class SceneManager
         Persist();
         _usage.Record(UsageKey(id));
         Changed?.Invoke(this, EventArgs.Empty);
-        return SceneResult.Success($"已另存为场景 [{record.Title}]：{pages.Count} 页");
-    }
-
-    // ---------------------------------------------------------------- 增删
-
-    public SceneResult Add(string? page, string? sceneIdOrTitle = null)
-    {
-        if (!TryTarget(sceneIdOrTitle, page, out var scene, out var window, out var error))
-            return SceneResult.Fail(error);
-
-        var record = _state.GetOrAdd(scene.Id);
-        if (scene.Source == SceneSource.User)
-        {
-            record.Pages ??= [];
-            if (!record.Pages.Any(reference => MatchesId(reference, window.Id)))
-                record.Pages.Add(RefOf(window));
-        }
-        else
-        {
-            record.Removed.RemoveAll(reference => MatchesId(reference, window.Id));
-            if (!SceneIdFor(window.Owner).Equals(scene.Id, StringComparison.OrdinalIgnoreCase) &&
-                !record.Added.Any(reference => MatchesId(reference, window.Id)))
-            {
-                record.Added.Add(RefOf(window));
-            }
-        }
-
-        Persist();
-        if (scene.Active)
-            _docking.Show(window.Id);
-        Changed?.Invoke(this, EventArgs.Empty);
-        return SceneResult.Success($"[{window.Title}] 已加入场景 [{scene.Title}]");
-    }
-
-    public SceneResult Remove(string? page, string? sceneIdOrTitle = null)
-    {
-        if (!TryTarget(sceneIdOrTitle, page, out var scene, out var window, out var error))
-            return SceneResult.Fail(error);
-
-        var record = _state.GetOrAdd(scene.Id);
-        if (scene.Source == SceneSource.User)
-        {
-            record.Pages?.RemoveAll(reference => MatchesId(reference, window.Id));
-        }
-        else
-        {
-            record.Added.RemoveAll(reference => MatchesId(reference, window.Id));
-            if (SceneIdFor(window.Owner).Equals(scene.Id, StringComparison.OrdinalIgnoreCase) &&
-                !record.Removed.Any(reference => MatchesId(reference, window.Id)))
-            {
-                record.Removed.Add(RefOf(window));
-            }
-        }
-
-        Persist();
-        if (scene.Active && window.IsVisible)
-            _docking.Hide(window.Id);
-        Changed?.Invoke(this, EventArgs.Empty);
-        return SceneResult.Success($"[{window.Title}] 已移出场景 [{scene.Title}]");
+        return SceneResult.Success($"已另存为场景 [{record.Title}]：{VisibleCount()} 页露面");
     }
 
     /// <summary>
-    /// 回到默认形态：派生场景丢掉增补与剔除，布局按各页 placement 重建。
-    /// 另存场景的页面集是用户定的，只重建布局。不是当前场景的，下次切进去时再重建。
+    /// 回到初值：「全部」与模块场景按各页 placement 重建，露面的页回到第一次进入时的样子。
+    /// 不是当前场景的，下次切进去时再重建。
+    ///
+    /// 另存场景没有初值可回，只能在它是当前场景时重排：此刻露面的页按各自默认位置摆回去。
     /// </summary>
     public SceneResult Reset(string? sceneIdOrTitle = null)
     {
@@ -341,16 +218,13 @@ internal sealed class SceneManager
         if (scene == null)
             return SceneResult.Fail($"没有场景 [{sceneIdOrTitle}]（aurora.scene.list 可查）");
 
-        var record = _state.GetOrAdd(scene.Id);
-        if (scene.Source == SceneSource.Derived)
-        {
-            record.Added.Clear();
-            record.Removed.Clear();
-        }
+        if (scene.Source == SceneSource.User && !scene.Active)
+            return SceneResult.Fail($"[{scene.Title}] 是另存的场景，没有初值可回；先切到它，重置会把此刻露面的页摆回默认位置");
 
+        var record = _state.GetOrAdd(scene.Id);
         if (scene.Active)
         {
-            Apply(Find(scene.Id)!, rebuild: true);
+            Apply(scene, rebuild: true);
             record.ResetPending = false;
         }
         else
@@ -403,7 +277,7 @@ internal sealed class SceneManager
     }
 
     /// <summary>
-    /// 注册表里的窗口变了。新登记的页若不属于当前场景就藏起来——
+    /// 注册表里的窗口变了。新登记的页按当前场景的**初值规则**决定露不露面——
     /// 否则在 Minerva 场景里，Janus 热重载一次，它的三页就会挤进来。
     /// 由界面在 <c>WindowsChanged</c> 之后调用；切场景自己引起的那一次不处理。
     /// </summary>
@@ -421,8 +295,7 @@ internal sealed class SceneManager
         var active = Find(ActiveId);
         if (active is { Source: not SceneSource.All })
         {
-            var keep = new HashSet<string>(active.Pages.Concat(Resident), StringComparer.OrdinalIgnoreCase);
-            foreach (var window in fresh.Where(w => w.IsVisible && !keep.Contains(w.Id)))
+            foreach (var window in fresh.Where(w => w.IsVisible && !IsSeeded(active, w)))
             {
                 try
                 {
@@ -430,7 +303,7 @@ internal sealed class SceneManager
                 }
                 catch (Exception ex)
                 {
-                    _log.Warn(LogSource, $"新登记的页面 {window.Id} 不属于当前场景，隐藏失败: {ex.Message}");
+                    _log.Warn(LogSource, $"新登记的页面 {window.Id} 不在当前场景的初值里，隐藏失败: {ex.Message}");
                 }
             }
         }
@@ -458,27 +331,29 @@ internal sealed class SceneManager
 
     private static string UsageKey(string sceneId) => "scene:" + sceneId;
 
-    /// <summary>页面引用写 owner/id：页面 id 只是「进程内唯一」，跨时间可能被别的模块占用。</summary>
-    private static string RefOf(ToolWindowInfo window) => window.Owner + "/" + window.Id;
-
-    private static bool MatchesId(string reference, string id)
+    /// <summary>
+    /// 初值规则：第一次进入（或重置）时哪些页露面。只在场景没有布局可恢复时用得上。
+    /// 「全部」是每一页；模块场景是该模块的页 + 常驻页；另存场景一定存过布局，
+    /// 走到这里只剩重置，初值就是此刻露面的页。
+    /// </summary>
+    private IReadOnlyCollection<string> SeedFor(SceneInfo scene)
     {
-        var slash = reference.LastIndexOf('/');
-        var tail = slash >= 0 ? reference[(slash + 1)..] : reference;
-        return tail.Equals(id, StringComparison.OrdinalIgnoreCase);
+        var windows = _docking.ListWindows();
+        return scene.Source switch
+        {
+            SceneSource.All => windows.Select(w => w.Id).ToList(),
+            SceneSource.User => windows.Where(w => w.IsVisible).Select(w => w.Id).ToList(),
+            _ => windows.Where(w => IsSeeded(scene, w)).Select(w => w.Id).ToList(),
+        };
     }
 
-    private static ToolWindowInfo? Resolve(IReadOnlyList<ToolWindowInfo> windows, string reference)
-    {
-        var slash = reference.LastIndexOf('/');
-        if (slash < 0)
-            return windows.FirstOrDefault(w => w.Id.Equals(reference, StringComparison.OrdinalIgnoreCase));
+    private static bool IsSeeded(SceneInfo scene, ToolWindowInfo window)
+        => Resident.Contains(window.Id)
+           || scene.Source == SceneSource.All
+           || scene.Source == SceneSource.Derived &&
+              SceneIdFor(window.Owner).Equals(scene.Id, StringComparison.OrdinalIgnoreCase);
 
-        var owner = reference[..slash];
-        var id = reference[(slash + 1)..];
-        return windows.FirstOrDefault(w => w.Id.Equals(id, StringComparison.OrdinalIgnoreCase) &&
-                                           w.Owner.Equals(owner, StringComparison.OrdinalIgnoreCase));
-    }
+    private int VisibleCount() => _docking.ListWindows().Count(w => w.IsVisible);
 
     private ToolWindowInfo? ResolvePage(string? page)
     {
@@ -490,83 +365,29 @@ internal sealed class SceneManager
                ?? windows.FirstOrDefault(w => w.Title.Equals(key, StringComparison.OrdinalIgnoreCase));
     }
 
-    private bool TryTarget(
-        string? sceneIdOrTitle,
-        string? page,
-        out SceneInfo scene,
-        out ToolWindowInfo window,
-        out string error)
-    {
-        scene = null!;
-        window = null!;
-        var found = Find(sceneIdOrTitle ?? ActiveId);
-        if (found == null)
-        {
-            error = $"没有场景 [{sceneIdOrTitle}]（aurora.scene.list 可查）";
-            return false;
-        }
-
-        if (found.Source == SceneSource.All)
-        {
-            error = "「全部」本来就含每一页；要单独组合，先 aurora.scene.save 另存一个场景";
-            return false;
-        }
-
-        var hit = ResolvePage(page);
-        if (hit == null)
-        {
-            error = $"没有页面 [{page}]（aurora.ui.windows 可查）";
-            return false;
-        }
-
-        if (Resident.Contains(hit.Id))
-        {
-            error = $"[{hit.Title}] 是常驻页，每个场景都有";
-            return false;
-        }
-
-        scene = found;
-        window = hit;
-        error = "";
-        return true;
-    }
-
-    private SceneInfo Describe(
-        string id,
-        string title,
-        SceneSource source,
-        IReadOnlyList<string> pages,
-        IReadOnlyList<string> broken)
+    private SceneInfo Describe(string id, string title, SceneSource source)
     {
         var usage = _usage.Get(UsageKey(id));
         return new SceneInfo(
-            id, title, source, pages, broken,
+            id, title, source,
             usage?.Count ?? 0,
             usage?.LastUsed,
             id.Equals(ActiveId, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string Summarize(string head, SceneInfo scene)
-        => scene.Broken.Count == 0
-            ? $"{head}：{scene.Pages.Count} 页"
-            : $"{head}：{scene.Pages.Count} 页；{scene.Broken.Count} 页未注册（{string.Join("、", scene.Broken)}）";
-
     private void Apply(SceneInfo scene, bool rebuild)
     {
+        var seed = SeedFor(scene);
         _applying = true;
         try
         {
-            _docking.ApplyScene(LayoutName(scene.Id), scene.Pages.Concat(Resident).ToList(), rebuild);
+            _docking.ApplyScene(LayoutName(scene.Id), seed, rebuild);
         }
         finally
         {
             _applying = false;
             RefreshKnown();
         }
-
-        // 断链不静默（REQ-UI-087）：场景照切，缺的页记一笔 Warn。
-        if (scene.Broken.Count > 0)
-            _log.Warn(LogSource, $"场景 [{scene.Title}] 引用了未注册的页面: {string.Join("、", scene.Broken)}");
     }
 
     private void RefreshKnown(IReadOnlyList<ToolWindowInfo>? windows = null)
@@ -626,10 +447,15 @@ internal sealed class SceneState
             state.Scenes = new Dictionary<string, SceneRecord>(
                 state.Scenes ?? new Dictionary<string, SceneRecord>(),
                 StringComparer.OrdinalIgnoreCase);
+
+            // 1.19.0 的另存场景靠「有 pages」来认；页面集合退役后改记 saved，旧账读一次就换掉。
+            // 同一版里的 added / removed 没有去处，反序列化时直接丢弃。
             foreach (var record in state.Scenes.Values)
             {
-                record.Added ??= [];
-                record.Removed ??= [];
+                if (record.LegacyPages == null)
+                    continue;
+                record.Saved = true;
+                record.LegacyPages = null;
             }
 
             return state;
@@ -642,21 +468,17 @@ internal sealed class SceneState
     }
 }
 
-/// <summary>
-/// 一个场景的用户改动。另存场景有 <see cref="Pages"/>；派生场景与「全部」只记增补、剔除与待重置。
-/// </summary>
+/// <summary>一个场景的用户改动：标题、是不是另存的、待重置标记。场景的样子本身在同名命名布局里。</summary>
 internal sealed class SceneRecord
 {
     public string? Title { get; set; }
 
-    /// <summary>另存场景的页面集，元素写 owner/id。派生场景为 null。</summary>
-    public List<string>? Pages { get; set; }
+    /// <summary>用户另存的场景。派生场景与「全部」的记录只用来挂待重置标记。</summary>
+    public bool Saved { get; set; }
 
-    /// <summary>派生场景：从别的模块借来的页（owner/id）。</summary>
-    public List<string> Added { get; set; } = [];
-
-    /// <summary>派生场景：从自己模块里剔掉的页（owner/id）。</summary>
-    public List<string> Removed { get; set; } = [];
+    /// <summary>1.19.0 另存场景的页面集。只读不写，见 <see cref="SceneState.Parse"/>。</summary>
+    [JsonPropertyName("pages")]
+    public List<string>? LegacyPages { get; set; }
 
     /// <summary>重置时它不是当前场景：下次切进去按默认形态重建布局。</summary>
     public bool ResetPending { get; set; }

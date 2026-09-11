@@ -13,7 +13,7 @@ internal sealed record UsageEntry(int Count, DateTimeOffset LastUsed);
 ///
 /// 场景一多，今天「全局页签条太长」的问题会原样搬到场景上。对策是**只靠搜索 + 频次**，
 /// 不给场景做专门的管理页——那又是一份要人维护的目录（场景与导航方案 §八.5）。
-/// 这本账就是「频次」那一半：左栏按它挑出常用的几个，搜索按它给结果加权。
+/// 这本账就是「频次」那一半：右栏按它挑出常用的场景、给常用页面胶囊排序，搜索按它给结果加权。
 /// </summary>
 internal sealed class UsageLedger(ISettingsService settings, IShellLog log)
 {

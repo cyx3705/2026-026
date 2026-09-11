@@ -241,7 +241,7 @@ internal partial class ShellWindow
             _reservePending = false;
             if (_closing)
                 return;
-            AttachChromeBarToMainDocumentPane();
+            PlaceChromeBar();
             ReserveSpaceForChromeBar();
 
             // R4-3:浮动窗口是布局后才建出来的,在这里补主题最稳妥
@@ -275,25 +275,28 @@ internal partial class ShellWindow
     }
 
     /// <summary>
-    /// 将窗口控制栏挂到主窗口的中央文档窗格。AvalonDock 的浮动窗格位于独立
-    /// Window，不会出现在 DockManager 的视觉树中，因此不会获得这组按钮。
+    /// 窗口控制组的落点（REQ-UI-099）：平时在右栏顶部——仍是整个窗体的右上角；
+    /// 专注态右栏让位，挂到专注页的页头上。两处都找不到时回退到停靠区右上角。
+    ///
+    /// 1.19.0 及以前它挂在主文档区的页签行上，命令集因此得常驻主文档区当锚点；
+    /// 搬走之后那条约束解开了（REQ-UI-095）。主文档区的页签行照旧能拖动窗口——
+    /// 顶栏这一轮只转移、不删除。浮窗是独立 Window，不会获得这组按钮。
     /// </summary>
-    private void AttachChromeBarToMainDocumentPane()
+    private void PlaceChromeBar()
     {
         if (!IsLoaded || _closing)
             return;
 
         var focused = _docking.MaximizedId != null;
         ChromeBar.Visibility = Visibility.Visible;
+        SetChromeDragSurface(FindMainHeaderSurface(focused));
 
-        var host = FindDescendants<ContentControl>(DockManager)
-            .FirstOrDefault(control => control.IsVisible &&
-                Equals(control.Tag, focused
-                    ? "FocusedShellChromeHost"
-                    : "ShellChromeHost"));
+        var host = focused
+            ? FindDescendants<ContentControl>(DockManager)
+                .FirstOrDefault(control => control.IsVisible && Equals(control.Tag, "FocusedShellChromeHost"))
+            : NavChromeHost;
         if (host == null)
         {
-            SetChromeDragSurface(null);
             if (_chromeHost != null)
             {
                 _chromeHost.Content = null;
@@ -301,24 +304,45 @@ internal partial class ShellWindow
             }
 
             if (!ReferenceEquals(ChromeBar.Parent, RootGrid))
-                RootGrid.Children.Insert(1, ChromeBar);
+            {
+                DetachChromeBar();
+                RootGrid.Children.Add(ChromeBar);
+            }
             return;
         }
 
         if (ReferenceEquals(_chromeHost, host) && ReferenceEquals(host.Content, ChromeBar))
             return;
 
-        if (_chromeHost != null)
-            _chromeHost.Content = null;
-        if (ChromeBar.Parent is Panel parent)
-            parent.Children.Remove(ChromeBar);
-
+        DetachChromeBar();
         host.Content = ChromeBar;
         _chromeHost = host;
-        SetChromeDragSurface(FindAncestor<FrameworkElement>(
-            host,
-            element => Equals(element.Tag,
-                focused ? "FocusedShellPaneHeader" : "ShellPaneHeader")));
+    }
+
+    private void DetachChromeBar()
+    {
+        switch (ChromeBar.Parent)
+        {
+            case ContentControl owner:
+                owner.Content = null;
+                break;
+            case Panel panel:
+                panel.Children.Remove(ChromeBar);
+                break;
+        }
+    }
+
+    /// <summary>主窗口的拖动面：常规态是主文档区的页签行，专注态是专注页的页头。</summary>
+    private FrameworkElement? FindMainHeaderSurface(bool focused)
+    {
+        var anchor = FindDescendants<ContentControl>(DockManager)
+            .FirstOrDefault(control => control.IsVisible &&
+                Equals(control.Tag, focused ? "FocusedShellChromeHost" : "ShellChromeHost"));
+        return anchor == null
+            ? null
+            : FindAncestor<FrameworkElement>(
+                anchor,
+                element => Equals(element.Tag, focused ? "FocusedShellPaneHeader" : "ShellPaneHeader"));
     }
 
     private void SetChromeDragSurface(FrameworkElement? surface)

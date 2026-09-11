@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:adc="clr-namespace:AvalonDock.Controls;assembly=AvalonDock">
+                    xmlns:adc="clr-namespace:AvalonDock.Controls;assembly=AvalonDock"
+                    xmlns:base="clr-namespace:HistoryAurora.Shell.Base">
 
     <!--
         UI-01 / UI-04 / UI-06:AvalonDock 覆盖层。
@@ -189,7 +190,10 @@
     <!--
         R4-1:动作图标不再浮在内容上方(会盖住视图自己的工具条),改为占据
         页签行右端的一个固定位置 —— 与页签同排、同高,像最后一个「标签」。
-        R4-2:📌 自动隐藏单独成键已取消,该动作在 ▼ 菜单里仍在。
+        R4-2:📌 自动隐藏单独成键已取消。
+        1.20.0(REQ-UI-099):顶栏退役的第一批删除项 —— ▼ 菜单(浮动 / 停靠为文档 / 自动隐藏 / 隐藏)
+        与 ✕ 隐藏一并删掉。拖出去没落到停靠点就是隐藏(REQ-UI-098),其余动作仍在 aurora.ui.* 指令里。
+        只留专注态的「恢复页面」。
     -->
     <Style TargetType="{x:Type adc:AnchorablePaneTitle}">
         <Setter Property="HorizontalAlignment" Value="Right" />
@@ -213,58 +217,6 @@
                             <Path Data="{DynamicResource Aurora.Icon.ExitFocus}"
                                   Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
                                   StrokeThickness="1.1" />
-                        </Button>
-                        <ToggleButton x:Name="MenuToggle"
-                                      Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                      ToolTip="页面操作">
-                            <Path Data="M 0 0 L 4 4 L 8 0"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.3" />
-                        </ToggleButton>
-                        <Popup IsOpen="{Binding IsChecked, ElementName=MenuToggle, Mode=TwoWay}"
-                               AllowsTransparency="True"
-                               Placement="Bottom"
-                               PlacementTarget="{Binding ElementName=MenuToggle}"
-                               StaysOpen="False">
-                            <Border Margin="0,2,10,10"
-                                    Background="{DynamicResource Aurora.Brush.Surface}"
-                                    BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
-                                    BorderThickness="1"
-                                    CornerRadius="{DynamicResource Aurora.Radius.Inner}"
-                                    Effect="{DynamicResource Aurora.Shadow.Flyout}"
-                                    Padding="4">
-                                <StackPanel MinWidth="140">
-                                    <MenuItem Header="浮动"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="float"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="停靠为文档"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="dock-document"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="自动隐藏"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="autohide"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="隐藏"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="hide"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                        <Button Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                ToolTip="隐藏"
-                                Command="{DynamicResource Aurora.Command.PageAction}"
-                                CommandParameter="hide"
-                                CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
-                            <Path Data="M 0,0 L 8,8 M 8,0 L 0,8"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.2" />
                         </Button>
                     </StackPanel>
                     <ControlTemplate.Triggers>
@@ -376,8 +328,39 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                <!-- Ctrl 标签态(REQ-UI-097):内容换成写着页名的大标签,按住就能把整页拖走 -->
+                <Border x:Name="PageLabelCover"
+                        Grid.Row="1"
+                        Panel.ZIndex="3"
+                        Tag="PageLabelCover"
+                        Visibility="Collapsed"
+                        Cursor="SizeAll"
+                        Background="{DynamicResource Aurora.Brush.Surface}">
+                    <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            Background="{DynamicResource Aurora.Brush.AccentSoft}"
+                            BorderBrush="{DynamicResource Aurora.Brush.Accent}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}">
+                        <TextBlock Margin="12,0"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{DynamicResource Aurora.Font.Family}"
+                                   FontSize="{DynamicResource Aurora.Font.Body}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
+                                   Text="{Binding SelectedItem.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </Border>
             </Grid>
         </Border>
+        <ControlTemplate.Triggers>
+            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
+                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                         Value="True">
+                <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <ControlTemplate x:Key="Aurora.Docking.DocumentPaneTemplate"
@@ -446,8 +429,39 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                <!-- Ctrl 标签态(REQ-UI-097),与工具窗格同一块 -->
+                <Border x:Name="PageLabelCover"
+                        Grid.Row="1"
+                        Panel.ZIndex="3"
+                        Tag="PageLabelCover"
+                        Visibility="Collapsed"
+                        Cursor="SizeAll"
+                        Background="{DynamicResource Aurora.Brush.Surface}">
+                    <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            Background="{DynamicResource Aurora.Brush.AccentSoft}"
+                            BorderBrush="{DynamicResource Aurora.Brush.Accent}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}">
+                        <TextBlock Margin="12,0"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{DynamicResource Aurora.Font.Family}"
+                                   FontSize="{DynamicResource Aurora.Font.Body}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
+                                   Text="{Binding SelectedItem.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </Border>
             </Grid>
         </Border>
+        <ControlTemplate.Triggers>
+            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
+                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                         Value="True">
+                <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <!-- ================================================================ 窗格模板:专注形态(UI-04) -->

@@ -246,11 +246,8 @@ internal sealed partial class DockingHost
         if (HasStockDocumentPane())
             return true;
 
-        if (!_byId.ContainsKey(StandardWindowIds.Mcp))
-            return false;
-
-        var document = FindCenterDocument(StandardWindowIds.Mcp);
-        return document == null || document.Parent is not LayoutDocumentPane || IsFloating(document);
+        // 1.20.0 起命令集不再是锚点（REQ-UI-095）：它藏了、浮了都不算坏，只有主文档区本身没了才修。
+        return TryFindMainDocumentPane() == null;
     }
 
     private bool HasStockDocumentPane()
@@ -312,8 +309,11 @@ internal sealed partial class DockingHost
     }
 
     /// <summary>
-    /// Keep the command catalog as the fixed main document. This repairs the early 3.0 candidate
-    /// topology that placed it in a narrow anchorable pane beside an empty document background.
+    /// 主文档区必须在，且必须是 <see cref="CenterDocumentPane"/>。
+    ///
+    /// 1.19.0 及以前这里还要求命令集钉在主文档区里（藏掉、浮出都会被当场放回），
+    /// 因为窗口按钮栏挂在那个窗格的页签行上。1.20.0 按钮栏搬去右栏，命令集解除锚点
+    /// （REQ-UI-095，DEC-031 的替代条件成立）：主文档区可以是空的，里面放哪一页都行。
     /// </summary>
     private bool EnsureCentralWorkspace()
     {
@@ -322,21 +322,20 @@ internal sealed partial class DockingHost
 
         var upgraded = UpgradeStockDocumentPanes();
 
-        if (!_byId.TryGetValue(StandardWindowIds.Mcp, out var descriptor))
-            return upgraded;
-
-        var existing = FindCenterDocument(StandardWindowIds.Mcp);
-        var repaired = existing == null || existing.Parent is not LayoutDocumentPane || IsFloating(existing);
-        if (!repaired)
+        var pane = TryFindMainDocumentPane();
+        if (pane == null)
         {
-            NormalizeMainDocumentSizing((LayoutDocumentPane)existing!.Parent!);
-            ScheduleCenterDocumentPresentation();
-            return upgraded;
+            // AvalonDock 自己会留住最后一个文档区；走到这里说明布局树被外力改坏了，补一个空的。
+            var rootPanel = _manager.Layout.RootPanel;
+            pane = new CenterDocumentPane();
+            rootPanel.Children.Insert(rootPanel.Children.Count / 2, pane);
+            _log.Info(LayoutSource, "主文档区缺失，已补一个空的");
+            upgraded = true;
         }
 
-        ShowCenterDocument(MoveToCenterDocument(descriptor));
-        _log.Info(LayoutSource, "命令集已恢复为中央主窗口");
-        return true;
+        NormalizeMainDocumentSizing(pane);
+        ScheduleCenterDocumentPresentation();
+        return upgraded;
     }
 
     private void ScheduleCentralWorkspaceRepair()

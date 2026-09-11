@@ -69,6 +69,18 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             handledEventsToo: true);
     }
 
+    /// <summary>
+    /// Ctrl 标签态（REQ-UI-097）。页面拖动不再附着在页签上：平时按页签只换页，
+    /// 这个开关打开时，页签与盖在内容上的页名标签才起拖动会话。开关由装配根按 Ctrl 管。
+    /// </summary>
+    public bool LabelMode { get; set; }
+
+    /// <summary>有一个拖动会话在途。装配根据此推迟退出标签态——松开 Ctrl 不该掐断正在拖的那一页。</summary>
+    public bool IsDragging => _dragSession != null;
+
+    /// <summary>拖动会话结束（完成或取消）。</summary>
+    public event EventHandler? DragFinished;
+
     public void Dispose()
     {
         if (_disposed)
@@ -122,6 +134,16 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     public void HandlePaneMouseLeftButtonDown(object? sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
+        if (LabelMode &&
+            e.ChangedButton == MouseButton.Left &&
+            sender is FrameworkElement labelPane &&
+            FindAncestor<FrameworkElement>(source, IsPageLabelCover) is { } cover &&
+            TryResolvePageId(cover, out var labelId))
+        {
+            BeginLabelDrag(labelPane, cover, labelId, e);
+            return;
+        }
+
         var floating = FindAncestor<LayoutFloatingWindowControl>(source);
         var sourceIsTab = FindAncestor<DependencyObject>(source, item =>
             item is LayoutAnchorableTabItem or LayoutDocumentTabItem) != null;
@@ -147,9 +169,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         if (floatingWindow is not null)
         {
             if (sourceIsTab && tab != null && CountFloatingPages(floatingWindow) > 1)
-                StartFloatingTabSession(tab, id, floatingWindow, e);
+            {
+                // 多页浮窗里的页签：平时只换页（归 AvalonDock），Ctrl 标签态才拆出去。
+                if (LabelMode)
+                    StartFloatingTabSession(tab, id, floatingWindow, e);
+            }
             else
+            {
                 BeginHostWindowGesture(floatingWindow, pane, $"floating:{id}", e);
+            }
             return;
         }
 
@@ -213,6 +241,9 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         var floating = FindFloatingWindow(id);
         if (floating != null)
         {
+            if (!LabelMode)
+                return false;
+
             if (_dragSession is { IsTab: true, PageId: { } currentId } active &&
                 ReferenceEquals(active.Surface, tab) &&
                 currentId.Equals(id, StringComparison.OrdinalIgnoreCase))
@@ -252,8 +283,92 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             }
         }
 
-        StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
+        // 页面拖动不附着在页签上（REQ-UI-097）：平时按页签只换页、双击专注，
+        // Ctrl 标签态才起拖动会话。
+        if (LabelMode)
+            StartTabSession(tab, id, screenPoint, e.GetPosition(tab));
         return false;
+    }
+
+    /// <summary>
+    /// 从主窗体之外拖一页进来——右栏的常用页面胶囊（REQ-UI-099）。
+    ///
+    /// 与 Ctrl 标签态拖页签是同一条路：浮出 → 系统移动循环 → 蓝色停靠点 → 落不到停靠点就隐藏。
+    /// 调用方已经判过拖动阈值，会话直接从「过阈值」起步。<paramref name="anchor"/> 是指针
+    /// 在新浮窗里的落点：给页签行上的一点，拖起来就像拎着页签。
+    /// </summary>
+    public void BeginExternalPageDrag(string id, FrameworkElement surface, Point anchor)
+    {
+        if (_disposed)
+            return;
+
+        CancelDragSession("external page drag");
+        var start = FloatingWindowGeometry.GetCursorPosition();
+        var session = new DockingDragSession(
+            ++_dragSequence,
+            DockingDragKind.Tab,
+            surface,
+            start,
+            anchor,
+            id,
+            null,
+            $"capsule:{id}",
+            false,
+            false);
+        _dragSession = session;
+        if (!session.TryTransition(DockingDragState.ThresholdReached))
+            return;
+        session.LastScreenPoint = start;
+        QueueRestoreAndFloat(session);
+    }
+
+    private static bool IsPageLabelCover(FrameworkElement element)
+        => Equals(element.Tag, PageLabelMode.CoverTag);
+
+    /// <summary>
+    /// 标签态下按在页名标签上：整页当成一个页签来拖。浮窗里只有这一页时拖的是那个浮窗本身。
+    /// 指针在新浮窗里的落点取它在原窗格里的位置——拎起来的就是这一页本身。
+    /// </summary>
+    private void BeginLabelDrag(FrameworkElement pane, FrameworkElement cover, string id, MouseButtonEventArgs e)
+    {
+        var floating = FindFloatingWindow(id);
+        if (floating != null)
+        {
+            if (CountFloatingPages(floating) > 1)
+                StartFloatingTabSession(cover, id, floating, e);
+            else
+                BeginHostWindowGesture(floating, pane, $"floating:{id}", e);
+            e.Handled = true;
+            return;
+        }
+
+        StartTabSession(cover, id, GetScreenPoint(cover, e), e.GetPosition(pane));
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// 拖出去的页没有落在停靠点上（REQ-UI-098）：隐藏它。悬浮页很少单独用（用户拍板）。
+    /// 放到 ContextIdle：AvalonDock 在系统移动循环收尾时才落停靠，等它落完再看页还在不在浮窗里。
+    /// </summary>
+    private void ParkIfStillFloating(string? id)
+    {
+        if (id == null || _disposed || _window.Dispatcher.HasShutdownStarted)
+            return;
+
+        _window.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        {
+            if (_disposed || FindFloatingWindow(id) == null)
+                return;
+            try
+            {
+                _docking.ParkHidden(id);
+                _log.Info(ChromeLogSource, $"页面 {id} 没有落在停靠点上，已隐藏；右栏常用页面里可以再拖回来");
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ChromeLogSource, $"隐藏拖出的页面 {id} 失败：{ex.Message}");
+            }
+        });
     }
 
     internal static bool HasReachedDragThreshold(
@@ -536,9 +651,14 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         };
         ApplyFloatingWindowGeometry(created, context);
         if (session.IsLeftButtonDown && !session.ButtonReleased)
+        {
             QueueWindowDrag(created, session);
+        }
         else
+        {
             CompleteDragSession(session, "button released before floating host was ready");
+            ParkIfStillFloating(pageId);
+        }
     }
 
     private LayoutFloatingWindowControl? FindFloatingWindow(string id)
@@ -588,6 +708,7 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
                 return;
             _windowDragDriver.Start(floating);
             CompleteDragSession(session, "floating window drag ended");
+            ParkIfStillFloating(session.PageId);
         });
 
     private void OnFloatingWindowStateChanged(object? sender, EventArgs e)
@@ -898,7 +1019,10 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         session.Completion?.TrySetResult(!cancelled);
         session.Completion = null;
         if (ReferenceEquals(_dragSession, session))
+        {
             _dragSession = null;
+            DragFinished?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private Size ResolveEmbeddedPaneSize(string id)

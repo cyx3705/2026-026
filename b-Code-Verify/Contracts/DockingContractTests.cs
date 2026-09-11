@@ -63,8 +63,10 @@ public sealed class DockingContractTests
                 new MemoryLayoutStore(),
                 new NullLog());
             host.Initialize();
+            host.Show(StandardWindowIds.Mcp);
 
             // 模拟 AvalonDock 的手笔：把中央区整个换成一个原装窗格。
+            // 顶栏只留一页（REQ-UI-096），此刻 business 藏着，它记着的「上一个容器」就是即将被换掉的这一格。
             var original = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
             var stock = new LayoutDocumentPane();
             foreach (var child in original.Children.ToList())
@@ -76,15 +78,15 @@ public sealed class DockingContractTests
             ((ILayoutContainer)original.Parent!).ReplaceChild(original, stock);
             manager.Layout.CollectGarbage();
 
-            // 任何一次经过布局差分的操作都应该把它换掉。
+            // 任何一次经过布局差分的操作都应该把它换掉；藏着的 business 回来时
+            // 那个旧窗格已经不在树里，得落进新的主文档区，而不是跟着旧窗格一起消失。
             host.Show("business");
 
             var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
             Assert.IsType<CenterDocumentPane>(pane);
-            Assert.Equal(
-                [StandardWindowIds.Mcp, "business"],
-                pane.Children.Select(item => item.ContentId));
+            Assert.Equal(["business"], pane.Children.Select(item => item.ContentId));
             Assert.Equal("business", pane.SelectedContent?.ContentId);
+            Assert.True(host.ListWindows().Single(item => item.Id == "business").IsVisible);
         });
     }
 
@@ -121,6 +123,9 @@ public sealed class DockingContractTests
                 var anchorable = manager.Layout.Descendents().OfType<LayoutAnchorable>()
                     .Single(item => item.ContentId == id);
                 Assert.True(anchorable.CanDockAsTabbedDocument);
+
+                // 顶栏只留一页（REQ-UI-096）：它此刻可能被顶掉了，显示出来位置仍是中央区。
+                host.Show(id);
                 Assert.Equal(DockSide.Center, host.ListWindows().Single(item => item.Id == id).Side);
             }
         });
@@ -196,66 +201,175 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-095：命令集不再是主文档区的锚点。1.19.0 及以前它藏不掉、浮不出（窗口按钮栏挂在它那格上），
+    /// 现在可以隐藏、可以浮出，藏着也不会被中央区修复放回来；它仍是文档身份，停靠只认中央区。
+    /// </summary>
     [Fact]
-    public void LastCenterCarrierCannotBeHiddenOrFloated()
+    public void CommandCatalogIsNoLongerTheCenterAnchor()
     {
         UiTestHost.RunSta(() =>
         {
-            var manager = new DockingManager();
-            var host = new DockingHost(
-                manager,
-                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
+            var window = ShowHost(
+                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1), Tool("console", DockSide.Bottom, 0.28)],
                 new MemoryLayoutStore(),
-                new NullLog());
+                out var host);
+            try
+            {
+                host.Hide(StandardWindowIds.Mcp);
+                // 越过布局差分的去抖：中央区修复要是还把它当锚点，会在这段时间里把它放回来。
+                UiTestHost.PumpFor(700);
+                Assert.False(InfoOf(host, StandardWindowIds.Mcp).IsVisible);
 
-            host.Initialize();
-            host.Hide(StandardWindowIds.Mcp);
-            var afterHide = Assert.Single(host.ListWindows());
-            Assert.True(afterHide.IsVisible);
-            Assert.False(afterHide.IsFloating);
-            Assert.Equal(DockSide.Center, afterHide.Side);
+                host.Show(StandardWindowIds.Mcp);
+                Assert.Equal(DockSide.Center, InfoOf(host, StandardWindowIds.Mcp).Side);
 
-            host.Float(StandardWindowIds.Mcp);
-            var afterFloat = Assert.Single(host.ListWindows());
-            Assert.True(afterFloat.IsVisible);
-            Assert.False(afterFloat.IsFloating);
-            Assert.Equal(DockSide.Center, afterFloat.Side);
+                host.Float(StandardWindowIds.Mcp);
+                UiTestHost.Pump();
+                Assert.True(InfoOf(host, StandardWindowIds.Mcp).IsFloating);
 
-            host.Dock(StandardWindowIds.Mcp, DockSide.Right, 0.25);
-            var afterDock = Assert.Single(host.ListWindows());
-            Assert.True(afterDock.IsVisible);
-            Assert.False(afterDock.IsFloating);
-            Assert.Equal(DockSide.Center, afterDock.Side);
+                host.Dock(StandardWindowIds.Mcp, DockSide.Right, 0.25);
+                var docked = InfoOf(host, StandardWindowIds.Mcp);
+                Assert.True(docked.IsVisible);
+                Assert.False(docked.IsFloating);
+                Assert.Equal(DockSide.Center, docked.Side);
+            }
+            finally
+            {
+                window.Close();
+            }
         });
     }
 
+    /// <summary>
+    /// REQ-UI-096：顶栏只留一页。显示、停靠进中央区的那一页留下，原来那一页隐藏；
+    /// 最后一页没了，主文档区空着——不再把命令集拽回来。
+    /// </summary>
     [Fact]
-    public void RemovingLastBusinessCenterRestoresCommandCatalog()
+    public void CenterHoldsOnlyTheLastPageShown()
     {
         UiTestHost.RunSta(() =>
         {
-            var manager = new DockingManager();
             var host = new DockingHost(
-                manager,
+                new DockingManager(),
                 [
                     Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
                     Tool("business", DockSide.Center, 1),
+                    Tool("other", DockSide.Right, 0.3),
                 ],
                 new MemoryLayoutStore(),
                 new NullLog());
 
             host.Initialize();
-            Assert.Equal(DockSide.Center, host.ListWindows().Single(w => w.Id == "business").Side);
+            Assert.Single(VisibleCenterIds(host));
 
-            host.UnregisterWindow("business");
+            host.Show("business");
+            Assert.Equal(["business"], VisibleCenterIds(host));
+            host.Show(StandardWindowIds.Mcp);
+            Assert.Equal([StandardWindowIds.Mcp], VisibleCenterIds(host));
+            Assert.False(InfoOf(host, "business").IsVisible);
 
-            var commandCatalog = Assert.Single(host.ListWindows());
-            Assert.Equal(StandardWindowIds.Mcp, commandCatalog.Id);
-            Assert.True(commandCatalog.IsVisible);
-            Assert.False(commandCatalog.IsFloating);
-            Assert.Equal(DockSide.Center, commandCatalog.Side);
+            host.Dock("other", DockSide.Center);
+            Assert.Equal(["other"], VisibleCenterIds(host));
+
+            host.UnregisterWindow("other");
+            Assert.Empty(VisibleCenterIds(host));
+
+            host.Show("business");
+            Assert.Equal(["business"], VisibleCenterIds(host));
         });
     }
+
+    /// <summary>
+    /// REQ-UI-098：拖出去没落到停靠点的页被收起来——先摆回默认位置再隐藏，下次打开回到停靠位，
+    /// 而不是那个已经关掉的浮窗；收起的那一下不许顶掉顶栏原来那一页。
+    /// </summary>
+    [Fact]
+    public void ParkedPageComesBackDockedAndLeavesTheCenterAlone()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var window = ShowHost(
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("page", DockSide.Center, 1),
+                    Tool("tool", DockSide.Right, 0.3),
+                ],
+                new MemoryLayoutStore(),
+                out var host);
+            try
+            {
+                host.Show(StandardWindowIds.Mcp);
+                host.Float("tool");
+                host.Float("page");
+                UiTestHost.Pump();
+                Assert.True(InfoOf(host, "tool").IsFloating);
+                Assert.True(InfoOf(host, "page").IsFloating);
+
+                host.ParkHidden("tool");
+                host.ParkHidden("page");
+                UiTestHost.Pump();
+                Assert.False(InfoOf(host, "tool").IsVisible);
+                Assert.False(InfoOf(host, "page").IsVisible);
+                Assert.Equal([StandardWindowIds.Mcp], VisibleCenterIds(host));
+
+                host.Show("tool");
+                var tool = InfoOf(host, "tool");
+                Assert.True(tool.IsVisible);
+                Assert.False(tool.IsFloating);
+                Assert.Equal(DockSide.Right, tool.Side);
+
+                host.Show("page");
+                Assert.Equal(["page"], VisibleCenterIds(host));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-096：新登记的中央页不抢顶栏，哪怕位置台账说它上次是选中的那一页。
+    /// 台账是全局的、不分场景——1.20.0 首次热装时 1.19.0 台账里「上次选中」的模块页把命令集顶掉，
+    /// 随后场景又把这个外来页藏起来，顶栏一页不剩。主文档区空着时，新来的页才留下。
+    /// </summary>
+    [Fact]
+    public void RegisteredCenterPageNeverTakesTheTopBarFromAPageAlreadyThere()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var settings = new MemorySettings();
+            settings.Set(
+                "layout.placements",
+                "{\"module.page\":{\"Side\":5,\"Ratio\":0.25,\"Hidden\":false,\"TabTarget\":null," +
+                "\"CenterIndex\":0,\"Selected\":true}}");
+            var host = new DockingHost(
+                new DockingManager(),
+                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
+                new MemoryLayoutStore(),
+                new NullLog(),
+                settings);
+            host.Initialize();
+            Assert.Equal([StandardWindowIds.Mcp], VisibleCenterIds(host));
+
+            host.RegisterWindow(Tool("module.page", DockSide.Center, 1), "module:test");
+            Assert.Equal([StandardWindowIds.Mcp], VisibleCenterIds(host));
+
+            host.Hide(StandardWindowIds.Mcp);
+            host.RegisterWindow(Tool("module.late", DockSide.Center, 1), "module:test");
+            Assert.Equal(["module.late"], VisibleCenterIds(host));
+        });
+    }
+
+    private static ToolWindowInfo InfoOf(DockingHost host, string id)
+        => host.ListWindows().Single(window => window.Id == id);
+
+    private static string[] VisibleCenterIds(DockingHost host)
+        => host.ListWindows()
+            .Where(window => window is { IsVisible: true, IsFloating: false, Side: DockSide.Center })
+            .Select(window => window.Id)
+            .ToArray();
 
     [Fact]
     public void RestoreSkipsRemovedPageAndAddsTheCurrentCommandCatalog()
@@ -349,11 +463,9 @@ public sealed class DockingContractTests
                 window.Show();
                 UiTestHost.Pump();
                 var single = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
-                // 1.9.0 起自持页在构造期就建好（REQ-UI-052），组件测试页与命令集一样
-                // 声明 side=center，因此中央区从一开始就是两页。此前它是在异步发现那一轮
-                // 才注册的，而本用例不泵发现，于是只看到一页——**那一页是时序的产物，
-                // 不是契约**。本条断言的始终是主文档区的几何与页签行为。
-                Assert.Equal(2, single.Items.Count);
+                // 1.20.0 起顶栏只留一页（REQ-UI-096）：组件测试页与命令集都声明 side=center，
+                // 中央区里却只有一页。本条断言的始终是主文档区的几何与页签行为。
+                Assert.Single(single.Items);
                 Assert.True(single.ActualWidth > window.ActualWidth * 0.5,
                     $"main document width={single.ActualWidth}, window width={window.ActualWidth}");
                 Assert.Equal(
@@ -364,9 +476,8 @@ public sealed class DockingContractTests
                 window.Docking.Show("business");
                 UiTestHost.Pump();
                 var multiple = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
-                // 命令集 + 组件测试 + 刚注册的 business。数的是「中央区能并排放页签」，
-                // 具体几页取决于自持页有几页声明 side=center，不是本条的契约。
-                Assert.Equal(3, multiple.Items.Count);
+                // 刚显示的 business 顶掉了原来那一页：中央区仍然只有一页，就是它。
+                Assert.Single(multiple.Items);
                 var centerPane = Assert.IsAssignableFrom<LayoutDocumentPane>(((ILayoutControl)multiple).Model);
                 var business = Assert.Single(
                     centerPane.Children.OfType<LayoutAnchorable>(),
@@ -468,23 +579,18 @@ public sealed class DockingContractTests
             host.RegisterWindow(Tool("module.first", DockSide.Right, 0.25), "module:test");
             host.RegisterWindow(Tool("module.second", DockSide.Right, 0.25), "module:test");
 
-            Assert.All(
-                host.ListWindows().Where(item => item.Id.StartsWith("module.", StringComparison.Ordinal)),
-                item => Assert.Equal(DockSide.Center, item.Side));
+            // 顶栏只留一页（REQ-UI-096）：两页都按台账落回中央区，但同一时刻只露一页。
+            // 契约是「落回中央区、身份仍是工具页」，逐页显示出来验。
             var pane = Assert.Single(manager.Layout.Descendents().OfType<LayoutDocumentPane>());
-            Assert.Equal(
-                [StandardWindowIds.Mcp, "module.second", "module.first"],
-                pane.Children.Select(item => item.ContentId));
-            Assert.Equal(StandardWindowIds.Mcp, pane.SelectedContent?.ContentId);
-            var restored = manager.Layout.Descendents().OfType<LayoutAnchorable>()
-                .Where(item => item.ContentId?.StartsWith("module.", StringComparison.Ordinal) == true)
-                .ToList();
-            Assert.Equal(2, restored.Count);
-            Assert.All(restored, item =>
+            foreach (var id in new[] { "module.first", "module.second" })
             {
-                Assert.Same(pane, item.Parent);
-                Assert.True(item.CanDockAsTabbedDocument);
-            });
+                host.Show(id);
+                Assert.Equal(DockSide.Center, host.ListWindows().Single(item => item.Id == id).Side);
+                var shown = Assert.Single(pane.Children);
+                Assert.Equal(id, shown.ContentId);
+                Assert.True(Assert.IsType<LayoutAnchorable>(shown).CanDockAsTabbedDocument);
+            }
+
             Assert.DoesNotContain(
                 manager.Layout.Descendents().OfType<LayoutDocument>(),
                 item => item.ContentId?.StartsWith("module.", StringComparison.Ordinal) == true);
@@ -578,6 +684,8 @@ public sealed class DockingContractTests
             var window = ShowHost(descriptors, store, out var host);
             try
             {
+                // 命令集留在顶栏，business 此刻被顶掉藏着：从藏着的状态直接浮出，也得报「浮着」。
+                host.Show(StandardWindowIds.Mcp);
                 host.Float("business");
                 UiTestHost.Pump();
                 Assert.True(host.ListWindows().Single(item => item.Id == "business").IsFloating);
@@ -622,10 +730,11 @@ public sealed class DockingContractTests
         UiTestHost.RunSta(() =>
         {
             var store = new MemoryLayoutStore();
+            // 顶栏只留一页之后，中央区被拆成两半的来路是「把侧边页丢到中央区边上」。
             var descriptors = new[]
             {
                 Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                Tool("business", DockSide.Center, 1),
+                Tool("business", DockSide.Right, 0.25),
                 Tool("side", DockSide.Left, 0.2),
             };
             var window = ShowHost(descriptors, store, out var host);
@@ -672,7 +781,7 @@ public sealed class DockingContractTests
             var window = ShowHost(
                 [
                     Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                    Tool("business", DockSide.Center, 1),
+                    Tool("business", DockSide.Right, 0.25),
                 ],
                 store,
                 out var host);
@@ -1141,6 +1250,8 @@ public sealed class DockingContractTests
             var host = new DockingHost(manager, descriptors, store, new NullLog());
             host.Initialize();
 
+            // 顶栏只留一页（REQ-UI-096）：并入中央区的 details 与命令集只露一个，先把它显示出来。
+            host.Show("details");
             AssertCenterTool(manager, "details");
             host.Dock("details", DockSide.Right, 0.3);
             host.ResetWindow("details");
@@ -1189,7 +1300,10 @@ public sealed class DockingContractTests
                 new NullLog());
             host.Initialize();
 
+            // 顶栏只留一页：跟随页与目标都落在中央区，逐个显示出来验位置与身份。
+            host.Show("details");
             AssertCenterTool(manager, "details");
+            host.Show("business");
             Assert.Equal(DockSide.Center, host.ListWindows().Single(item => item.Id == "business").Side);
         });
     }
@@ -1215,12 +1329,18 @@ public sealed class DockingContractTests
 
             host.RegisterWindow(Tool(StandardWindowIds.Mcp, DockSide.Center, 1), "HistoryMercury");
 
+            // 目标到了，跟随页并入中央区；顶栏只留一页，显示出来验。
+            host.Show("overview");
             AssertCenterTool(manager, "overview");
         });
     }
 
+    /// <summary>
+    /// 布局存下之后才出现的中央页不能在布局里失踪。1.19.0 及以前它直接露面；
+    /// 顶栏只留一页（REQ-UI-096）之后它可能被原来那一页挡着，契约改成「一次显示就到位」。
+    /// </summary>
     [Fact]
-    public void RestoredLayoutShowsNewDefaultVisibleCenterPage()
+    public void RestoredLayoutKeepsANewCenterPageOneShowAway()
     {
         UiTestHost.RunSta(() =>
         {
@@ -1245,6 +1365,8 @@ public sealed class DockingContractTests
                 new NullLog());
             host.Initialize();
 
+            Assert.Single(VisibleCenterIds(host));
+            host.Show("business");
             Assert.True(host.ListWindows().Single(item => item.Id == "business").IsVisible);
             // 业务中央页现在是工具窗口而非文档页：位置仍在主文档区，身份是 LayoutAnchorable。
             Assert.Contains(
@@ -1311,8 +1433,9 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>同上，走命名布局那条路：布局里没见过的中央页，一次显示就到位。</summary>
     [Fact]
-    public void NamedLayoutShowsDefaultVisibleCenterPageAddedAfterItWasSaved()
+    public void NamedLayoutKeepsACenterPageAddedAfterItWasSavedOneShowAway()
     {
         UiTestHost.RunSta(() =>
         {
@@ -1337,6 +1460,8 @@ public sealed class DockingContractTests
             host.Initialize();
 
             Assert.True(host.LoadLayout("before-business"));
+            Assert.Single(VisibleCenterIds(host));
+            host.Show("business");
             Assert.True(host.ListWindows().Single(item => item.Id == "business").IsVisible);
             // 同上：业务中央页以 LayoutAnchorable 呈现。
             Assert.Contains(
@@ -1617,13 +1742,16 @@ public sealed class DockingContractTests
         return window;
     }
 
-    /// <summary>把中央区拆成左右两个文档区——等价于用户把一个中央页拖到中央区侧边放下。</summary>
+    /// <summary>
+    /// 把中央区拆成左右两个文档区——等价于用户把一页拖到中央区侧边放下。
+    /// 主文档区原样留着，<paramref name="id"/> 从它原来的地方搬进新拆出来的那一格。
+    /// </summary>
     private static void SplitCenterArea(DockingManager manager, string id)
     {
         var content = manager.Layout.Descendents().OfType<LayoutContent>()
             .Single(item => item.ContentId == id);
-        var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(content.Parent);
-        ((ILayoutContainer)pane).RemoveChild(content);
+        ((ILayoutContainer)content.Parent!).RemoveChild(content);
+        var pane = manager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>().First();
 
         var group = new LayoutDocumentPaneGroup { Orientation = Orientation.Horizontal };
         ((ILayoutContainer)pane.Parent!).ReplaceChild(pane, group);

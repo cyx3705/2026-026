@@ -20,7 +20,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.list",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "列出全部场景（按使用频次排序）：当前场景、来源、页面、断链",
+            Summary = "列出全部场景（按使用频次排序）：当前场景、来源、使用次数。场景不含页面集合，只是一份布局",
             Readonly = true,
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ => WithScenes(s, scenes =>
@@ -28,8 +28,6 @@ internal static partial class BuiltinCommands
                 var list = scenes.List();
                 var lines = list.Select(scene =>
                     $"\n  {(scene.Active ? "*" : " ")} {scene.Title} [{scene.Id}] {SourceText(scene.Source)}"
-                    + $" · {scene.Pages.Count} 页"
-                    + (scene.Broken.Count > 0 ? $" · 断链 {scene.Broken.Count}" : "")
                     + (scene.Uses > 0 ? $" · 用过 {scene.Uses} 次" : ""));
                 var rows = list.Select(scene => new
                 {
@@ -37,8 +35,6 @@ internal static partial class BuiltinCommands
                     title = scene.Title,
                     source = SourceText(scene.Source),
                     active = scene.Active,
-                    pages = scene.Pages,
-                    broken = scene.Broken,
                     uses = scene.Uses,
                 }).ToList();
                 return CommandResult.Ok($"共 {list.Count} 个场景（* 为当前）:" + string.Concat(lines), rows);
@@ -50,7 +46,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.go",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "切到一个场景：换掉整个停靠布局，只留该场景的页面与常驻页（控制台、命令集）",
+            Summary = "切到一个场景：恢复它上次的布局与显隐；模块场景第一次进入时露出该模块的页与常驻页（控制台、命令集）",
             Example = "aurora.scene.go id=HistoryMinerva",
             RequiresUiThread = true,
             Parameters =
@@ -72,7 +68,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.open",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "打开一页：当前场景里有就露面，没有就切到含它的最常用场景",
+            Summary = "在当前场景里打开一页（不切场景）；落在中央区的页会顶掉顶栏原来那一页",
             Example = "aurora.scene.open page=graph",
             RequiresUiThread = true,
             Parameters = [PageParameter()],
@@ -103,38 +99,14 @@ internal static partial class BuiltinCommands
                 WithScenes(s, scenes => FromScene(scenes.Save(ctx.RequireString("id"), ctx.GetString("title"))))),
         });
 
-        RegisterFrontend(r, new CommandDescriptor
-        {
-            Name = "aurora.scene.add",
-            Domain = "aurora",
-            CommandClass = "scene",
-            Summary = "把一页加入场景（省略 scene 为当前场景）；Minerva 与别的页混用走这条",
-            Example = "aurora.scene.add page=graph",
-            RequiresUiThread = true,
-            Parameters = [PageParameter(), SceneParameter()],
-            Handler = CommandDescriptor.Sync(ctx =>
-                WithScenes(s, scenes => FromScene(scenes.Add(ctx.RequireString("page"), ctx.GetString("scene"))))),
-        });
-
-        RegisterFrontend(r, new CommandDescriptor
-        {
-            Name = "aurora.scene.remove",
-            Domain = "aurora",
-            CommandClass = "scene",
-            Summary = "把一页移出场景（省略 scene 为当前场景）；别的场景不受影响",
-            Example = "aurora.scene.remove page=graph",
-            RequiresUiThread = true,
-            Parameters = [PageParameter(), SceneParameter()],
-            Handler = CommandDescriptor.Sync(ctx =>
-                WithScenes(s, scenes => FromScene(scenes.Remove(ctx.RequireString("page"), ctx.GetString("scene"))))),
-        });
+        // aurora.scene.add / remove 在 1.20.0 退役（REQ-UI-094）：场景不拥有页面，显隐就是 aurora.ui.show / hide。
 
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.scene.reset",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "场景回到默认形态：丢掉增补与剔除，布局按各页声明重建（省略 scene 为当前场景）",
+            Summary = "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）",
             RequiresUiThread = true,
             Parameters = [SceneParameter(position: 0)],
             Handler = CommandDescriptor.Sync(ctx =>
@@ -179,7 +151,7 @@ internal static partial class BuiltinCommands
         Position = 0,
     };
 
-    private static ParameterSpec SceneParameter(int position = 1) => new()
+    private static ParameterSpec SceneParameter(int position) => new()
     {
         Name = "scene",
         Description = "场景 id 或标题；省略为当前场景",

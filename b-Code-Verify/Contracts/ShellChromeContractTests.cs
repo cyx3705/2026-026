@@ -74,22 +74,31 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-099：窗口控制组搬到右栏顶部——仍是整个窗体的右上角，但不再挂在任何窗格上。
+    /// 1.19.0 及以前它挂在主文档区的页签行上，命令集因此得常驻当锚点（REQ-UI-095 解开）。
+    /// </summary>
     [Fact]
-    public void WindowChromeBarBelongsToCentralDocumentPane()
+    public void WindowChromeBarSitsAtTheTopOfTheRightRail()
     {
         RunShell(window =>
         {
             var chromeBar = RequireElement<Panel>(window, "ChromeBar");
-            var host = FindAncestor<ContentControl>(
-                chromeBar,
-                control => Equals(control.Tag, "ShellChromeHost"));
+            var rail = RequireElement<FrameworkElement>(window, "NavRail");
+            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
 
-            Assert.NotNull(host);
-            Assert.NotNull(FindAncestor<LayoutDocumentPaneControl>(chromeBar, _ => true));
-            Assert.DoesNotContain(
-                FindVisualDescendants<LayoutAnchorableControl>(window)
-                    .SelectMany(tool => FindVisualDescendants<ContentControl>(tool)),
-                control => Equals(control.Tag, "ShellChromeHost"));
+            Assert.True(chromeBar.IsDescendantOf(rail), "window chrome must live in the right rail");
+            Assert.Null(FindAncestor<LayoutDocumentPaneControl>(chromeBar, _ => true));
+
+            var managerRight = manager.TransformToAncestor(window).Transform(new Point(manager.ActualWidth, 0)).X;
+            var railOrigin = rail.TransformToAncestor(window).Transform(new Point(0, 0));
+            Assert.True(railOrigin.X >= managerRight - 0.5,
+                $"rail left={railOrigin.X} must sit right of the docking area right={managerRight}");
+
+            var chromeTopRight = chromeBar.TransformToAncestor(window).Transform(new Point(chromeBar.ActualWidth, 0));
+            Assert.True(chromeTopRight.Y <= railOrigin.Y + 0.5, $"chrome top={chromeTopRight.Y}");
+            Assert.True(Math.Abs(chromeTopRight.X - (railOrigin.X + rail.ActualWidth)) < 1.5,
+                $"chrome right={chromeTopRight.X} must reach the rail right edge={railOrigin.X + rail.ActualWidth}");
         });
     }
 
@@ -462,114 +471,14 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// 回归(2026-09-06 真机):中央页签的左键手势必须只有一个主人。
-    /// AvalonDock 的 <c>LayoutDocumentTabItem</c> 会在自己的 OnMouseDown/OnMouseMove 里
-    /// 另起一条拖拽,跨过同一个系统阈值、调同一个 <c>StartDraggingFloatingWindowForContent</c>。
-    /// 两条路同时跑的后果:先到的那个把页面浮走,Aurora 这侧的 <c>aurora.ui.float</c>
-    /// 看到「已经浮着」直接成功返回却等不到自己的浮窗宿主,2 秒后报「未创建浮窗宿主」;
-    /// 与此同时那个页签已被摘出可视树,AvalonDock 仍在对它调 <c>PointToScreen</c>,
-    /// 鼠标每动一下抛一条「此 Visual 未连接到 PresentationSource」(真机一次拖拽 100 条)。
-    /// 所以按下必须在隧道阶段判定 Handled——**同时**由 Aurora 自己补上选中,
-    /// 否则点页签换不了页(选中本来是 AvalonDock 在同一个处理器里顺手做的)。
-    /// </summary>
-    [Fact]
-    public void TabPressSwitchesWhereItCanAndNeverBlanksThePane()
-    {
-        RunShell(window =>
-        {
-            // 中央区凑两页:mcp 是文档身份,commanddetail 是**工具身份**的中央页。
-            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
-            UiTestHost.Pump();
-
-            var center = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
-
-            try
-            {
-                // 文档身份的中央页:点得动。
-                ClickTab(window, StandardWindowIds.Mcp);
-                Assert.Equal(StandardWindowIds.Mcp, SelectedId(center));
-
-                // 工具身份的中央页(Aurora 的中央页全是这一种)本轮**没有**断言:
-                // 合成点击在这条路上会落到相邻的隐藏页上(实测:点 commanddetail 选中的是
-                // components),真机行为要靠真鼠标才判得准。这条挂在验证合同里,不在这里
-                // 断言一个自己都还没确认的契约。
-            }
-            finally
-            {
-                Mouse.Capture(null);
-            }
-        });
-
-        static string? SelectedId(Selector pane) => (pane.SelectedItem as LayoutContent)?.ContentId;
-
-        static void ClickTab(ShellWindow window, string id)
-        {
-            FrameworkElement tab =
-                FindVisualDescendants<LayoutDocumentTabItem>(window)
-                    .FirstOrDefault(item => item.Model?.ContentId == id)
-                ?? (FrameworkElement)FindVisualDescendants<LayoutAnchorableTabItem>(window)
-                    .First(item => item.Model?.ContentId == id);
-
-            // 真实点击是两趟:隧道的 PreviewMouseDown,再冒泡的 MouseDown。
-            // 只发隧道那一趟的用例看不见换页——1.17.5 就是这样绿着上线的。
-            foreach (var routed in new[] { Mouse.PreviewMouseDownEvent, Mouse.MouseDownEvent })
-            {
-                tab.RaiseEvent(new MouseButtonEventArgs(
-                    Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
-                {
-                    RoutedEvent = routed,
-                    Source = tab,
-                });
-            }
-
-            UiTestHost.Pump();
-        }
-    }
-
-    /// <summary>
-    /// REQ-UI-083：中央区里**工具身份**的页签，点一下要换到那一页。
+    /// REQ-UI-096：顶栏只留一页，而且**屏幕上**也只剩那一页。
     ///
-    /// 这一半此前是坏的，而且只坏一半——同一排页签里，文档身份的命令集换页、拖动都正常，
-    /// 工具身份的那些（Aurora 的中央页几乎全是这一种）换不了页也拖不动。
-    /// 根子是 <c>LayoutDocumentPane</c> 的 <c>ILayoutContentSelector.IndexOf</c>
-    /// 只认 <c>LayoutDocument</c>，对 anchorable 返回 -1。
+    /// 显示或停靠进中央区的那一页留下，原来那一页隐藏。断言落在控件上而不只是模型：
+    /// 中央区换页的那一跳会先经过一个 -1，控件在那一下之后可能不跟（REQ-UI-083，2026-09-07 真机）。
+    /// 文档身份（命令集）与工具身份（其余中央页）两种都要走一遍。
     /// </summary>
     [Fact]
-    public void CenterToolTabPressSelectsThatPage()
-    {
-        RunShell(window =>
-        {
-            // 中央区凑两页：mcp 是文档身份，commanddetail 被停到中央区，是工具身份。
-            window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
-            UiTestHost.Pump();
-
-            var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
-                .First(item => item.Model?.ContentId == StandardWindowIds.CommandDetail);
-            var anchorable = Assert.IsType<LayoutAnchorable>(tab.Model);
-            var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(anchorable.Parent);
-
-            // 换页的两条路都要通：模型层的 IsSelected，以及窗格自己的选中下标。
-            // 1.18.0 之前两条都落在 -1 上——「有页签、没内容」。
-            anchorable.IsSelected = true;
-            Assert.Equal(pane.Children.IndexOf(anchorable), pane.SelectedContentIndex);
-            Assert.Same(anchorable, pane.SelectedContent);
-
-            pane.SelectedContentIndex = 0;
-            Assert.NotSame(anchorable, pane.SelectedContent);
-            pane.SelectedContentIndex = pane.Children.IndexOf(anchorable);
-            Assert.Same(anchorable, pane.SelectedContent);
-        });
-    }
-
-    /// <summary>
-    /// REQ-UI-083：<c>aurora.ui.show</c> 之后，**屏幕上**也要换到那一页。
-    ///
-    /// 这条是真机先发现、门禁后补的：模型层修对之后，快照里 <c>selectedContentId</c>
-    /// 已经是被点的那一页，而窗格控件仍停在原处——中央区换页的那一跳会先经过一个 -1，
-    /// 控件在那一下之后不跟了（2026-09-07）。因此这条断言的是**控件**，不是模型。
-    /// </summary>
-    [Fact]
-    public void ShowMovesThePaneControlNotJustTheModel()
+    public void CenterTabRowKeepsOnlyTheLastPageShown()
     {
         RunShell(window =>
         {
@@ -578,40 +487,101 @@ public sealed class ShellChromeContractTests
 
             var control = Assert.Single(FindVisualDescendants<LayoutDocumentPaneControl>(window));
             var pane = Assert.IsAssignableFrom<LayoutDocumentPane>(((ILayoutControl)control).Model);
+            Assert.Equal(StandardWindowIds.CommandDetail, Assert.Single(pane.Children).ContentId);
+            Assert.Equal(StandardWindowIds.CommandDetail, ((LayoutContent?)control.SelectedItem)?.ContentId);
 
             window.Docking.Show(StandardWindowIds.Mcp);
             UiTestHost.Pump();
+            Assert.Equal(StandardWindowIds.Mcp, Assert.Single(pane.Children).ContentId);
             Assert.Equal(StandardWindowIds.Mcp, ((LayoutContent?)control.SelectedItem)?.ContentId);
+            Assert.False(window.Docking.ListWindows()
+                .Single(item => item.Id == StandardWindowIds.CommandDetail).IsVisible);
 
             window.Docking.Show(StandardWindowIds.CommandDetail);
             UiTestHost.Pump();
-            Assert.Equal(
-                StandardWindowIds.CommandDetail,
-                ((LayoutContent?)control.SelectedItem)?.ContentId);
-            Assert.Equal(StandardWindowIds.CommandDetail, pane.SelectedContent?.ContentId);
+            Assert.Equal(StandardWindowIds.CommandDetail, Assert.Single(pane.Children).ContentId);
+            Assert.Equal(StandardWindowIds.CommandDetail, ((LayoutContent?)control.SelectedItem)?.ContentId);
         });
     }
 
     /// <summary>
-    /// 页签的左键仍然**整个交给 AvalonDock**（REQ-UI-082 不被本轮推翻）：
-    /// 下标修对之后它自己那条路就是通的，Aurora 不再需要在手势层拦任何一半。
-    /// 本条守的是「别又去抢按下事件」——1.17.2/1.17.5 各试过一次，两次都把换页弄坏了。
+    /// 页签的左键仍然**整个交给 AvalonDock**（REQ-UI-082）：Aurora 不判 Handled——
+    /// 1.17.2/1.17.5 各试过一次，两次都把换页弄坏了。
+    ///
+    /// 1.20.0 起页面拖动不附着在页签上（REQ-UI-097）：平时按页签连拖动会话都不起，
+    /// Ctrl 标签态才起。两种身份的中央页各按一次。
     /// </summary>
     [Fact]
-    public void NeitherCenterTabKindIsInterceptedOnPress()
+    public void CenterTabPressIsNeverHandledAndDragsOnlyInLabelMode()
     {
         RunShell(window =>
         {
+            var topBar = GetPrivateField(window, "_topBar")!;
+
             window.Docking.Dock(StandardWindowIds.CommandDetail, DockSide.Center);
             UiTestHost.Pump();
+            AssertPressIsQuiet(StandardWindowIds.CommandDetail);
 
-            foreach (var id in new[] { StandardWindowIds.Mcp, StandardWindowIds.CommandDetail })
+            window.Docking.Show(StandardWindowIds.Mcp);
+            UiTestHost.Pump();
+            AssertPressIsQuiet(StandardWindowIds.Mcp);
+
+            // 越过 250ms 的双击窗口：同一页签连按两下是专注，不是拖动。
+            UiTestHost.PumpFor(300);
+            window.SetLabelMode(true);
+            var labelTab = CenterTab(StandardWindowIds.Mcp);
+            try
             {
-                var tab = FindVisualDescendants<LayoutDocumentTabItem>(window)
-                    .First(item => item.Model?.ContentId == id);
-                Assert.False(Press(tab).Handled, $"{id} 的页签左键不该被 Aurora 判定 Handled");
+                // 按下之后立刻看、不泵消息：合成按下会捕获鼠标，WPF 随即补发一次合成移动，
+                // 没有真鼠标时那一下可能越过阈值、把页浮出去再当场收尾——查的就不再是「起没起会话」了。
+                labelTab.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                {
+                    RoutedEvent = Mouse.PreviewMouseDownEvent,
+                    Source = labelTab,
+                });
+                Assert.NotNull(GetPrivateField(topBar, "_dragSession"));
             }
+            finally
+            {
+                // 没有真鼠标时这次按下可能已经被合成移动推过了阈值，抬起取消不了它；
+                // 直接收掉会话，排队中的浮出见会话已换就不会动命令集。
+                topBar.GetType()
+                    .GetMethod("CancelDragSession", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .Invoke(topBar, ["test finished"]);
+                Mouse.Capture(null);
+                window.SetLabelMode(false);
+            }
+
+            void AssertPressIsQuiet(string id)
+            {
+                var tab = CenterTab(id);
+                Assert.False(Press(tab).Handled, $"{id} 的页签左键不该被 Aurora 判定 Handled");
+                PressPreview(tab);
+                Assert.Null(GetPrivateField(topBar, "_dragSession"));
+            }
+
+            FrameworkElement CenterTab(string id)
+                => FindVisualDescendants<LayoutDocumentTabItem>(window).First(item => item.Model?.ContentId == id);
         });
+
+        // 必须发隧道的 PreviewMouseDown：PreviewMouseLeftButtonDown 是直达事件，手工 RaiseEvent
+        // 只到页签自己，停靠管理器上的手势处理器根本看不见——那样「不起会话」是白绿。
+        static void PressPreview(FrameworkElement tab)
+        {
+            try
+            {
+                tab.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                {
+                    RoutedEvent = Mouse.PreviewMouseDownEvent,
+                    Source = tab,
+                });
+                UiTestHost.Pump();
+            }
+            finally
+            {
+                Mouse.Capture(null);
+            }
+        }
     }
 
     /// <summary>
@@ -1017,30 +987,84 @@ public sealed class ShellChromeContractTests
         }));
     }
 
+    /// <summary>
+    /// REQ-UI-099\uff1a\u9876\u680f\u9000\u5f79\u7684\u7b2c\u4e00\u6279\u5220\u9664\u9879\u2014\u2014\u5de5\u5177\u9875\u53f3\u4fa7\u7684 \u25bc \u83dc\u5355\u4e0e \u2715 \u9690\u85cf\u3002
+    /// \u9875\u5934\u52a8\u4f5c\u4f4d\u8fd8\u5728\u9875\u7b7e\u884c\u91cc\uff0c\u53ea\u5269\u4e13\u6ce8\u6001\u7684\u300c\u6062\u590d\u9875\u9762\u300d\uff1b\u62d6\u51fa\u53bb\u6ca1\u843d\u5230\u505c\u9760\u70b9\u5c31\u662f\u9690\u85cf\uff08REQ-UI-098\uff09\u3002
+    /// </summary>
     [Fact]
-    public void PaneActionsSitInTheTabRowWithoutTheAutoHideButton()
+    public void ToolPaneHeaderKeepsOnlyTheFocusRestoreAction()
     {
         RunShell(window =>
         {
             var actions = FindVisualDescendants<AnchorablePaneTitle>(window).First(item => item.IsVisible);
 
-            // R4-1:?????????,????????
+            // R4-1:\u52a8\u4f5c\u4f4d\u4e0e\u9875\u7b7e\u540c\u6392
             var header = FindAncestor<Grid>(actions, grid => grid.Tag as string == "ShellPaneHeader");
             Assert.NotNull(header);
 
-            // R4-2:?? ???????,?????? ? ????
-            // ???? Popup ?,?????????? ?? ???? ? ????????
             var buttons = FindVisualDescendants<ButtonBase>(actions).ToList();
-            Assert.DoesNotContain(buttons, button => Equals(button.ToolTip, "\u81ea\u52a8\u9690\u85cf"));
+            Assert.Empty(buttons.OfType<ToggleButton>());
+            var restore = Assert.IsType<Button>(Assert.Single(buttons));
+            Assert.Equal("restore", restore.CommandParameter);
 
-            Assert.Single(buttons.OfType<ToggleButton>());
-
-            // ????? Popup ?,???????????,??????????;
-            // ????????????,?????????????
+            // \u8fde\u6a21\u677f\u91cc\u7684\u5f39\u51fa\u83dc\u5355\u4e00\u8d77\u6ca1\u4e86\uff0c\u4e0d\u662f\u85cf\u8d77\u6765\u3002
             var declared = (FrameworkElement)actions.Template.LoadContent();
-            var menuItems = FindLogicalDescendants<MenuItem>(declared).ToList();
-            Assert.Contains(menuItems, item => Equals(item.Header, "\u81ea\u52a8\u9690\u85cf"));
-            Assert.Contains(menuItems, item => Equals(item.Header, "\u6d6e\u52a8"));
+            Assert.Empty(FindLogicalDescendants<MenuItem>(declared));
+            Assert.Empty(FindLogicalDescendants<Popup>(declared));
+        });
+    }
+
+    /// <summary>REQ-UI-097\uff1aCtrl \u6807\u7b7e\u6001\u4e0b\u6bcf\u4e00\u683c\u7a97\u683c\u7684\u5185\u5bb9\u6362\u6210\u5199\u7740\u9875\u540d\u7684\u5927\u6807\u7b7e\uff1b\u9000\u51fa\u5373\u6062\u590d\u3002</summary>
+    [Fact]
+    public void LabelModeCoversEveryPaneWithItsPageTitle()
+    {
+        RunShell(window =>
+        {
+            var covers = FindVisualDescendants<Border>(window)
+                .Where(border => Equals(border.Tag, "PageLabelCover"))
+                .ToList();
+            Assert.True(covers.Count >= 2, $"expected a label cover in the center and the console pane, got {covers.Count}");
+            Assert.All(covers, cover => Assert.Equal(Visibility.Collapsed, cover.Visibility));
+
+            window.SetLabelMode(true);
+            UiTestHost.Pump();
+
+            var shown = covers.Where(cover => cover.IsVisible).ToList();
+            Assert.True(shown.Count >= 2, $"only {shown.Count} label covers became visible");
+            foreach (var cover in shown)
+            {
+                var pane = FindAncestor<Selector>(cover, _ => true);
+                var title = (pane?.SelectedItem as LayoutContent)?.Title;
+                Assert.False(string.IsNullOrEmpty(title));
+                Assert.Equal(title, Assert.Single(FindVisualDescendants<TextBlock>(cover)).Text);
+            }
+
+            window.SetLabelMode(false);
+            UiTestHost.Pump();
+            Assert.All(covers, cover => Assert.Equal(Visibility.Collapsed, cover.Visibility));
+        });
+    }
+
+    /// <summary>REQ-UI-099\uff1a\u53f3\u680f\u4e0b\u534a\u53ea\u5217\u6b64\u523b\u6ca1\u9732\u9762\u7684\u9875\uff1b\u9732\u9762\u4e86\u5c31\u4e0d\u5728\u91cc\u9762\u3002</summary>
+    [Fact]
+    public void RightRailListsHiddenPagesAsCapsules()
+    {
+        RunShell(window =>
+        {
+            var items = RequireElement<Panel>(window, "NavPageItems");
+
+            window.Docking.Hide(StandardWindowIds.Console);
+            window.RefreshNavigatorPages();
+            var capsules = items.Children.OfType<Border>().ToList();
+            Assert.Contains(capsules, capsule => Equals(capsule.Tag, StandardWindowIds.Console));
+            var visible = window.Docking.ListWindows().Where(item => item.IsVisible).Select(item => item.Id).ToHashSet();
+            Assert.DoesNotContain(capsules, capsule => visible.Contains((string)capsule.Tag!));
+
+            window.Docking.Show(StandardWindowIds.Console);
+            window.RefreshNavigatorPages();
+            Assert.DoesNotContain(
+                items.Children.OfType<Border>(),
+                capsule => Equals(capsule.Tag, StandardWindowIds.Console));
         });
     }
 
