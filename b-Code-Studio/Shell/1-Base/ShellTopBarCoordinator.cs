@@ -67,6 +67,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
             UIElement.PreviewMouseLeftButtonUpEvent,
             new MouseButtonEventHandler(OnDockPreviewMouseLeftButtonUp),
             handledEventsToo: true);
+        // AvalonDock 页签自带的拖动在冒泡回到这里时卸掉（见 ShellTopBarCoordinator.NativeTabDrag.cs）。
+        _manager.AddHandler(
+            UIElement.MouseDownEvent,
+            new MouseButtonEventHandler(OnDockMouseDown),
+            handledEventsToo: true);
     }
 
     /// <summary>
@@ -99,9 +104,15 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
         _manager.RemoveHandler(
             UIElement.PreviewMouseLeftButtonUpEvent,
             new MouseButtonEventHandler(OnDockPreviewMouseLeftButtonUp));
+        _manager.RemoveHandler(
+            UIElement.MouseDownEvent,
+            new MouseButtonEventHandler(OnDockMouseDown));
 
         foreach (var floating in _manager.FloatingWindows.OfType<LayoutFloatingWindowControl>())
+        {
             floating.StateChanged -= OnFloatingWindowStateChanged;
+            floating.RemoveHandler(UIElement.MouseDownEvent, new MouseButtonEventHandler(OnDockMouseDown));
+        }
         _documentPanes.Clear();
         foreach (var (target, binding) in _pageActionBindings)
             target.CommandBindings.Remove(binding);
@@ -627,6 +638,11 @@ internal sealed partial class ShellTopBarCoordinator : IDisposable
     {
         var created = e.LayoutFloatingWindowControl;
         created.StateChanged += OnFloatingWindowStateChanged;
+        // 浮窗是另一棵可视树，停靠管理器上的处理器看不到它的页签。
+        created.AddHandler(
+            UIElement.MouseDownEvent,
+            new MouseButtonEventHandler(OnDockMouseDown),
+            handledEventsToo: true);
         ApplyFloatingWindowStateChrome(created);
         _ = _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Refresh);
 

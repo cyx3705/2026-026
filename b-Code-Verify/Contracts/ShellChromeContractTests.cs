@@ -1045,6 +1045,51 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-098 第 2 条（1.20.1）：AvalonDock 页签自带的拖动一律卸掉。按下照常归 AvalonDock（换页、激活），
+    /// 冒泡回到停靠管理器时把它刚上的膛退掉——否则顶栏页签按住拖出去就是一个不收起的悬浮窗（真机问题 3）。
+    /// 先把膛手工上好再按：只有 Aurora 的处理器真跑了，它才会变回 false，免得白绿。
+    /// 字段名按 AvalonDock 4.72.1 取，升级 AvalonDock 时这条先红。
+    /// </summary>
+    [Fact]
+    public void NativeTabDragIsDisarmedOnEveryPress()
+    {
+        Assert.True(HistoryAurora.Shell.Base.ShellTopBarCoordinator.NativeTabDragHooksResolved);
+        RunShell(window =>
+        {
+            var flags = System.Reflection.BindingFlags.NonPublic;
+            var dragging = typeof(LayoutAnchorableTabItem)
+                .GetField("_draggingItem", flags | System.Reflection.BindingFlags.Static)!;
+            var tabs = new FrameworkElement[]
+            {
+                FindVisualDescendants<LayoutDocumentTabItem>(window).First(),
+                FindVisualDescendants<LayoutAnchorableTabItem>(window).First(),
+            };
+            foreach (var tab in tabs)
+            {
+                var armed = tab.GetType().GetField("_isMouseDown", flags | System.Reflection.BindingFlags.Instance)!;
+                armed.SetValue(tab, true);
+                if (tab is LayoutAnchorableTabItem)
+                    dragging.SetValue(null, tab);
+                try
+                {
+                    tab.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                    {
+                        RoutedEvent = Mouse.MouseDownEvent,
+                        Source = tab,
+                    });
+                    Assert.False((bool)armed.GetValue(tab)!, $"{tab.GetType().Name} 的原生拖动没有被卸掉");
+                }
+                finally
+                {
+                    Mouse.Capture(null);
+                }
+            }
+
+            Assert.Null(dragging.GetValue(null));
+        });
+    }
+
     /// <summary>REQ-UI-099\uff1a\u53f3\u680f\u4e0b\u534a\u53ea\u5217\u6b64\u523b\u6ca1\u9732\u9762\u7684\u9875\uff1b\u9732\u9762\u4e86\u5c31\u4e0d\u5728\u91cc\u9762\u3002</summary>
     [Fact]
     public void RightRailListsHiddenPagesAsCapsules()

@@ -336,13 +336,18 @@
                         Visibility="Collapsed"
                         Cursor="SizeAll"
                         Background="{DynamicResource Aurora.Brush.Surface}">
+                    <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
                     <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MinWidth="140"
+                            MinHeight="{DynamicResource Aurora.Size.Tab}"
+                            Padding="22,8"
                             Background="{DynamicResource Aurora.Brush.AccentSoft}"
                             BorderBrush="{DynamicResource Aurora.Brush.Accent}"
                             BorderThickness="1"
-                            CornerRadius="{DynamicResource Aurora.Radius.Inner}">
-                        <TextBlock Margin="12,0"
-                                   HorizontalAlignment="Center"
+                            CornerRadius="{DynamicResource Aurora.Radius.TabInner}">
+                        <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    FontFamily="{DynamicResource Aurora.Font.Family}"
                                    FontSize="{DynamicResource Aurora.Font.Body}"
@@ -437,13 +442,18 @@
                         Visibility="Collapsed"
                         Cursor="SizeAll"
                         Background="{DynamicResource Aurora.Brush.Surface}">
+                    <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
                     <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MinWidth="140"
+                            MinHeight="{DynamicResource Aurora.Size.Tab}"
+                            Padding="22,8"
                             Background="{DynamicResource Aurora.Brush.AccentSoft}"
                             BorderBrush="{DynamicResource Aurora.Brush.Accent}"
                             BorderThickness="1"
-                            CornerRadius="{DynamicResource Aurora.Radius.Inner}">
-                        <TextBlock Margin="12,0"
-                                   HorizontalAlignment="Center"
+                            CornerRadius="{DynamicResource Aurora.Radius.TabInner}">
+                        <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    FontFamily="{DynamicResource Aurora.Font.Family}"
                                    FontSize="{DynamicResource Aurora.Font.Body}"

@@ -32,8 +32,9 @@ public sealed class SceneContractTests
         Assert.True(scenes.Go("Minerva").Ok);
         AssertVisible(host, "console", "mapping");
 
+        // 每格只留一页（REQ-UI-100）：「图」并在控制台那一格，进 Janus 留本模块的「图」，控制台藏着。
         Assert.True(scenes.Go("janus").Ok);
-        AssertVisible(host, "console", "overview", "projops", "graph");
+        AssertVisible(host, "overview", "projops", "graph");
         Assert.Equal("HistoryJanus", scenes.ActiveId);
     });
 
@@ -56,7 +57,7 @@ public sealed class SceneContractTests
 
         Assert.Same(mapping, host.FindContent("mapping"));
         Assert.Same(overview, host.FindContent("overview"));
-        AssertVisible(host, "console", "overview", "projops", "graph");
+        AssertVisible(host, "overview", "projops", "graph");
     });
 
     /// <summary>REQ-UI-085：场景的布局按场景 id 存成命名布局——模块场景就是模块名。</summary>
@@ -77,22 +78,27 @@ public sealed class SceneContractTests
     [Fact]
     public void ASceneRemembersWhatWasShownAndHiddenInIt() => RunScene((host, scenes, _) =>
     {
+        // 每格只留一页（REQ-UI-100）：「图」并在控制台那一格，打开它就顶掉控制台。
         scenes.Go("Minerva");
         host.Show("graph");
-        AssertVisible(host, "console", "mapping", "graph");
+        AssertVisible(host, "mapping", "graph");
 
         scenes.Go("Janus");
         host.Hide("projops");
-        AssertVisible(host, "console", "overview", "graph");
+        AssertVisible(host, "overview", "graph");
 
         scenes.Go("Minerva");
-        AssertVisible(host, "console", "mapping", "graph");
+        AssertVisible(host, "mapping", "graph");
 
         scenes.Go("Janus");
-        AssertVisible(host, "console", "overview", "graph");
+        AssertVisible(host, "overview", "graph");
     });
 
-    /// <summary>在 Minerva 场景里 Janus 热重载一次，它新登记的页不得挤进来；Minerva 自己的新页照常露面。</summary>
+    /// <summary>
+    /// 在 Minerva 场景里 Janus 热重载一次，它新登记的页不得挤进来；Minerva 自己的新页照常露面。
+    /// 1.20.1 起两页落进右栏同一格：Janus 的页先占了位子、Minerva 的页登记时不抢位；
+    /// 场景把 Janus 的页藏掉之后，Minerva 的页回到这个位子（REQ-UI-100 的等位）。
+    /// </summary>
     [Fact]
     public void PagesRegisteredWhileInAnotherSceneStayOutOfSight() => RunScene((host, scenes, _) =>
     {

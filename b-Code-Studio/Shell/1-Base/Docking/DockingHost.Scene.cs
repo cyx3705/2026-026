@@ -18,7 +18,11 @@ internal interface ISceneDocking
 
     void SaveLayout(string name);
 
-    void ApplyScene(string name, IReadOnlyCollection<string> seed, bool rebuild);
+    void ApplyScene(
+        string name,
+        IReadOnlyCollection<string> seed,
+        bool rebuild,
+        IReadOnlyCollection<string>? prefer = null);
 
     event EventHandler? WindowsChanged;
 }
@@ -35,18 +39,24 @@ internal sealed partial class DockingHost : ISceneDocking
     ///   <item>存有同名命名布局：恢复它，显隐就是它记着的样子。存下之后才登记的页这个场景没见过，按初值定；</item>
     ///   <item>都没有：保留当前布局树，按初值定显隐。</item>
     /// </list>
-    /// 最后顶栏只留一页（REQ-UI-096）。
+    /// 最后每格只留一页（REQ-UI-096 / 100）：同一格里挤着两页时，<paramref name="prefer"/> 里的页优先——
+    /// 模块场景传的是该模块自己的页，于是 Janus 的「图」与常驻的控制台同一格时，进 Janus 留「图」。
     ///
     /// **页面视图不重建**：内容对象按 id 缓存在 <c>_contents</c>，恢复快照换的只是停靠模型
     /// （REQ-UI-086）。切走再切回来，页面里选好的来源、表格的选中行都还在。
     /// </summary>
-    public void ApplyScene(string name, IReadOnlyCollection<string> seed, bool rebuild)
+    public void ApplyScene(
+        string name,
+        IReadOnlyCollection<string> seed,
+        bool rebuild,
+        IReadOnlyCollection<string>? prefer = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(seed);
         RestoreLayoutFromMaximized();
 
         var initial = new HashSet<string>(seed, StringComparer.OrdinalIgnoreCase);
+        _waitingForSeat.Clear();
         string? payload = null;
         if (!rebuild)
         {
@@ -109,7 +119,7 @@ internal sealed partial class DockingHost : ISceneDocking
             EnsureCentralWorkspace();
             AttachLayout();
             CurrentLayoutName = name;
-            EnforceSingleCenterPage(keep ?? SelectedCenterId());
+            EnforceSinglePagePerPane(keep ?? SelectedCenterId(), newcomersWin: false, prefer);
         }
 
         ScheduleReapplyRatios();

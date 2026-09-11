@@ -378,10 +378,18 @@ internal sealed class SceneManager
     private void Apply(SceneInfo scene, bool rebuild)
     {
         var seed = SeedFor(scene);
+
+        // 每格只留一页（REQ-UI-100）：模块场景里，本模块的页与常驻页挤在同一格时留本模块的页。
+        var own = scene.Source == SceneSource.Derived
+            ? _docking.ListWindows()
+                .Where(w => !Resident.Contains(w.Id) && IsSeeded(scene, w))
+                .Select(w => w.Id)
+                .ToList()
+            : [];
         _applying = true;
         try
         {
-            _docking.ApplyScene(LayoutName(scene.Id), seed, rebuild);
+            _docking.ApplyScene(LayoutName(scene.Id), seed, rebuild, own);
         }
         finally
         {

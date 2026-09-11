@@ -203,8 +203,8 @@ internal sealed partial class DockingHost : IDockingService
             AttachLayout();
         }
 
-        // 1.19.0 及以前存下的布局顶栏里可能有好几页：只留上次选中的那一页。
-        EnforceSingleCenterPage(SelectedCenterId());
+        // 1.20.0 及以前存下的布局里一格可能有好几页（顶栏、侧边标签组）：每格只留上次选中的那一页。
+        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -248,11 +248,12 @@ internal sealed partial class DockingHost : IDockingService
             })
             .ToList();
 
-    /// <summary>显示一页。落在中央区的页会把顶栏原来那一页顶掉（REQ-UI-096）。</summary>
+    /// <summary>显示一页。它落进的那一格原来那一页被顶掉（REQ-UI-096 / 100）。</summary>
     public void Show(string id)
     {
+        _waitingForSeat.Remove(id);
         ShowCore(id);
-        EnforceSingleCenterPage(id);
+        EnforceSinglePagePerPane(id);
     }
 
     private void ShowCore(string id)
@@ -278,7 +279,15 @@ internal sealed partial class DockingHost : IDockingService
         }
     }
 
+    /// <summary>明确隐藏一页。它若占着别的页登记时想要的位子，那一页回到这个位子（见 <c>_waitingForSeat</c>）。</summary>
     public void Hide(string id)
+    {
+        HideCore(id);
+        _waitingForSeat.Remove(id);
+        ReturnSeatsOf(id);
+    }
+
+    private void HideCore(string id)
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
@@ -358,6 +367,7 @@ internal sealed partial class DockingHost : IDockingService
             throw new ArgumentOutOfRangeException(nameof(ratio), "比例须严格位于 (0,1)");
         }
         _pendingTabTargets.Remove(id);
+        _waitingForSeat.Remove(id);
         using (Suppress())
         {
             // 明确停到某处的页就是露面的页：它若曾被顶栏顶掉，那笔「中央区隐藏」得先勾掉。
@@ -391,7 +401,7 @@ internal sealed partial class DockingHost : IDockingService
             EnsureCentralWorkspace();
         }
 
-        EnforceSingleCenterPage(id);
+        EnforceSinglePagePerPane(id);
     }
 
     public void SetRatio(string id, double ratio)
@@ -423,8 +433,9 @@ internal sealed partial class DockingHost : IDockingService
 
     public void ResetWindow(string id)
     {
+        _waitingForSeat.Remove(id);
         ResetWindowCore(id);
-        EnforceSingleCenterPage(id);
+        EnforceSinglePagePerPane(id);
     }
 
     private void ResetWindowCore(string id)
@@ -456,6 +467,7 @@ internal sealed partial class DockingHost : IDockingService
     public void ResetLayout()
     {
         RestoreLayoutFromMaximized();
+        _waitingForSeat.Clear();
         using (Suppress())
         {
             BuildDefaultLayout();
@@ -467,7 +479,7 @@ internal sealed partial class DockingHost : IDockingService
                 _ratios[d.Id] = NormalizeRatio(d.DefaultRatio, 0.25);
         }
 
-        EnforceSingleCenterPage(SelectedCenterId());
+        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
         ScheduleReapplyRatios();
         RebaseSoon();
     }
@@ -499,6 +511,7 @@ internal sealed partial class DockingHost : IDockingService
             return false;
         }
 
+        _waitingForSeat.Clear();
         try
         {
             using (Suppress())
@@ -513,7 +526,7 @@ internal sealed partial class DockingHost : IDockingService
                 _seedRatiosFromLayout = true;
             }
 
-            EnforceSingleCenterPage(SelectedCenterId());
+            EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
             RebaseSoon();
             return true;
         }
@@ -608,7 +621,12 @@ internal sealed partial class DockingHost : IDockingService
             ResolvePendingTabTargets(descriptor.Id);
         }
 
-        EnforceSingleCenterPage(previousCenter ?? descriptor.Id);
+        // 侧边、底边同理（REQ-UI-100）：新登记的页落进一格已经有页的窗格，留原来那一页，新来的藏着等位。
+        foreach (var (hidden, kept) in EnforceSinglePagePerPane(previousCenter, newcomersWin: false))
+        {
+            if (hidden.Equals(descriptor.Id, StringComparison.OrdinalIgnoreCase))
+                _waitingForSeat[hidden] = kept;
+        }
         ScheduleReapplyRatios();
         WindowsChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -644,6 +662,15 @@ internal sealed partial class DockingHost : IDockingService
             _preserveDefaultRatioOnSeed.Remove(id);
             _owners.Remove(id);
             _pendingTabTargets.Remove(id);
+            _pagePanes.Remove(id);
+            _waitingForSeat.Remove(id);
+            foreach (var waiting in _waitingForSeat
+                         .Where(pair => pair.Value.Equals(id, StringComparison.OrdinalIgnoreCase))
+                         .Select(pair => pair.Key)
+                         .ToArray())
+            {
+                _waitingForSeat.Remove(waiting);
+            }
             if (_contents.Remove(id, out var content))
                 TryDispose(content, id);
             _manager.Layout.CollectGarbage();
@@ -725,7 +752,7 @@ internal sealed partial class DockingHost : IDockingService
             _seedRatiosFromLayout = true;
         }
 
-        EnforceSingleCenterPage(SelectedCenterId());
+        EnforceSinglePagePerPane(SelectedCenterId(), newcomersWin: false);
         WindowsChanged?.Invoke(this, EventArgs.Empty);
         RebaseSoon();
     }
@@ -750,7 +777,7 @@ internal sealed partial class DockingHost : IDockingService
 
         ScheduleCentralWorkspaceRepair();
         ScheduleCenterDocumentPresentation();
-        ScheduleSingleCenterCheck();
+        ScheduleSinglePageCheck();
 
         // 手势进行中持续触发 → 去抖,静默 500ms 后视为动作结束
         _debounce.Stop();
