@@ -26,9 +26,9 @@ using HistoryAurora.Shell.Base.Dialogs;
 namespace HistoryAurora.Shell.Composition;
 
 /// <summary>
-/// 主程序窗体(Main Frame,§2)。3.1 起为自绘顶栏 + 停靠系统容器两段结构:
-/// 菜单折叠进顶栏右上角的菜单按钮(UI-03),常驻菜单行与底部状态栏均已取消
-/// (UI-05,原状态栏信息改由顶栏徽章、布局文本和瞬时回执承担)。
+/// 主程序窗体(Main Frame,§2)。1.20.2 顶栏删除(REQ-UI-101)之后是「停靠区 + 右栏」两列结构:
+/// 窗口按钮组、搜索、场景与常用页面都在右栏,菜单折叠进右栏的菜单按钮(UI-03),
+/// 常驻菜单行与底部状态栏均已取消(UI-05,原状态栏信息改由错误徽章、布局文本和瞬时回执承担)。
 /// M2 起指令总线为一切操作的汇聚点:菜单项点击同样是发指令(S-02),
 /// 控制台手输、脚本、布局手势与派生应用共用同一张指令注册表。
 /// </summary>
@@ -59,6 +59,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>列序台账（REQ-UI-062）；自持页与模块页共用一本。</summary>
     private readonly Components.Table.ColumnOrderStore _columnOrder;
 
+    /// <summary>场景（REQ-UI-084）与使用频次台账（REQ-UI-089），导航器与场景指令共用。</summary>
+    private readonly Components.Scenes.SceneManager _scenes;
+
+    private readonly Components.Scenes.UsageLedger _usage;
+
     /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
     private readonly bool _hostedModulesPage;
     private readonly Components.Modules.ShellUiRegistrar _shellUi;
@@ -68,14 +73,14 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     // 命令集页与指令详情页的选中联动(0.4.4 上抛):优先用派生应用经 ShellConfig 传入的实例,
     // 未传则自建。由构造函数赋值——工具窗口内容工厂在 DockingHost 构建默认布局时即被调用,
     // 派生应用那时拿不到 window,故联动实例必须由派生侧创建并传入。
-    // UI-03:折叠后的菜单挂在顶栏菜单按钮上(挂上去才能继承窗体资源与样式)
+    // UI-03:折叠后的菜单挂在右栏的菜单按钮上(挂上去才能继承窗体资源与样式)
     private readonly ContextMenu _menu = new();
 
     private int _errorCount;
     private bool _menusInitialized;
 
     // UI-09.1:true 表示已接管窗体非客户区;false 表示宿主改过 WindowStyle,
-    // 只降级边框接管方式,顶栏四个按钮仍然保留并可用。
+    // 只降级边框接管方式,右栏的四个按钮仍然保留并可用。
     private bool _customChrome;
 
     // Alt 单独按下(未与其他键组合)才呼出菜单,避免抢走 Alt+Tab 等组合
@@ -91,16 +96,14 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>弹窗与主窗体必须用同一套令牌；独立 Window 自己合并字典，但要知道此刻是哪一套。</summary>
     public bool IsDarkTheme => string.Equals(_theme, ThemeDark, StringComparison.Ordinal);
 
-    // 右上角按钮组要在最上一排页签里占位,避免页签跑到按钮底下
+    // 浮窗主题、标签态与右栏胶囊的低频巡检
     private readonly DispatcherTimer _chromeUpkeep;
     private readonly DispatcherTimer _discoverDebounce;
     private readonly CoalescingAsyncWork<PageLoadReport?> _discover = new();
-    private bool _reservePending;
+    private bool _floatingThemePending;
     private bool _closing;
     private bool _allowClose;
-    private ContentControl? _chromeHost;
-    private FrameworkElement? _chromeDragSurface;
-    private readonly ShellTopBarCoordinator _topBar;
+    private readonly PageDragCoordinator _pageDrag;
 
     public ShellWindow(
         ShellConfig config,
@@ -229,6 +232,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
         _docking = new DockingHost(DockManager, config.ToolWindows, layoutStore, log, settings);
         _docking.Initialize();
+
+        // 场景要在停靠层恢复完上次布局之后建：它记下此刻已有的窗口，之后新登记的页
+        // 才按当前场景决定露不露面。上次退出时的布局本来就是当前场景的样子，这里不再切一次。
+        _usage = new Components.Scenes.UsageLedger(settings, log);
+        _scenes = new Components.Scenes.SceneManager(_docking, settings, _usage, log);
         ConfigureCommandCompletionRouting(
             () => _docking.MaximizedId?.Equals(
                 StandardWindowIds.Console,
@@ -237,15 +245,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             {
                 _ = ShowCommandCatalogForCompletionAsync();
             });
-        _topBar = new ShellTopBarCoordinator(
-            this,
-            DockManager,
-            _docking,
-            _bus,
-            _log,
-            (RoutedCommand)Resources["Aurora.Command.PageAction"],
-            config.EnableMaximizeOnDoubleClick);
-        // 按钮组占位与浮动窗口主题需要在「布局稳定之后」才算得准,但不能挂
+        _pageDrag = new PageDragCoordinator(this, DockManager, _docking, _bus, _log);
+        // 浮动窗口主题需要在「布局稳定之后」才补得准,但不能挂
         // LayoutUpdated:那个事件每帧都发,回调里任何写操作都会再触发一次布局,
         // 直接转成 100% CPU 的死循环(实测)。改为低频巡检 + 幂等写入。
         _chromeUpkeep = new DispatcherTimer(DispatcherPriority.Background)
@@ -256,9 +257,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             if (_closing)
                 return;
-            AttachChromeBarToMainDocumentPane();
-            ReserveSpaceForChromeBar();
             ApplyThemeToFloatingWindows();
+            ApplyLabelModeToFloatingWindows();
+
+            // 用户拖放、隐藏都不一定发 WindowsChanged：常用页面胶囊跟着巡检对一次，没变不重画。
+            RefreshNavigatorPages();
         };
         Loaded += (_, _) => _chromeUpkeep.Start();
 
@@ -289,13 +292,17 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             }
             UpdateLayoutIndicator();
 
-            // UI-04:页面最大化态与常规态的窗格外观、顶栏形态在此切换。
+            // UI-04:页面最大化态与常规态的窗格外观在此切换。
             // WindowsChanged 是 MaximizeWindow / RestoreLayoutFromMaximized 的共同出口。
             ApplyFocusChrome();
 
             // R4-3:刚拖出来的浮动窗口带的是自己那份浅色令牌,补一次主题
             ApplyThemeToFloatingWindows();
-            _topBar.Refresh();
+
+            // 新登记的页不属于当前场景就藏起来（Janus 热重载不能挤进 Minerva 场景）；
+            // 右栏（场景与常用页面胶囊）跟着页面显隐与专注态重画。
+            _scenes.OnWindowsChanged();
+            RefreshNavigatorRail();
         });
 
         // ---- 内置指令组 + 派生应用自定义指令(冲突此时报错,§5.3)
@@ -321,6 +328,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             DataRefresher = _dataRefresher,
             PageLoader = _pageLoader,
             ComponentRequests = _componentRequests,
+            Scenes = _scenes,
 
             // 命令目录会话（REQ-UI-057）。**漏掉这一行的代价是三页一起空白**：
             // 1.9.0 把命令集、指令详情两页改成描述式，取数从视图里的私有状态换成了
@@ -402,6 +410,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         BuildMenus();
         UpdateLayoutIndicator();
         ApplyFocusChrome();
+        InitializeNavigator();
+        InitializeLabelMode();
 
         Closing += OnShellClosing;
         Closed += OnShellClosed;
@@ -418,8 +428,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             WindowChrome.SetWindowChrome(this, new WindowChrome
             {
-                // 不再让隐藏标题区横跨整个窗体顶部：它会吞掉工具窗格的 ▼/×。
-                // 窗体拖动只由中央文档页签行的空白区域处理。
+                // 隐藏标题区恒为 0：横跨窗体顶部的命中区会吞掉页面自己的输入。
+                // 窗体拖动由右栏与停靠区的空白自己处理（REQ-UI-107）。
                 CaptionHeight = 0,
                 ResizeBorderThickness = new Thickness(6),
                 GlassFrameThickness = new Thickness(0),
@@ -431,13 +441,13 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
         else
         {
-            // 只降级边框接管方式;顶栏的菜单与三个窗口按钮保持不变(UI-09.1)
+            // 只降级边框接管方式;右栏的菜单与三个窗口按钮保持不变(UI-09.1)
             _customChrome = false;
-            _log.Info("shell", $"宿主使用 WindowStyle={WindowStyle},已跳过非客户区接管,顶部按钮组仍然可用");
+            _log.Info("shell", $"宿主使用 WindowStyle={WindowStyle},已跳过非客户区接管,右栏按钮组仍然可用");
         }
 
         ApplyWindowStateChrome();
-        ScheduleChromeReserve();
+        ScheduleFloatingTheme();
     }
 
     /// <summary>停靠系统门面。</summary>
@@ -517,6 +527,11 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             var report = await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
                 await _annotationClaimer.ClaimAsync().ConfigureAwait(true);
+
+            // 导航器热键挂在发现这一轮，不挂在 aurora.host.ready：单独热重载 Aurora 时
+            // 宿主不会再发就绪通知（1.19.0 真机实测：装上了，Mercury 那边一条都没有）。
+            // 发现是冷启动与热重载都会走的那条路，此刻 Mercury 的指令也一定进了注册表。
+            await RegisterNavigatorHotkeyAsync().ConfigureAwait(true);
             return report;
         }
         catch (Exception ex)
@@ -675,7 +690,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
     }
 
-    // ---------------------------------------------------------------- 顶栏状态(UI-05)
+    // ---------------------------------------------------------------- 错误徽章(UI-05)
 
     /// <summary>UI-05.3:原状态栏错误计数,点击行为不变(聚焦控制台并只看错误)。</summary>
     private void UpdateErrorBadge()
@@ -687,7 +702,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private void OnErrorBadgeClick(object sender, RoutedEventArgs e)
         => _ = _bus.ExecuteAsync("aurora.log.focus errors=true", "UI");
 
-    // ---------------------------------------------------------------- 顶栏窗口控件(UI-02)
+    // ---------------------------------------------------------------- 窗口控件(UI-02,在右栏顶部)
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e)
         => _ = _bus.ExecuteAsync("aurora.app.window state=minimized", "UI");
@@ -699,7 +714,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         => _ = _bus.ExecuteAsync("vulcan.app.hide", "UI");
 
     internal CommandResult SetFloatingWindowState(string id, string state)
-        => _topBar.SetFloatingWindowState(id, state);
+        => _pageDrag.SetFloatingWindowState(id, state);
 
     /// <summary>窗体最大化图标切换 + WindowChrome 溢出补偿(UI-02.5)。</summary>
     private void ApplyWindowStateChrome()
@@ -710,7 +725,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         MaximizeButton.ToolTip = maximized ? "向下还原" : "最大化";
 
         // 接管非客户区后,最大化的窗体会按可调整边框宽度溢出工作区,
-        // 不补偿则顶栏被裁掉一截。
+        // 不补偿则右栏顶部的按钮组被裁掉一截。
         RootBorder.Padding = _customChrome && maximized
             ? SystemParameters.WindowResizeBorderThickness
             : default;
@@ -739,6 +754,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _chromeUpkeep.Stop();
         _discoverDebounce.Stop();
         SaveWindowBounds();
+        // 先写回当前场景：下次切回来是离开时的样子。layout.v1.json 照旧另存一份供启动恢复。
+        _scenes.SaveActiveLayout();
         _docking.SaveCurrentLayout();
 
         // Shell 自建的能力由 Shell 自己收尾：模块宿主握着文件监听与防抖定时器，
@@ -748,7 +765,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     }
 
     private void OnShellClosed(object? sender, EventArgs e)
-        => _topBar.Dispose();
+    {
+        ShutdownLabelMode();
+        _pageDrag.Dispose();
+    }
 
     private void RegisterFrontendLifecycleCommands(CommandRegistry registry)
     {

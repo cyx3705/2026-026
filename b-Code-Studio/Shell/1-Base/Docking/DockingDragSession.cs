@@ -28,9 +28,7 @@ internal sealed class DockingDragSession(
     Point anchor,
     string? pageId,
     Window? hostWindow,
-    string target,
-    bool wasMaximized,
-    bool requiresHold)
+    bool wasMaximized)
 {
     public long Id { get; } = id;
     public DockingDragKind Kind { get; } = kind;
@@ -39,9 +37,7 @@ internal sealed class DockingDragSession(
     public Point Anchor { get; } = anchor;
     public string? PageId { get; } = pageId;
     public Window? HostWindow { get; } = hostWindow;
-    public string Target { get; } = target;
     public bool WasMaximized { get; } = wasMaximized;
-    public bool RequiresHold { get; } = requiresHold;
     public DockingDragState State { get; set; } = DockingDragState.Pressed;
     public bool ButtonReleased { get; set; }
     public Point LastScreenPoint { get; set; }

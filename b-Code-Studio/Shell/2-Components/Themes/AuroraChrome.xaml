@@ -2,7 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        UI-02 / UI-03 / UI-05:顶栏、窗口控件、菜单按钮、错误徽章与瞬时提示。
+        UI-02 / UI-03 / UI-05:窗口控件、菜单按钮、错误徽章与瞬时提示。
+        顶栏已删(REQ-UI-101),这几样如今都长在右栏顶部。
         图标一律用 Path 绘制,不依赖 Segoe MDL2 Assets 等字体 —— 目标平台是
         Win10 IoT LTSC 2021,精简镜像可能缺字体。
     -->
@@ -11,8 +12,8 @@
 
     <!--
         菜单 + 最小化 + 最大化还原 + 关闭 共用底座。
-        WindowChrome.IsHitTestVisibleInChrome=True 保留为兼容性保护；3.1 的主窗体
-        已将 CaptionHeight 归零，只在中央文档页签空白处处理拖动。
+        WindowChrome.IsHitTestVisibleInChrome=True 保留为兼容性保护；主窗体的
+        CaptionHeight 恒为 0，拖动由右栏与停靠区的空白自己处理（REQ-UI-107）。
     -->
     <Style x:Key="Aurora.WindowButton" TargetType="Button">
         <Setter Property="Width" Value="{DynamicResource Aurora.Size.WindowButton}" />
@@ -76,7 +77,7 @@
         </Setter>
     </Style>
 
-    <!-- 顶栏图标(菜单、退出专注):与窗口控件同底座,宽度略窄 -->
+    <!-- 控制组图标(菜单、退出专注):与窗口控件同底座,宽度略窄 -->
     <Style x:Key="Aurora.ChromeIconButton" TargetType="Button"
            BasedOn="{StaticResource Aurora.WindowButton}">
         <Setter Property="Width" Value="36" />

@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shell;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Components.Scenes;
 using HistoryAurora.Shell.Components.Themes;
 
 namespace HistoryAurora.Shell.Composition;
@@ -37,14 +38,12 @@ internal partial class ShellWindow
         ChromeBar.Visibility = Visibility.Visible;
 
         // CaptionHeight 永久为零，避免隐藏命中区覆盖任意工具窗格顶部。
-        // 文档页头显式拖动主窗口；工具页头由协调器显式拖出工具浮窗。
+        // 顶栏已删（REQ-UI-101）：拖动主窗口走右栏空白处。
         if (WindowChrome.GetWindowChrome(this) is { } chrome)
             chrome.CaptionHeight = 0;
 
         ApplyPaneStyles(chromeless: focused);
-        ScheduleChromeReserve();
         RefreshCommandCompletionFocus();
-        _topBar.Refresh();
     }
 
     private string FindTitle(string id)
@@ -177,6 +176,21 @@ internal partial class ShellWindow
             : Item("切换到深色模式", $"aurora.app.theme mode={ThemeDark}"));
         rebuilt.Add(view);
 
+        // 场景（REQ-UI-085）：与右栏同一条命令路径，菜单里列全，右栏只列常用的
+        var scenes = new MenuItem { Header = "场景(_S)" };
+        foreach (var scene in _scenes.List()
+                     .OrderBy(s => s.Source == SceneSource.All ? 0 : 1)
+                     .ThenBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var item = Item(scene.Title, "aurora.scene.go id=" + CommandParser.QuoteArg(scene.Id));
+            item.IsChecked = scene.Active;
+            scenes.Items.Add(item);
+        }
+        scenes.Items.Add(new Separator());
+        scenes.Items.Add(Item("搜索场景与页面（右栏）", "aurora.nav.open"));
+        scenes.Items.Add(Item("重置当前场景", "aurora.scene.reset"));
+        rebuilt.Add(scenes);
+
         // 工具
         var tools = new MenuItem { Header = "工具(_T)" };
         tools.Items.Add(Item("打开数据目录", "aurora.app.opendata"));
@@ -234,5 +248,13 @@ internal partial class ShellWindow
     /// 改挂菜单按钮提示 —— 需要时一悬停就能看到,不占任何常驻像素。
     /// </summary>
     private void UpdateLayoutIndicator()
-        => MenuButton.ToolTip = $"菜单 (Alt) · 布局 {_docking.CurrentLayoutName}";
+    {
+        // 1.19.0 起主页面按场景组织，提示改报场景；另外加载过命名布局时两者才会不同，那时一并报。
+        var sceneId = _scenes.ActiveId;
+        var title = _scenes.Find(sceneId)?.Title ?? sceneId;
+        var layout = _docking.CurrentLayoutName;
+        MenuButton.ToolTip = layout.Equals(sceneId, StringComparison.OrdinalIgnoreCase) || layout == "默认"
+            ? $"菜单 (Alt) · 场景 {title}"
+            : $"菜单 (Alt) · 场景 {title} · 布局 {layout}";
+    }
 }

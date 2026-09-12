@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:adc="clr-namespace:AvalonDock.Controls;assembly=AvalonDock">
+                    xmlns:adc="clr-namespace:AvalonDock.Controls;assembly=AvalonDock"
+                    xmlns:base="clr-namespace:HistoryAurora.Shell.Base">
 
     <!--
         UI-01 / UI-04 / UI-06:AvalonDock 覆盖层。
@@ -10,117 +11,45 @@
         页签容器样式由那两个样式的 ItemContainerStyle 带下去。
         主题画刷键的覆盖在 AuroraTokens[.Dark].xaml —— 随主题整份切换。
 
-        页签 DataContext 就是 LayoutContent(LayoutDocument / LayoutAnchorable),
-        故可直接绑定 Title / IsSelected / IsActive / CanClose;关闭命令走
-        TemplatedParent 的 LayoutItem.CloseCommand。(经运行期探针确认)
+        1.20.2 起所有页都是 LayoutAnchorable(REQ-UI-102),没有页签行、没有页签切换;
+        1.20.3 起页签模板本身也是空的(REQ-UI-103)。
     -->
 
-    <!-- ================================================================ 页签(UI-06) -->
+    <!-- ================================================================ 页签容器(只剩壳) -->
 
     <!--
-        同心圆角:卡片外圆角 8,页签条相对卡片内缩 3,故页签上圆角取 5。
-        主窗体不再使用横跨整窗的 CaptionHeight 命中区；中央文档页签行的空白
-        由 ShellWindow 单独接管拖动，工具窗格顶部因此始终保持可操作。
+        1.20.3(REQ-UI-103):顶栏视觉的最后一块。1.20.2 删掉了页签**行**,页签本身的模板
+        (标题文字、关闭按钮、悬停与选中触发器,约 90 行)却还留着,在一行高 0、不可见、
+        不接收输入的格子里照常被构造与绑定 —— 画出来给谁看都没有,改坏了也没人看得见。
+        本版把模板清空,只留下面这层最小的壳。
+
+        壳为什么不能一起删:窗格控件是 TabControl,它要靠**生成出来的页签容器**才产出
+        SelectedContent;整份 ItemContainerStyle 拿掉,内容区就是空白(REQ-UI-101 第 1 条)。
+        容器里的 adc:LayoutXxxTabItem 也留着 —— AvalonDock 的激活与选中同步挂在它身上,
+        它只是没有可见的模板了。
+
+        页签 DataContext 就是 LayoutContent(LayoutAnchorable),故可直接绑定 Title / IsSelected。
+        (经运行期探针确认)
     -->
     <ControlTemplate x:Key="Aurora.Docking.TabItemTemplate" TargetType="{x:Type Control}">
-        <Border x:Name="Bd"
-                Margin="0,0,2,0"
-                Background="Transparent"
-                CornerRadius="{DynamicResource Aurora.Radius.TabTop}"
-                SnapsToDevicePixels="True">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="TitleText"
-                           Grid.Column="0"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center"
-                           FontFamily="{DynamicResource Aurora.Font.Family}"
-                           FontSize="{DynamicResource Aurora.Font.Body}"
-                           Foreground="{DynamicResource Aurora.Brush.TextSecondary}"
-                           Text="{Binding Title}"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding Title}" />
-                <Button x:Name="CloseButton"
-                        Grid.Column="1"
-                        Width="18" Height="18"
-                        Margin="6,0,6,0"
-                        VerticalAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Focusable="False"
-                        Visibility="Collapsed"
-                        WindowChrome.IsHitTestVisibleInChrome="True"
-                        Command="{Binding LayoutItem.CloseCommand,
-                                  RelativeSource={RelativeSource TemplatedParent}}">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="CloseBd" Background="{TemplateBinding Background}"
-                                    CornerRadius="4">
-                                <Path Data="M 0,0 L 7,7 M 7,0 L 0,7"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                      Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                      StrokeThickness="1.1" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="CloseBd" Property="Background"
-                                            Value="{DynamicResource Aurora.Brush.SurfacePressed}" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </Grid>
-        </Border>
-        <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background"
-                        Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
-            </Trigger>
-            <DataTrigger Binding="{Binding CanClose}" Value="True">
-                <Setter TargetName="CloseButton" Property="Visibility" Value="Visible" />
-            </DataTrigger>
-            <!-- The outer TabItem is the visual selection source of truth. -->
-            <DataTrigger Binding="{Binding IsSelected,
-                                      RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}"
-                         Value="True">
-                <Setter TargetName="Bd" Property="Background"
-                        Value="{DynamicResource Aurora.Brush.AccentSoft}" />
-                <Setter TargetName="TitleText" Property="Foreground"
-                        Value="{DynamicResource Aurora.Brush.TextPrimary}" />
-                <Setter TargetName="TitleText" Property="FontWeight" Value="SemiBold" />
-            </DataTrigger>
-        </ControlTemplate.Triggers>
+        <Border Background="Transparent" />
     </ControlTemplate>
 
-    <!--
-        窗格控件是 TabControl,页签容器因此是普通 TabItem;AvalonDock 的
-        LayoutDocumentTabItem / LayoutAnchorableTabItem 是容器模板里承担
-        拖拽、激活、上下文菜单的那一层。所以外层样式必须 TargetType=TabItem,
-        内层才换我们的视觉模板 —— 直接给容器套 LayoutXxxTabItem 样式会抛
-        「样式不适用于类型 TabItem」。
-    -->
     <Style x:Key="Aurora.Docking.DocumentTabItemStyle" TargetType="{x:Type adc:LayoutDocumentTabItem}">
-        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Tab}" />
-        <Setter Property="MinWidth" Value="90" />
-        <Setter Property="MaxWidth" Value="220" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         <Setter Property="Template" Value="{StaticResource Aurora.Docking.TabItemTemplate}" />
     </Style>
 
     <Style x:Key="Aurora.Docking.AnchorableTabItemStyle" TargetType="{x:Type adc:LayoutAnchorableTabItem}">
-        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Tab}" />
-        <Setter Property="MinWidth" Value="80" />
-        <Setter Property="MaxWidth" Value="220" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         <Setter Property="Template" Value="{StaticResource Aurora.Docking.TabItemTemplate}" />
     </Style>
 
+    <!--
+        窗格控件是 TabControl,页签容器因此是普通 TabItem;AvalonDock 的
+        LayoutDocumentTabItem / LayoutAnchorableTabItem 是容器模板里承担
+        激活与选中同步的那一层。所以外层样式必须 TargetType=TabItem,
+        内层才换我们的模板 —— 直接给容器套 LayoutXxxTabItem 样式会抛
+        「样式不适用于类型 TabItem」。
+    -->
     <Style x:Key="Aurora.Docking.DocumentTabContainerStyle" TargetType="{x:Type TabItem}">
         <Setter Property="Padding" Value="0" />
         <Setter Property="Margin" Value="0" />
@@ -151,140 +80,10 @@
         </Setter>
     </Style>
 
-    <!-- ================================================================ 工具页动作(R3-1) -->
-
     <!--
-        3.1 第三轮:工具页原本自带一条「蓝条」标题栏(标题 + 虚线拖拽区 + ▼📌✕),
-        与页签行重复且抢眼。现在整条取消,三个动作缩成页面右上角的一组浅色小图标,
-        常态半透明、悬停才实体化。命令仍取自 AvalonDock 的 LayoutItem,功能不减:
-        ▼ 浮动 / 停靠为文档 / 自动隐藏 / 隐藏,📌 自动隐藏,✕ 隐藏。
-    -->
-    <Style x:Key="Aurora.Docking.PaneActionButton" TargetType="ButtonBase">
-        <Setter Property="Width" Value="20" />
-        <Setter Property="Height" Value="20" />
-        <Setter Property="Margin" Value="1,0,0,0" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Focusable" Value="False" />
-        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ButtonBase">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.35" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        R4-1:动作图标不再浮在内容上方(会盖住视图自己的工具条),改为占据
-        页签行右端的一个固定位置 —— 与页签同排、同高,像最后一个「标签」。
-        R4-2:📌 自动隐藏单独成键已取消,该动作在 ▼ 菜单里仍在。
-    -->
-    <Style TargetType="{x:Type adc:AnchorablePaneTitle}">
-        <Setter Property="HorizontalAlignment" Value="Right" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="{x:Type adc:AnchorablePaneTitle}">
-                    <StackPanel x:Name="Actions"
-                                Margin="4,0,2,0"
-                                VerticalAlignment="Center"
-                                Background="Transparent"
-                                Opacity="0.55"
-                                Orientation="Horizontal">
-                        <Button x:Name="RestoreFocus"
-                                Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                ToolTip="恢复页面"
-                                Visibility="Collapsed"
-                                Command="{DynamicResource Aurora.Command.PageAction}"
-                                CommandParameter="restore"
-                                CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
-                            <Path Data="{DynamicResource Aurora.Icon.ExitFocus}"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.1" />
-                        </Button>
-                        <ToggleButton x:Name="MenuToggle"
-                                      Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                      ToolTip="页面操作">
-                            <Path Data="M 0 0 L 4 4 L 8 0"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.3" />
-                        </ToggleButton>
-                        <Popup IsOpen="{Binding IsChecked, ElementName=MenuToggle, Mode=TwoWay}"
-                               AllowsTransparency="True"
-                               Placement="Bottom"
-                               PlacementTarget="{Binding ElementName=MenuToggle}"
-                               StaysOpen="False">
-                            <Border Margin="0,2,10,10"
-                                    Background="{DynamicResource Aurora.Brush.Surface}"
-                                    BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
-                                    BorderThickness="1"
-                                    CornerRadius="{DynamicResource Aurora.Radius.Inner}"
-                                    Effect="{DynamicResource Aurora.Shadow.Flyout}"
-                                    Padding="4">
-                                <StackPanel MinWidth="140">
-                                    <MenuItem Header="浮动"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="float"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="停靠为文档"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="dock-document"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="自动隐藏"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="autohide"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                    <MenuItem Header="隐藏"
-                                              Command="{DynamicResource Aurora.Command.PageAction}"
-                                              CommandParameter="hide"
-                                              CommandTarget="{Binding PlacementTarget,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Popup}}}" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                        <Button Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                ToolTip="隐藏"
-                                Command="{DynamicResource Aurora.Command.PageAction}"
-                                CommandParameter="hide"
-                                CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
-                            <Path Data="M 0,0 L 8,8 M 8,0 L 0,8"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.2" />
-                        </Button>
-                    </StackPanel>
-                    <ControlTemplate.Triggers>
-                        <Trigger SourceName="Actions" Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Actions" Property="Opacity" Value="1" />
-                        </Trigger>
-                        <DataTrigger Binding="{Binding Tag,
-                                                  RelativeSource={RelativeSource AncestorType={x:Type Grid}}}"
-                                     Value="FocusedShellPaneHeader">
-                            <Setter TargetName="RestoreFocus" Property="Visibility" Value="Visible" />
-                        </DataTrigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        工具页内容宿主:原模板是「标题条 + 内容」两段,标题条就是那条蓝条。
-        改成内容铺满、动作图标浮在右上角(不占布局位置)。
+        工具页内容宿主:原模板是「标题条 + 内容」两段,标题条就是那条蓝条。改成内容铺满。
+        1.20.2 顶栏删除(REQ-UI-101):页签行上的「恢复页面」等动作一并删掉,
+        退出专注走右栏窗口控制组里的按钮、F11 或 Esc。
     -->
     <Style TargetType="{x:Type adc:LayoutAnchorableControl}">
         <Setter Property="Template">
@@ -325,10 +124,11 @@
     <!-- ================================================================ 窗格模板:卡片形态 -->
 
     <!--
-        W-04 沿用:标签条置顶。UI-01:窗格 = 圆角卡片 + 投影 + 外缘间隙。
-        透明底层 Border 必须保留 —— 拖拽停靠依赖它捕获鼠标事件。
-        中央文档模板自带 ShellChromeHost，ShellWindow 会把窗口控制栏挂到该宿主；
-        工具窗格不再为主窗口按钮组预留右边距，避免小窗动作栏与窗口控制栏重叠。
+        UI-01:窗格 = 圆角卡片 + 投影 + 外缘间隙。透明底层 Border 必须保留 —— 拖拽停靠依赖它捕获鼠标事件。
+
+        1.20.2 顶栏删除(REQ-UI-101):一格一页(REQ-UI-100),页签行不再画出来,没有页签切换。
+        页签面板仍然留着、高 0、不可见、不接收输入:窗格控件是 TabControl,
+        它要靠生成出来的页签容器才产出 SelectedContent —— 整个拿掉,内容区就是空白。
     -->
     <ControlTemplate x:Key="Aurora.Docking.AnchorablePaneTemplate"
                      TargetType="{x:Type adc:LayoutAnchorablePaneControl}">
@@ -345,25 +145,9 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <Border Grid.RowSpan="2" Background="Transparent" />
-                <!-- 工具窗格动作栏独立占据页签行右端，不承载主窗口控制栏。 -->
-                <Grid Grid.Row="0"
-                      Panel.ZIndex="1"
-                      Background="Transparent"
-                      Margin="{DynamicResource Aurora.Space.TabStrip}"
-                      Tag="ShellPaneHeader">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <adc:AnchorablePaneTabPanel x:Name="HeaderPanel"
-                                                Grid.Column="0"
-                                                IsItemsHost="True"
-                                                FlowDirection="LeftToRight"
-                                                KeyboardNavigation.TabIndex="1" />
-                    <!-- R4-1:页面动作与页签同排,占页签行右端的固定位置 -->
-                    <adc:AnchorablePaneTitle Grid.Column="1"
-                                             Model="{Binding SelectedItem,
-                                                     RelativeSource={RelativeSource TemplatedParent}}" />
+                <!-- 页签行已删:只留生成页签容器用的面板,高 0、不可见、不接收输入 -->
+                <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
+                    <adc:AnchorablePaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
                 </Grid>
                 <ContentPresenter x:Name="PART_SelectedContentHost"
                                   Grid.Row="1"
@@ -376,8 +160,52 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                <!--
+                    Ctrl 标签态(REQ-UI-097):内容换成写着页名的大标签,按住就能把整页拖走。
+
+                    CornerRadius 必须跟着卡片(REQ-UI-105,1.20.3):这块盖板是卡片里**最上面**的一层,
+                    圆角由外层卡片 Border 画、而 WPF 的 CornerRadius 不裁剪子元素 ——
+                    盖板不自己带圆角的话,四个角就被它填成直角,按住 Ctrl 时整页从圆角矩形变成尖角矩形。
+                    它铺满第 1 行,而第 0 行(页签容器)高 0,所以取与卡片同一个 Aurora.Radius.Inner 即可对齐。
+                -->
+                <Border x:Name="PageLabelCover"
+                        Grid.Row="1"
+                        Panel.ZIndex="3"
+                        Tag="PageLabelCover"
+                        Visibility="Collapsed"
+                        Cursor="SizeAll"
+                        CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                        Background="{DynamicResource Aurora.Brush.Surface}">
+                    <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
+                    <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MinWidth="140"
+                            MinHeight="{DynamicResource Aurora.Size.Tab}"
+                            Padding="22,8"
+                            Background="{DynamicResource Aurora.Brush.AccentSoft}"
+                            BorderBrush="{DynamicResource Aurora.Brush.Accent}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Aurora.Radius.TabInner}">
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{DynamicResource Aurora.Font.Family}"
+                                   FontSize="{DynamicResource Aurora.Font.Body}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
+                                   Text="{Binding SelectedItem.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </Border>
             </Grid>
         </Border>
+        <ControlTemplate.Triggers>
+            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
+                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                         Value="True">
+                <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <ControlTemplate x:Key="Aurora.Docking.DocumentPaneTemplate"
@@ -395,45 +223,9 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <Border Grid.RowSpan="2" Background="Transparent" />
-                <!-- REQ-DOCK-001:中央区页面选择区,单页时同样可见 -->
-                <Grid Grid.Row="0"
-                      Panel.ZIndex="1"
-                      Background="Transparent"
-                      Margin="{DynamicResource Aurora.Space.TabStrip}"
-                      Tag="ShellPaneHeader">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <adc:DocumentPaneTabPanel x:Name="HeaderPanel"
-                                               Grid.Column="0"
-                                               IsItemsHost="True"
-                                               KeyboardNavigation.TabIndex="1" />
-                    <!--
-                        窗口控制栏只属于中央主窗口。ShellWindow 在布局稳定后把
-                        ChromeBar 放入这个宿主，工具窗格不会再与它重叠。
-                    -->
-                    <Grid Grid.Column="1">
-                        <ContentControl x:Name="ShellChromeHost"
-                                        Tag="ShellChromeHost"
-                                        Height="{DynamicResource Aurora.Size.Tab}"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Top"
-                                        Panel.ZIndex="2" />
-                        <Button x:Name="FloatingDocumentMaxRestore"
-                                Style="{StaticResource Aurora.Docking.PaneActionButton}"
-                                ToolTip="浮窗最大化/还原"
-                                Visibility="Collapsed"
-                                Tag="FloatingMaxRestore"
-                                Command="{DynamicResource Aurora.Command.PageAction}"
-                                CommandParameter="toggle-floating"
-                                CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
-                            <Path x:Name="FloatingDocumentMaxRestoreIcon"
-                                  Data="{DynamicResource Aurora.Icon.Maximize}"
-                                  Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                  StrokeThickness="1.1" />
-                        </Button>
-                    </Grid>
+                <!-- 页签行已删(顶栏删除,REQ-UI-101):只留生成页签容器用的面板 -->
+                <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
+                    <adc:DocumentPaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
                 </Grid>
                 <ContentPresenter x:Name="PART_SelectedContentHost"
                                   Grid.Row="1"
@@ -446,8 +238,45 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                <!-- Ctrl 标签态(REQ-UI-097),与工具窗格同一块;圆角同上(REQ-UI-105) -->
+                <Border x:Name="PageLabelCover"
+                        Grid.Row="1"
+                        Panel.ZIndex="3"
+                        Tag="PageLabelCover"
+                        Visibility="Collapsed"
+                        Cursor="SizeAll"
+                        CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                        Background="{DynamicResource Aurora.Brush.Surface}">
+                    <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
+                    <Border Margin="{DynamicResource Aurora.Space.PadTight}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MinWidth="140"
+                            MinHeight="{DynamicResource Aurora.Size.Tab}"
+                            Padding="22,8"
+                            Background="{DynamicResource Aurora.Brush.AccentSoft}"
+                            BorderBrush="{DynamicResource Aurora.Brush.Accent}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Aurora.Radius.TabInner}">
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{DynamicResource Aurora.Font.Family}"
+                                   FontSize="{DynamicResource Aurora.Font.Body}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
+                                   Text="{Binding SelectedItem.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </Border>
             </Grid>
         </Border>
+        <ControlTemplate.Triggers>
+            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
+                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                         Value="True">
+                <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <!-- ================================================================ 窗格模板:专注形态(UI-04) -->
@@ -462,30 +291,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid x:Name="ShellToolChrome"
-                  Grid.Row="0"
-                  Height="{DynamicResource Aurora.Size.Tab}"
-                  Panel.ZIndex="1"
-                  Background="Transparent"
-                  Margin="{DynamicResource Aurora.Space.TabStrip}"
-                  Tag="FocusedShellPaneHeader">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <adc:AnchorablePaneTabPanel x:Name="HeaderPanel"
-                                            Grid.Column="0"
-                                            IsItemsHost="True"
-                                            FlowDirection="LeftToRight"
-                                            KeyboardNavigation.TabIndex="1" />
-                <!-- 聚焦态右侧只承载主窗口 ChromeBar；工具页动作不占位。 -->
-                <ContentControl x:Name="FocusedShellChromeHost"
-                                Grid.Column="1"
-                                Tag="FocusedShellChromeHost"
-                                Height="{DynamicResource Aurora.Size.Tab}"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Panel.ZIndex="2" />
+            <!-- 专注态同样没有页签行;窗口控制组一直在右栏 -->
+            <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
+                <adc:AnchorablePaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
             </Grid>
             <ContentPresenter x:Name="PART_SelectedContentHost"
                               Grid.Row="1"
@@ -607,28 +415,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0"
-                  Height="{DynamicResource Aurora.Size.Tab}"
-                  Panel.ZIndex="1"
-                  Background="Transparent"
-                  Margin="{DynamicResource Aurora.Space.TabStrip}"
-                  Tag="FocusedShellPaneHeader">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <adc:DocumentPaneTabPanel x:Name="HeaderPanel"
-                                          Grid.Column="0"
-                                          IsItemsHost="True"
-                                          KeyboardNavigation.TabIndex="1" />
-                <!-- 聚焦态右侧与工具页共用主窗口 ChromeBar。 -->
-                <ContentControl x:Name="FocusedShellChromeHost"
-                                Grid.Column="1"
-                                Tag="FocusedShellChromeHost"
-                                Height="{DynamicResource Aurora.Size.Tab}"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                Panel.ZIndex="2" />
+            <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
+                <adc:DocumentPaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
             </Grid>
             <ContentPresenter x:Name="PART_SelectedContentHost"
                               Grid.Row="1"

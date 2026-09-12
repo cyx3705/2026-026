@@ -10,11 +10,9 @@
         Background="{DynamicResource Aurora.Brush.Canvas}">
 
     <!--
-        3.1 外壳(UI-02 / UI-03 / UI-04 / UI-05):
-        没有独立标题栏那一层 —— 停靠区从窗体顶端起算,窗口按钮组浮在右上角,
-        与最上一排页签同处一行(高度都是 Aurora.Size.Tab)。页签之外的空白
-        属于 WindowChrome 的标题区,因此仍可拖动、双击最大化和贴边分屏;
-        页签本身在 AuroraDocking.xaml 里声明为 IsHitTestVisibleInChrome,可正常点击。
+        外壳(UI-02 / UI-03 / UI-04 / UI-05):
+        没有标题栏、也没有顶栏(1.20.2 顶栏删除,REQ-UI-101)—— 停靠区从窗体顶端起算,
+        窗格没有页签行。窗口按钮组在右栏顶部,右栏空白处拖动窗口、双击最大化。
 
         WindowChrome 的装配与降级在 ShellWindow.xaml.cs 的 SourceInitialized 完成
         (消费方可能在构造之后才改 WindowStyle,构造期判定会误判)。
@@ -50,32 +48,58 @@
             <Geometry x:Key="Aurora.Icon.Restore">M 0,2.5 H 7.5 V 10 H 0 Z M 2.5,2.5 V 0 H 10 V 7.5 H 7.5</Geometry>
             <Geometry x:Key="Aurora.Icon.Close">M 0,0 L 10,10 M 10,0 L 0,10</Geometry>
             <Geometry x:Key="Aurora.Icon.ExitFocus">M 0,4 H 4 V 0 M 12,0 V 4 H 16 M 16,8 H 12 V 12 M 4,12 V 8 H 0</Geometry>
-            <RoutedCommand x:Key="Aurora.Command.PageAction" />
         </ResourceDictionary>
     </Window.Resources>
 
     <!-- RootBorder:窗体最大化时由代码补偿 WindowChrome 溢出(UI-02.5) -->
     <Border x:Name="RootBorder" Background="{DynamicResource Aurora.Brush.Canvas}">
         <Grid x:Name="RootGrid">
+            <!-- 第 0 列是停靠区，第 1 列是右栏（REQ-UI-099，1.20.0 从左侧搬来） -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
             <ad:DockingManager x:Name="DockManager"
+                               Grid.Column="0"
                                Background="{DynamicResource Aurora.Brush.Canvas}" />
 
             <!--
-                UI-02.3:菜单 + 最小化 + 最大化还原 + 关闭,次序固定、任何形态都不删减。
-                正常状态下会挂到中央文档窗格的页签行；没有中央文档宿主时才回退到
-                本层右上角。这样工具窗格的动作栏不会再与窗口控制栏共用一个位置。
+                右栏(REQ-UI-088 / 099):顶部是窗口控制组 —— 原来挂在顶栏右上角,
+                搬过来之后仍在整个窗体的右上角;搜索行之下是场景,再下面是常用页面胶囊。
+                空白处可拖动窗口、双击最大化。按钮与内容由 ShellWindow.Navigator.cs 填。
+                宽 200:菜单 36 + 三个窗口按钮 44 要放得下。
+
+                1.20.3(REQ-UI-104):底色取 Canvas、不画左边框 —— 右栏与停靠区的画布是同一片底,
+                卡片浮在上面。此前底色是 SurfaceAlt,浅色下与 Canvas 只差 1 个色阶看不出来,
+                深色下 #242625 比 #1A1D1C 亮一截,右栏就成了一块贴在窗体右边的板子。
             -->
+            <Border x:Name="NavRail"
+                    Grid.Column="1"
+                    Width="200"
+                    Background="{DynamicResource Aurora.Brush.Canvas}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 窗口控制组的唯一落点。专注态右栏也在,它不再搬家。 -->
+                    <ContentControl x:Name="NavChromeHost"
+                                    Grid.Row="0"
+                                    Height="{DynamicResource Aurora.Size.Tab}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Focusable="False">
+            <!-- UI-02.3:菜单 + 最小化 + 最大化还原 + 关闭,次序固定、任何形态都不删减。 -->
             <StackPanel x:Name="ChromeBar"
                         Height="{DynamicResource Aurora.Size.Tab}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Orientation="Horizontal">
-                <!-- UI-05.3:错误计数(原状态栏) -->
-                <Button x:Name="ErrorBadge"
-                        Style="{StaticResource Aurora.ErrorBadge}"
-                        Visibility="Collapsed"
-                        Click="OnErrorBadgeClick" />
-
                 <!-- UI-04.4:退出专注,仅页面最大化时出现 -->
                 <Button x:Name="ExitFocusButton"
                         Style="{StaticResource Aurora.ChromeIconButton}"
@@ -123,6 +147,81 @@
                           StrokeThickness="1.2" />
                 </Button>
             </StackPanel>
+                    </ContentControl>
+
+                    <!--
+                        搜索行(REQ-UI-106,1.20.3):搜索就在这里,不再弹独立浮层。
+                        输入随手筛下面两段 —— 场景与常用页面,回车打开排在最前的那个候选。
+
+                        UI-05.3:错误计数(原状态栏)。1.20.0 从窗口控制组里拿出来放在搜索行:
+                        右栏只有 200 宽,四个按钮之外再挤一块徽章会把关闭按钮挤出去。
+                    -->
+                    <DockPanel Grid.Row="1" Margin="6">
+                        <Button x:Name="ErrorBadge"
+                                DockPanel.Dock="Right"
+                                Margin="6,0,0,0"
+                                Style="{StaticResource Aurora.ErrorBadge}"
+                                Visibility="Collapsed"
+                                Click="OnErrorBadgeClick" />
+                        <Grid>
+                            <TextBox x:Name="NavQuery" />
+                            <!-- 占位提示:TextBox 自己没有 placeholder,叠一层、有字就藏 -->
+                            <TextBlock x:Name="NavQueryHint"
+                                       Margin="8,0,0,0"
+                                       IsHitTestVisible="False"
+                                       VerticalAlignment="Center"
+                                       Text="搜索场景与页面"
+                                       FontFamily="{DynamicResource Aurora.Font.Family}"
+                                       FontSize="{DynamicResource Aurora.Font.Body}"
+                                       Foreground="{DynamicResource Aurora.Brush.TextDisabled}" />
+                        </Grid>
+                    </DockPanel>
+
+                    <ScrollViewer Grid.Row="2"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="6,0,6,6">
+                            <StackPanel x:Name="NavRailItems" />
+                            <TextBlock x:Name="NavScenesEmpty"
+                                       Margin="2,2,0,0"
+                                       Text="没有匹配的场景"
+                                       Visibility="Collapsed"
+                                       FontFamily="{DynamicResource Aurora.Font.Family}"
+                                       FontSize="{DynamicResource Aurora.Font.Small}"
+                                       Foreground="{DynamicResource Aurora.Brush.TextSecondary}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 常用页面(REQ-UI-099):胶囊只用来拖,按住拖出来落到蓝色停靠点上嵌入;点一下什么都不做 -->
+                    <Border Grid.Row="3"
+                            Margin="6,0,6,0"
+                            Padding="2,6,0,4"
+                            BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
+                            BorderThickness="0,1,0,0">
+                        <TextBlock x:Name="NavPagesHeader"
+                                   Text="常用页面"
+                                   FontFamily="{DynamicResource Aurora.Font.Family}"
+                                   FontSize="{DynamicResource Aurora.Font.Small}"
+                                   Foreground="{DynamicResource Aurora.Brush.TextSecondary}"
+                                   ToolTip="没打开的页都在这里,按用得多少排。按住拖出来,落到蓝色停靠点上嵌入" />
+                    </Border>
+
+                    <ScrollViewer Grid.Row="4"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="6,0,6,6">
+                            <WrapPanel x:Name="NavPageItems" />
+                            <TextBlock x:Name="NavPagesEmpty"
+                                       Margin="2,2,0,0"
+                                       Text="所有页面都已打开"
+                                       Visibility="Collapsed"
+                                       FontFamily="{DynamicResource Aurora.Font.Family}"
+                                       FontSize="{DynamicResource Aurora.Font.Small}"
+                                       Foreground="{DynamicResource Aurora.Brush.TextSecondary}" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
 
         </Grid>
     </Border>
