@@ -1,18 +1,49 @@
-﻿# HistoryAurora 模块 API
+# HistoryAurora 模块 API
 
-适用版本：**1.20.0**（宿主 HistoryVulcan **5.1.0**）
+模块版本：**1.20.3**；最低宿主：**HistoryVulcan 5.1.0**
+（由 `b-Code-Studio/AuroraVersion.props` 的 `MinimumHistoryVulcanVersion` 单点声明）。
 
-## 当前对外面
+本文件是**总线面**合同：别的模块要在界面里露面、或要驱动布局时，看这一篇。
 
-HistoryAurora 是宿主装载的界面模块。5.0 起入口只实现 `IModuleContextAware`：
-`Attach` 里启动窗口，卸载走 `IDisposable`。不再实现已删除的 `IUiModule` /
-`IShellUiProvider` / `IShellUiRegistrar`。
+- 代码面（模块入口接口、窗格交接实现、前端执行器）在 `b-Office/current/技术合同.md`。
+- 页面**怎么写**（组件、令牌、表格、面板、动作、选择通道）在同目录
+  [`HistoryAurora_组件清单与用法.md`](./HistoryAurora_组件清单与用法.md)。
+- AI 面（MCP 工具名与调用形状）由 MCP 服务封装，本文件不重复。
 
-界面命令以 `aurora.*` 登记（来源 `framework:frontend`）。宿主生命周期壳命令
-`vulcan.app.show` / `hide` / `close` / `focusconsole` 仍由宿主注册，执行体经
-`CommandBus.FrontendExecutor` 转到本模块。
+## 这个模块提供什么
 
-其它模块要露出窗格时，登记带注解的命令，活对象放 `CommandResult.Data`：
+Aurora 是宿主装载的**界面模块**：主窗口、场景、布局、控制台、命令集、弹窗、页面宿主。
+指令域 `aurora`。
+
+没装 Aurora 的宿主没有界面：`aurora.*` 与 `vulcan.ui.*` 都是未知指令。
+宿主生命周期壳命令 `vulcan.app.show / hide / close / focusconsole` 仍由**宿主**注册，
+执行体转到本模块——所以调这四条的模块不需要知道 Aurora 在不在。
+
+## 模块怎么在界面里露面
+
+两条路，二选一。
+
+### 路一：描述化页面（页面注册协议 V1，推荐）
+
+模块登记三条指令，Aurora 来问：
+
+| 指令 | 作用 |
+| --- | --- |
+| `<域>.ui.describe` | 返回页面描述 JSON |
+| `<域>.ui.actions` | 返回可被按钮绑定的动作声明 |
+| `<域>.ui.data` | 按视图返回行数据 |
+
+三条都是模块与界面之间的内部协议，**请一律声明 `HiddenReason`**，不要对远端暴露。
+写法与可用组件见《组件清单与用法》。描述变了以后调 `aurora.ui.invalidate owner=<模块名>` 请求重拉本模块。
+
+**时序保证**：Aurora 登记了 `aurora.host.ready`，宿主（5.1.3 起）装完全部模块后按命令名通知它整轮重拉。
+所以你的 `describe` 一定在「全部模块都接上」之后才被问到——
+**不要为「启动时 Aurora 问得太早」写重试，也不要在 `Attach` 里抢着 invalidate**。
+`aurora.host.ready` 是宿主的生命周期回调，不由人或远端触发，模块也不要直接调。
+
+### 路二：带注解的命令交出一个窗格
+
+登记一条命令，把活对象（`UIElement`）放进 `CommandResult.Data`，并带上注解：
 
 ```text
 ui.window = 窗格 id
@@ -21,48 +52,95 @@ ui.title  = 标题（可省，回退命令摘要）
 ui.ratio  = (0,1) 比例（可省，默认 0.25）
 ```
 
-Aurora 在界面空闲时扫描注册表、执行该命令，并把返回的 `UIElement` 停靠进布局。
-页面描述协议 V1（`<域>.ui.describe`）仍然可用，走 `aurora.ui.reloadpages`。
+Aurora 在界面空闲时扫描注册表、执行该命令，把返回的窗格停靠进布局。
 
-1.19.0 起主页面按**场景**组织。**模块侧不需要改任何声明**：每个声明了页面的模块自动得到一个场景，
-id 就是模块名（如 `HistoryJanus`）。1.20.0 起场景**只是一份布局**、不拥有页面：第一次进入本模块的场景时
-露出本模块的页与常驻页，之后按用户离开时的样子恢复。切到别的场景时页面对象不重建，状态都还在。
-模块想把用户带到自己这里，可以调：
+## 两条必须知道的界面规矩
 
-```text
-aurora.scene.go id=<模块名>          切到本模块的场景（也认去掉 History 的简称）
-aurora.scene.open page=<页面 id>     在当前场景里打开一页（1.20.0 起不再切场景）
+**一格一页**：每个位置任何时刻只放一页，没有页签、没有页签切换、没有顶栏。
+页面被显示或停到某处时，那个位置原来那一页被隐藏。
+所以别在一次操作里连着 `show` 两个同位置的页、指望它们并排。
+登记时位置被占着，新页是藏着的，要它露面走 `aurora.ui.show`。
+`side=tab tabTarget=X` 仍然合法，意思是「与 X 同一个位置」；`aurora.ui.dock` 不接受 `pos=tab`。
+
+**所有页面是同一种抽象**：命令集也是工具窗口，没有文档身份。
+模块声明 `side=center` 拿到的一直是工具窗口，落位在中央区——**模块侧不需要为此改任何声明**。
+
+## 场景
+
+场景**只是一份布局**，不拥有页面。每个声明了页面的模块自动得到一个场景，id 就是模块名
+（如 `HistoryJanus`，也认去掉 `History` 的简称）——**模块侧不需要改任何声明**。
+第一次进入本模块的场景时露出本模块的页与常驻页，之后按用户离开时的样子恢复；
+切到别的场景时页面对象不重建，状态都还在。控制台与命令集是常驻页，每个场景的初值里都有，
+`tabTarget=console` 因此在任何场景里都成立。
+
+| 指令 | 参数 | 说明 |
+| --- | --- | --- |
+| `aurora.scene.go` | `id` | 切到一个场景，恢复它上次的布局与显隐 |
+| `aurora.scene.open` | `page` | 在**当前**场景里打开一页，不切场景 |
+| `aurora.scene.list` | — | 列出全部场景（按使用频次）。**只读** |
+| `aurora.scene.save` | `id`、`title` | 把当前露面的页与布局另存为场景并切过去 |
+| `aurora.scene.reset` | `scene` | 场景回到默认形态；省略为当前场景 |
+| `aurora.scene.delete` | `id` | 删除另存的场景；模块场景随模块装卸，删不掉 |
+
+模块想把用户带到自己这里，调 `aurora.scene.go id=<模块名>`。
+
+## 窗口与布局
+
+| 指令 | 参数 | 说明 |
+| --- | --- | --- |
+| `aurora.ui.show` / `.hide` | `name` | 显示（隐藏则唤出、已显示则激活）/ 隐藏，状态保留 |
+| `aurora.ui.dock` | `name`、`pos`、`ratio` | 停靠到某方位；`pos=center` 占中央区 |
+| `aurora.ui.float` / `.floatstate` | `name`(、`state`) | 浮为独立顶层窗口 / 设其最大化状态 |
+| `aurora.ui.max` / `.restore` | `name` | 最大化 / 退出最大化 |
+| `aurora.ui.ratio` | `name`、`value` | 调整占主窗体比例 |
+| `aurora.ui.autohide` | `name` | 切换自动隐藏 |
+| `aurora.ui.reset` | `name` | 复位到注册时的默认位置 |
+| `aurora.ui.windows` | — | 列出全部窗口及状态。**只读** |
+| `aurora.ui.layouts` / `.layoutsave` / `.layoutload` / `.layoutreset` | (`name`) | 命名布局方案 |
+| `aurora.ui.channels` | — | 列出选择通道、当前选中行与断链引用。**只读** |
+| `aurora.ui.refreshdata` | `page`、`node` | 重新拉取页面数据，可按页或按节点 |
+| `aurora.app.window` | `state` | 设置主窗口状态（如 `state=toggle`） |
+| `aurora.app.about` | — | 关于对话框 |
+
+## 面板
+
+| 指令 | 参数 | 说明 |
+| --- | --- | --- |
+| `aurora.ui.panels` | — | 列出全部控制面板及窗口状态。**只读** |
+| `aurora.ui.panelshow` | `id` | 显示面板（等价 `aurora.ui.show`） |
+| `aurora.ui.panelset` | `panel`、`control`、`value` | 程序向面板控件回写值 |
+| `aurora.ui.panelreload` | — | 重读面板 JSON 并原地重建；**新增面板需重启** |
+
+## 弹窗与文件选择
+
+`aurora.ui.dialog` 显示 Aurora 主题化弹窗，`kind` 取 `message` / `confirm` / `prompt` / `choice` / `content`。
+
+```
+aurora.ui.dialog kind=confirm title=确认 body="覆盖现有文件？" danger=true
 ```
 
-`aurora.scene.add / remove` 在 1.20.0 删除，调用会得到「未知指令」；显隐用 `aurora.ui.show / hide`。
+`kind=choice` 的 `options` 是非空 `{label,value}` JSON 数组，成功结果的 `Message` 与 `Data` 都是所选 value。
 
-控制台与命令集是常驻页，每个场景的初值里都有。`tabTarget=console` 因此在任何场景里都成立。
+`aurora.ui.selectfile` / `aurora.ui.selectdirectory` 选本地文件 / 目录。
 
-**一格一页**（1.20.2，REQ-UI-100）：每个位置任何时刻只放一页，没有页签、没有页签切换，也没有顶栏。
-页面被显示或停到某处时，那个位置原来那一页被隐藏；所以别在一次操作里连着 `show` 两个同位置的页、
-指望它们并排。登记时位置被占着，新页藏着，要它露面走 `aurora.ui.show`。
-`side=tab tabTarget=X` 仍然合法，意思是「与 X 同一个位置」；`aurora.ui.dock` 不再接受 `pos=tab`。
+## 控制台
 
-所有页面是同一种抽象（1.20.2，REQ-UI-102）：命令集也是工具窗口，不再有文档身份。
-模块声明 `side=center` 拿到的一直是工具窗口，落位在中央区——**模块侧不需要改任何声明**。
+`aurora.log.level`、`.source`、`.class`、`.keyword`、`.mute`、`.autoscroll`、`.focus`、
+`.clear`、`.copy`、`.export`、`.prefill` 控制控制台的显示与过滤。
+`aurora.command.history` 查指令历史（**只读**），`aurora.command.copyexample` 复制示例，
+`aurora.command.runreadonly` 只执行只读指令、非只读的只填进输入框不执行。
 
-1.17.0 起 Aurora 登记 `aurora.host.ready`：宿主（5.1.3 起）装完全部模块后按命令名通知，
-Aurora 在那时做整轮重拉。**对其它模块的影响是好的一面**——你的 `<域>.ui.describe`
-从此一定在「全部模块都接上」之后才被问到，不必再为「启动时 Aurora 问得太早」写重试或
-在 `Attach` 里抢着 `aurora.ui.invalidate`。这条命令是宿主的生命周期回调，
-不由人或远端触发，模块也不要直接调它。
+**要读控制台日志请用 `diana.log.read`**：`aurora.log.snapshot` 是 Diana 的进程内只读提供者，不直接对远端暴露。
 
-1.13.0 为页面协议增加三项兼容能力：表格列 `cellAction`、`aurora.ui.dialog kind=choice`
-与面板按钮 `icon=refresh-cw`。旧页面和旧面板声明无需修改。
+## 不要跨模块调的指令
 
-- `cellAction` 绑定动作 id，动作占位符默认读取被点行同名字段；空单元格不触发，断链会显示诊断。
-- `kind=choice` 的 `options` 是非空 `{label,value}` JSON 数组，成功结果的 `Message`/`Data`
-  为所选 value。
-- `icon` 只属于面板按钮，图形由 Aurora 管控；当前唯一值为 `refresh-cw`，未知值按合同拒绝。
+以下声明了 `HiddenReason`，属界面内部协议或「只对坐在屏幕前的人有意义」：
 
-未装本模块时 `vulcan.ui.*` 是未知指令；布局操作是 `aurora.ui.*`。
+`aurora.host.ready`（宿主生命周期回调）、`aurora.ui.describe` 侧的 `.actions` / `.data` / `.invalidate` /
+`.invoke` / `.reloadpages` / `.reloadactions` / `.missing` / `.request` / `.requests`、
+`aurora.log.snapshot`、`aurora.nav.open`、`aurora.module.hotreload` / `.reloadall`（界面自持页的组合指令）、
+`aurora.preview.*`（组件测试页）。
 
-## 宿主要求
+## 已经删掉的
 
-最低宿主版本 **HistoryVulcan 5.1.0**，由 `b-Code-Studio/AuroraVersion.props` 的
-`MinimumHistoryVulcanVersion` 单点声明。
+`aurora.scene.add` / `aurora.scene.remove` 在 1.20.0 删除，调用会得到「未知指令」；显隐用 `aurora.ui.show` / `hide`。
