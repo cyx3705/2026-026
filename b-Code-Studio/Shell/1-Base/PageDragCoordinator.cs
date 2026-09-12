@@ -134,8 +134,6 @@ internal sealed partial class PageDragCoordinator : IDisposable
             anchor,
             id,
             null,
-            $"capsule:{id}",
-            false,
             false);
         _dragSession = session;
         if (!session.TryTransition(DockingDragState.ThresholdReached))
@@ -159,7 +157,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
             if (CountFloatingPages(floating) > 1)
                 StartPageSession(cover, id, GetScreenPoint(cover, e), e.GetPosition(pane), floating);
             else
-                BeginHostWindowGesture(floating, pane, $"floating:{id}", e);
+                BeginHostWindowGesture(floating, pane, e);
             e.Handled = true;
             return;
         }
@@ -263,8 +261,6 @@ internal sealed partial class PageDragCoordinator : IDisposable
             anchor,
             id,
             floating,
-            $"{(floating == null ? "label" : "floating-label")}:{id}",
-            false,
             false)
         {
             IsFloatingTab = floating != null,
@@ -439,7 +435,6 @@ internal sealed partial class PageDragCoordinator : IDisposable
     private void BeginHostWindowGesture(
         Window hostWindow,
         FrameworkElement surface,
-        string target,
         MouseButtonEventArgs e)
     {
         if (_dragSession is
@@ -462,9 +457,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
             e.GetPosition(surface),
             null,
             hostWindow,
-            target,
-            hostWindow.WindowState == WindowState.Maximized,
-            false);
+            hostWindow.WindowState == WindowState.Maximized);
         _dragSession = session;
         surface.CaptureMouse();
         e.Handled = true;

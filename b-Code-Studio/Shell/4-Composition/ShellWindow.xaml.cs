@@ -26,9 +26,9 @@ using HistoryAurora.Shell.Base.Dialogs;
 namespace HistoryAurora.Shell.Composition;
 
 /// <summary>
-/// 主程序窗体(Main Frame,§2)。3.1 起为自绘顶栏 + 停靠系统容器两段结构:
-/// 菜单折叠进顶栏右上角的菜单按钮(UI-03),常驻菜单行与底部状态栏均已取消
-/// (UI-05,原状态栏信息改由顶栏徽章、布局文本和瞬时回执承担)。
+/// 主程序窗体(Main Frame,§2)。1.20.2 顶栏删除(REQ-UI-101)之后是「停靠区 + 右栏」两列结构:
+/// 窗口按钮组、搜索、场景与常用页面都在右栏,菜单折叠进右栏的菜单按钮(UI-03),
+/// 常驻菜单行与底部状态栏均已取消(UI-05,原状态栏信息改由错误徽章、布局文本和瞬时回执承担)。
 /// M2 起指令总线为一切操作的汇聚点:菜单项点击同样是发指令(S-02),
 /// 控制台手输、脚本、布局手势与派生应用共用同一张指令注册表。
 /// </summary>
@@ -73,14 +73,14 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     // 命令集页与指令详情页的选中联动(0.4.4 上抛):优先用派生应用经 ShellConfig 传入的实例,
     // 未传则自建。由构造函数赋值——工具窗口内容工厂在 DockingHost 构建默认布局时即被调用,
     // 派生应用那时拿不到 window,故联动实例必须由派生侧创建并传入。
-    // UI-03:折叠后的菜单挂在顶栏菜单按钮上(挂上去才能继承窗体资源与样式)
+    // UI-03:折叠后的菜单挂在右栏的菜单按钮上(挂上去才能继承窗体资源与样式)
     private readonly ContextMenu _menu = new();
 
     private int _errorCount;
     private bool _menusInitialized;
 
     // UI-09.1:true 表示已接管窗体非客户区;false 表示宿主改过 WindowStyle,
-    // 只降级边框接管方式,顶栏四个按钮仍然保留并可用。
+    // 只降级边框接管方式,右栏的四个按钮仍然保留并可用。
     private bool _customChrome;
 
     // Alt 单独按下(未与其他键组合)才呼出菜单,避免抢走 Alt+Tab 等组合
@@ -428,8 +428,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             WindowChrome.SetWindowChrome(this, new WindowChrome
             {
-                // 不再让隐藏标题区横跨整个窗体顶部：它会吞掉工具窗格的 ▼/×。
-                // 窗体拖动只由中央文档页签行的空白区域处理。
+                // 隐藏标题区恒为 0：横跨窗体顶部的命中区会吞掉页面自己的输入。
+                // 窗体拖动由右栏与停靠区的空白自己处理（REQ-UI-107）。
                 CaptionHeight = 0,
                 ResizeBorderThickness = new Thickness(6),
                 GlassFrameThickness = new Thickness(0),
@@ -441,9 +441,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
         else
         {
-            // 只降级边框接管方式;顶栏的菜单与三个窗口按钮保持不变(UI-09.1)
+            // 只降级边框接管方式;右栏的菜单与三个窗口按钮保持不变(UI-09.1)
             _customChrome = false;
-            _log.Info("shell", $"宿主使用 WindowStyle={WindowStyle},已跳过非客户区接管,顶部按钮组仍然可用");
+            _log.Info("shell", $"宿主使用 WindowStyle={WindowStyle},已跳过非客户区接管,右栏按钮组仍然可用");
         }
 
         ApplyWindowStateChrome();
@@ -690,7 +690,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
     }
 
-    // ---------------------------------------------------------------- 顶栏状态(UI-05)
+    // ---------------------------------------------------------------- 错误徽章(UI-05)
 
     /// <summary>UI-05.3:原状态栏错误计数,点击行为不变(聚焦控制台并只看错误)。</summary>
     private void UpdateErrorBadge()
@@ -702,7 +702,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private void OnErrorBadgeClick(object sender, RoutedEventArgs e)
         => _ = _bus.ExecuteAsync("aurora.log.focus errors=true", "UI");
 
-    // ---------------------------------------------------------------- 顶栏窗口控件(UI-02)
+    // ---------------------------------------------------------------- 窗口控件(UI-02,在右栏顶部)
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e)
         => _ = _bus.ExecuteAsync("aurora.app.window state=minimized", "UI");
@@ -725,7 +725,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         MaximizeButton.ToolTip = maximized ? "向下还原" : "最大化";
 
         // 接管非客户区后,最大化的窗体会按可调整边框宽度溢出工作区,
-        // 不补偿则顶栏被裁掉一截。
+        // 不补偿则右栏顶部的按钮组被裁掉一截。
         RootBorder.Padding = _customChrome && maximized
             ? SystemParameters.WindowResizeBorderThickness
             : default;

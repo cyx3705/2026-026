@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using HistoryAurora.Shell.Base;
@@ -11,7 +12,7 @@ using HistoryVulcan.Core.Logging;
 namespace HistoryAurora.Shell.Composition;
 
 /// <summary>
-/// 导航器（REQ-UI-088 / 089 / 099）：右栏 + 搜索浮层。
+/// 导航器（REQ-UI-088 / 099 / 106 / 107）：右栏——窗口控制组、搜索、场景、常用页面，外加两片拖窗口的空白。
 ///
 /// 它承担「去哪」这一件事——以前是全局页签条在做，模块一多就排成长长一排，
 /// 用 Minerva 时 Janus 的三页也挂在眼前。现在去别处走这里。
@@ -22,9 +23,14 @@ namespace HistoryAurora.Shell.Composition;
 /// 和下半部分的常用页面胶囊——按住拖出来就是一个带蓝色停靠点的浮窗，落到停靠点上就嵌进场景。
 /// 1.20.2 顶栏整个删掉（REQ-UI-101），右栏在专注态也不让位：窗口控制组一直在这里。
 ///
-/// 索引一律派生：行来自场景清单、停靠注册表、动作注册表，不落盘；
-/// 检索文本只用已声明的字段（标题、owner、动作说明），不新增要人维护的关键词——
-/// 要人维护的元数据，会在项目变成历史的那一刻起开始腐烂。
+/// 1.20.3（REQ-UI-106）搜索浮层退役：搜索框就是右栏第二行，输入随手**筛下面这两段**——
+/// 场景与常用页面，回车打开排在最前的那个候选。浮层是「另开一个满屏的界面去找东西」，
+/// 而要找的东西本来就列在右栏里；两处各画一遍同一份清单，是两处都要维护的重复。
+/// 动作不再进搜索：动作条目从来只是「切到它所在模块的场景」，与直接搜场景重合。
+///
+/// 索引一律派生：行来自场景清单与停靠注册表，不落盘；检索文本只用已声明的字段
+/// （标题、id、owner），不新增要人维护的关键词——要人维护的元数据，
+/// 会在项目变成历史的那一刻起开始腐烂。
 ///
 /// 场景膨胀的对策是**搜索 + 频次**（用户拍板）：右栏只挑用得多的几个，
 /// 其余一律靠搜，频次给结果加权。不给场景做管理页。
@@ -42,23 +48,18 @@ internal partial class ShellWindow
     /// </summary>
     internal const string DefaultNavigatorHotkey = "Ctrl+Alt+K";
 
+    /// <summary>没有搜索词时右栏最多列几个场景。搜索时不限——筛出来的就那么几个。</summary>
     private const int RailLimit = 12;
-    private const int ResultLimit = 30;
-    private const string KindScene = "场景";
-    private const string KindPage = "页面";
-    private const string KindAction = "动作";
 
-    /// <summary>指针在胶囊拖出来的新浮窗里的落点：页签行上靠左的一点，拖起来像拎着页签。</summary>
+    /// <summary>指针在胶囊拖出来的新浮窗里的落点：靠左上的一点，拖起来像拎着页签。</summary>
     private static readonly Point CapsuleDragAnchor = new(48, 16);
 
-    private sealed record NavEntry(
-        string Kind,
-        string UsageKey,
-        string Title,
-        string Detail,
-        string Command,
-        string Haystack,
-        double Boost);
+    /// <summary>搜索框此刻的内容。空串表示不筛。</summary>
+    private string NavFilter => NavQuery.Text.Trim();
+
+    /// <summary>当前筛选下排在最前的场景与页面，回车打开它们（场景优先）。</summary>
+    private string? _topSceneId;
+    private string? _topPageId;
 
     private string NavigatorHotkey
     {
@@ -71,12 +72,14 @@ internal partial class ShellWindow
 
     private void InitializeNavigator()
     {
-        NavSearchButton.Click += (_, _) => OpenNavigator();
-        NavQuery.TextChanged += (_, _) => RefreshNavigatorResults();
+        NavQuery.TextChanged += (_, _) => OnNavigatorQueryChanged();
         NavQuery.PreviewKeyDown += OnNavigatorKeyDown;
-        NavResults.MouseDoubleClick += (_, _) => PickNavigatorEntry();
-        NavBackdrop.MouseLeftButtonDown += (_, _) => CloseNavigator();
-        NavRail.MouseLeftButtonDown += OnNavRailMouseLeftButtonDown;
+
+        // 拖窗口的两片空白（REQ-UI-107）：右栏整条，以及停靠区里卡片之外的画布。
+        // 走 Preview 而不是冒泡：右栏里的滚动区、停靠区里的窗格都会先把按下吃掉，
+        // 冒泡上来时能拖的只剩边角上那几条缝——用户报的「只有一小部分区域可以拖」就是这个。
+        NavRail.PreviewMouseLeftButtonDown += OnNavRailPreviewMouseLeftButtonDown;
+        DockManager.PreviewMouseLeftButtonDown += OnDockCanvasPreviewMouseLeftButtonDown;
         _scenes.Changed += (_, _) => Dispatcher.BeginInvoke(() =>
         {
             RefreshNavigatorRail();
@@ -96,27 +99,50 @@ internal partial class ShellWindow
     // ---------------------------------------------------------------- 场景
 
     /// <summary>
-    /// 右栏上半挑「全部」+ 用得最多的几个 + 当前场景，**按标题排**而不是按频次排：
+    /// 右栏上半。没有搜索词时挑「全部」+ 用得最多的几个 + 当前场景，**按标题排**而不是按频次排：
     /// 频次每切一次就变，按它排的话按钮会在手底下跳位置。
+    ///
+    /// 有搜索词时改为筛选（REQ-UI-106）：不限条数、按匹配得分排，不再硬塞「全部」与当前场景——
+    /// 搜索时用户要的是「叫这个名字的那个」，不是「顺手能看到的那几个」。
     /// </summary>
     private void RefreshNavigatorRail()
     {
         if (_closing)
             return;
 
-        NavSearchButton.ToolTip = $"搜索场景、页面与动作（{NavigatorHotkey}）";
+        NavQuery.ToolTip = $"搜索场景与页面（{NavigatorHotkey}）；回车打开排在最前的候选";
 
+        var filter = NavFilter;
         var scenes = _scenes.List();
-        var shown = scenes.Where(s => s.Source != SceneSource.All).Take(RailLimit).ToList();
-        var active = scenes.FirstOrDefault(s => s.Active);
-        if (active != null && active.Source != SceneSource.All && !shown.Contains(active))
-            shown.Add(active);
+        List<SceneInfo> shown;
+        if (filter.Length > 0)
+        {
+            shown = scenes
+                .Select(scene => (Scene: scene, Score: MatchScore(filter, scene.Title + " " + scene.Id)))
+                .Where(hit => hit.Score >= 0)
+                .OrderByDescending(hit => hit.Score + Boost(hit.Scene.Uses))
+                .ThenBy(hit => hit.Scene.Title, StringComparer.CurrentCultureIgnoreCase)
+                .Select(hit => hit.Scene)
+                .ToList();
+        }
+        else
+        {
+            var rest = scenes.Where(scene => scene.Source != SceneSource.All).Take(RailLimit).ToList();
+            var active = scenes.FirstOrDefault(scene => scene.Active);
+            if (active != null && active.Source != SceneSource.All && !rest.Contains(active))
+                rest.Add(active);
+            rest = rest.OrderBy(scene => scene.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
+            shown = scenes.Where(scene => scene.Source == SceneSource.All).Concat(rest).ToList();
+        }
 
         NavRailItems.Children.Clear();
-        if (scenes.FirstOrDefault(s => s.Source == SceneSource.All) is { } all)
-            NavRailItems.Children.Add(RailButton(all));
-        foreach (var scene in shown.OrderBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase))
+        foreach (var scene in shown)
             NavRailItems.Children.Add(RailButton(scene));
+
+        _topSceneId = filter.Length > 0 ? shown.FirstOrDefault()?.Id : null;
+        NavScenesEmpty.Visibility = filter.Length > 0 && shown.Count == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         RefreshNavigatorPages(force: true);
     }
@@ -152,8 +178,36 @@ internal partial class ShellWindow
         _ => "另存",
     };
 
-    /// <summary>右栏空白处承担一部分标题栏职责：拖动窗口、双击最大化。按钮与胶囊自己吃掉按下，不会走到这里。</summary>
-    private void OnNavRailMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    // ---------------------------------------------------------------- 拖动窗口的空白（REQ-UI-107）
+
+    /// <summary>
+    /// 右栏整条都能拖窗口、双击最大化（REQ-UI-107）。
+    ///
+    /// 走 Preview，因此要自己把「这一下是给控件的」挑出去：按钮、搜索框、滚动条、常用页面胶囊
+    /// 都还没收到这一下，先让它们收。剩下的空白——行与行之间、列表下方、胶囊之间——一律是拖动面。
+    /// </summary>
+    private void OnNavRailPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsInteractiveSurface(e.OriginalSource as DependencyObject, NavRail))
+            return;
+        BeginShellWindowGesture(e);
+    }
+
+    /// <summary>
+    /// 停靠区里卡片之外的画布也能拖窗口（REQ-UI-107）：卡片有 <c>Aurora.Space.Gap</c> 的外缘间隙，
+    /// 那片底色与右栏是同一片（REQ-UI-104），手感上就该是同一块可拖的面。
+    ///
+    /// 判据是**命中的就是 DockingManager 自己**：窗格、分隔条、自动隐藏边条都有自己的命中面，
+    /// 落在它们上面时 <c>OriginalSource</c> 不会是管理器。页面内容再怎么点也走不到这里。
+    /// </summary>
+    private void OnDockCanvasPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, DockManager))
+            return;
+        BeginShellWindowGesture(e);
+    }
+
+    private void BeginShellWindowGesture(MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
         {
@@ -162,6 +216,7 @@ internal partial class ShellWindow
             return;
         }
 
+        // 最大化时 DragMove 会抛；这一下本来也没有「拖到哪去」的语义。
         if (WindowState != WindowState.Normal)
             return;
         try
@@ -175,6 +230,28 @@ internal partial class ShellWindow
         }
     }
 
+    /// <summary>
+    /// 这一下按在了控件上（<paramref name="root"/> 之内）。胶囊是带页面 id 的 <see cref="Border"/>，
+    /// 它自己要起拖动会话，不能被窗口拖动抢走。
+    /// </summary>
+    internal static bool IsInteractiveSurface(DependencyObject? source, DependencyObject root)
+    {
+        for (var node = source; node != null && !ReferenceEquals(node, root); node = VisualOrLogicalParent(node))
+        {
+            if (node is ButtonBase or TextBoxBase or ScrollBar or Thumb)
+                return true;
+            if (node is Border { Tag: string tag } && tag.Length > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? VisualOrLogicalParent(DependencyObject node)
+        => node is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+            ? System.Windows.Media.VisualTreeHelper.GetParent(node)
+            : LogicalTreeHelper.GetParent(node);
+
     // ---------------------------------------------------------------- 常用页面（REQ-UI-099）
 
     /// <summary>上一次画出来的胶囊（id + 标题，按顺序）。没变就不重画，巡检才敢每 400ms 调一次。</summary>
@@ -184,20 +261,31 @@ internal partial class ShellWindow
     private Point _capsuleStart;
 
     /// <summary>
-    /// 右栏下半：此刻没露面的页，按使用频次、再按标题排。
-    /// 露着的页不列——场景之间的区别只是显隐（REQ-UI-094），右栏要回答的是「还有什么没打开」。
+    /// 右栏下半：此刻没露面的页，按使用频次、再按标题排；有搜索词时先筛一道、按匹配得分排。
+    /// 露着的页不列——场景之间的区别只是显隐（REQ-UI-094），右栏要回答的是「还有什么没打开」，
+    /// 搜索也在这份清单里搜（REQ-UI-106）。
     /// </summary>
     internal void RefreshNavigatorPages(bool force = false)
     {
         if (_closing || _capsulePressed != null)
             return;
 
+        var filter = NavFilter;
         var hidden = _docking.ListWindows()
             .Where(window => !window.IsVisible)
-            .OrderByDescending(window => _usage.Get(PageUsageKey(window.Id))?.Count ?? 0)
-            .ThenBy(window => window.Title, StringComparer.CurrentCultureIgnoreCase)
+            .Select(window => (Page: window, Score: filter.Length == 0
+                ? 0
+                : MatchScore(filter, $"{window.Title} {window.Id} {window.Owner}")))
+            .Where(hit => hit.Score >= 0)
+            .OrderByDescending(hit => hit.Score)
+            .ThenByDescending(hit => _usage.Get(PageUsageKey(hit.Page.Id))?.Count ?? 0)
+            .ThenBy(hit => hit.Page.Title, StringComparer.CurrentCultureIgnoreCase)
+            .Select(hit => hit.Page)
             .ToList();
-        var signature = string.Join("\n", hidden.Select(window => window.Id + "\t" + window.Title));
+
+        // 签名带上搜索词：不带的话，改了搜索词而命中集恰好没变时会被这一行挡掉。
+        var signature = filter + "|" + string.Join(
+            "\n", hidden.Select(window => window.Id + "\t" + window.Title));
         if (!force && signature == _pagesSignature)
             return;
 
@@ -212,6 +300,9 @@ internal partial class ShellWindow
             .ToHashSet(StringComparer.CurrentCultureIgnoreCase);
         foreach (var window in hidden)
             NavPageItems.Children.Add(PageCapsule(window, clashing.Contains(window.Title)));
+
+        _topPageId = filter.Length > 0 ? hidden.FirstOrDefault()?.Id : null;
+        NavPagesEmpty.Text = filter.Length > 0 ? "没有匹配的页面" : "所有页面都已打开";
         NavPagesEmpty.Visibility = hidden.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -309,22 +400,15 @@ internal partial class ShellWindow
 
     private static string PageUsageKey(string id) => "page:" + id;
 
-    // ---------------------------------------------------------------- 搜索浮层
+    // ---------------------------------------------------------------- 搜索（REQ-UI-106）
 
-    /// <summary>aurora.nav.open 的落点：已开且窗口在前台就关，否则打开。返回是否打开。</summary>
-    internal bool ToggleNavigator()
-    {
-        if (NavOverlay.Visibility == Visibility.Visible && IsActive)
-        {
-            CloseNavigator();
-            return false;
-        }
-
-        OpenNavigator();
-        return true;
-    }
-
-    private void OpenNavigator()
+    /// <summary>
+    /// <c>aurora.nav.open</c> 的落点：把窗口请到前台并聚焦右栏搜索框，选中已有内容好直接改写。
+    ///
+    /// 1.20.2 及以前这条指令开的是一层盖住整窗的搜索浮层；1.20.3 浮层退役，搜索并进右栏，
+    /// 指令与 HistoryMercury 注册的全局快捷键都还在，只是落点从「开浮层」换成「聚焦搜索框」。
+    /// </summary>
+    internal bool FocusNavigatorSearch()
     {
         // 全局快捷键可能在窗口隐藏或最小化时按下：先把窗口请到前台。
         if (!IsVisible)
@@ -333,168 +417,77 @@ internal partial class ShellWindow
             WindowState = WindowState.Normal;
         WindowForegroundActivator.Activate(this);
 
-        NavOverlay.Visibility = Visibility.Visible;
-        if (NavQuery.Text.Length > 0)
-            NavQuery.Text = "";
-        else
-            RefreshNavigatorResults();
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
             NavQuery.Focus();
             Keyboard.Focus(NavQuery);
+            NavQuery.SelectAll();
         });
+        return true;
     }
 
-    private void CloseNavigator() => NavOverlay.Visibility = Visibility.Collapsed;
+    private void OnNavigatorQueryChanged()
+    {
+        NavQueryHint.Visibility = NavQuery.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RefreshNavigatorRail();
+    }
 
+    /// <summary>回车打开排在最前的候选（场景优先），Esc 清空——清空之后再按一次才把焦点让出去。</summary>
     private void OnNavigatorKeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
         {
-            case Key.Down:
-                MoveNavigatorSelection(1);
-                e.Handled = true;
-                break;
-            case Key.Up:
-                MoveNavigatorSelection(-1);
-                e.Handled = true;
-                break;
             case Key.Enter:
-                PickNavigatorEntry();
+                PickTopNavigatorCandidate();
                 e.Handled = true;
                 break;
             case Key.Escape:
-                CloseNavigator();
+                if (NavQuery.Text.Length > 0)
+                    NavQuery.Text = "";
+                else
+                    Keyboard.ClearFocus();
                 e.Handled = true;
                 break;
         }
     }
 
-    private void MoveNavigatorSelection(int delta)
+    private void PickTopNavigatorCandidate()
     {
-        if (NavResults.Items.Count == 0)
+        if (_topSceneId is { } sceneId)
+        {
+            // 场景的次数由 scene.go 自己记，这里不再记一笔。
+            _ = _bus.ExecuteAsync("aurora.scene.go id=" + CommandParser.QuoteArg(sceneId), "UI");
             return;
-        var index = Math.Clamp(NavResults.SelectedIndex + delta, 0, NavResults.Items.Count - 1);
-        NavResults.SelectedIndex = index;
-        NavResults.ScrollIntoView(NavResults.Items[index]);
-    }
+        }
 
-    private void PickNavigatorEntry()
-    {
-        if ((NavResults.SelectedItem as ListBoxItem)?.Tag is not NavEntry entry)
+        if (_topPageId is not { } pageId)
             return;
-
-        CloseNavigator();
-
-        // 场景的次数由 scene.go 自己记，这里只记页面与动作，免得一次切换记两笔。
-        if (entry.Kind != KindScene)
-            _usage.Record(entry.UsageKey);
-        _ = _bus.ExecuteAsync(entry.Command, "UI");
-    }
-
-    private void RefreshNavigatorResults()
-    {
-        var query = NavQuery.Text.Trim();
-        var hits = NavigatorIndex()
-            .Select(entry => (Entry: entry, Score: MatchNavigatorEntry(query, entry)))
-            .Where(hit => hit.Score >= 0)
-            .OrderByDescending(hit => hit.Score)
-            .ThenBy(hit => hit.Entry.Title, StringComparer.CurrentCultureIgnoreCase)
-            .Take(ResultLimit)
-            .ToList();
-
-        NavResults.Items.Clear();
-        foreach (var hit in hits)
-            NavResults.Items.Add(NavigatorRow(hit.Entry));
-        if (NavResults.Items.Count > 0)
-            NavResults.SelectedIndex = 0;
-
-        NavHint.Text = hits.Count == 0
-            ? "没有匹配项"
-            : "Enter 打开 · Esc 关闭";
-    }
-
-    private IEnumerable<NavEntry> NavigatorIndex()
-    {
-        foreach (var scene in _scenes.List())
-        {
-            var detail = SceneKindText(scene.Source) + "场景" + (scene.Active ? " · 当前" : "");
-            yield return new NavEntry(
-                KindScene, "scene:" + scene.Id, scene.Title, detail,
-                "aurora.scene.go id=" + CommandParser.QuoteArg(scene.Id),
-                scene.Title + " " + scene.Id, Boost(scene.Uses));
-        }
-
-        // 页面条目在当前场景里打开：场景不拥有页面（REQ-UI-094），没有「切到含它的场景」这回事。
-        foreach (var window in _docking.ListWindows())
-        {
-            var key = PageUsageKey(window.Id);
-            var detail = SceneManager.TitleFor(window.Owner) + (window.IsVisible ? " · 已打开" : "");
-            yield return new NavEntry(
-                KindPage, key, window.Title, detail,
-                "aurora.scene.open page=" + CommandParser.QuoteArg(window.Id),
-                $"{window.Title} {window.Id} {window.Owner}", Boost(_usage.Get(key)?.Count ?? 0));
-        }
-
-        // 动作只用来**定位**：回车切到它所在模块的场景，不在这里执行。
-        // 动作的参数多从页面的选择通道取值，离开页面执行，填进去的是空的或是别处的选中行。
-        foreach (var action in _actions.Actions)
-        {
-            var key = "action:" + action.Id;
-            yield return new NavEntry(
-                KindAction, key, action.Title,
-                SceneManager.TitleFor(action.Owner) + " · " + (action.Summary ?? action.Command),
-                "aurora.scene.go id=" + CommandParser.QuoteArg(SceneManager.SceneIdFor(action.Owner)),
-                $"{action.Title} {action.Id} {action.Summary} {action.Owner}", Boost(_usage.Get(key)?.Count ?? 0));
-        }
+        _usage.Record(PageUsageKey(pageId));
+        _ = _bus.ExecuteAsync("aurora.scene.open page=" + CommandParser.QuoteArg(pageId), "UI");
     }
 
     /// <summary>
-    /// 空查询只列场景；有查询时每个词都得命中，标题开头 &gt; 标题包含 &gt; 其余字段包含，
-    /// 再加使用频次（对数，免得一个用了几百次的条目压住一切）。
+    /// 每个词都得命中，标题开头 &gt; 标题包含 &gt; 其余字段包含；一个词都不命中判 -1（出局）。
+    /// 检索文本只用已声明的字段（标题、id、owner），不新增要人维护的关键词。
     /// </summary>
-    private static double MatchNavigatorEntry(string query, NavEntry entry)
+    private static double MatchScore(string query, string haystack)
     {
-        if (query.Length == 0)
-            return entry.Kind == KindScene ? 1 + entry.Boost : -1;
-
         var score = 0.0;
         foreach (var token in query.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (entry.Title.StartsWith(token, StringComparison.OrdinalIgnoreCase))
+            if (haystack.StartsWith(token, StringComparison.OrdinalIgnoreCase))
                 score += 4;
-            else if (entry.Title.Contains(token, StringComparison.OrdinalIgnoreCase))
-                score += 3;
-            else if (entry.Haystack.Contains(token, StringComparison.OrdinalIgnoreCase))
-                score += 1;
+            else if (haystack.Contains(token, StringComparison.OrdinalIgnoreCase))
+                score += 2;
             else
                 return -1;
         }
 
-        return score + entry.Boost + (entry.Kind == KindScene ? 0.5 : 0);
+        return score;
     }
 
+    /// <summary>使用频次加权，取对数，免得一个用了几百次的条目压住一切。</summary>
     private static double Boost(int uses) => uses <= 0 ? 0 : Math.Log(1 + uses) * 1.5;
-
-    private static ListBoxItem NavigatorRow(NavEntry entry)
-    {
-        var kind = new TextBlock { Text = entry.Kind, Width = 40 };
-        kind.SetResourceReference(TextBlock.ForegroundProperty, "Aurora.Brush.TextSecondary");
-        var title = new TextBlock { Text = entry.Title, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 10, 0) };
-        var detail = new TextBlock { Text = entry.Detail, TextTrimming = TextTrimming.CharacterEllipsis };
-        detail.SetResourceReference(TextBlock.ForegroundProperty, "Aurora.Brush.TextSecondary");
-
-        var row = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(kind, Dock.Left);
-        DockPanel.SetDock(title, Dock.Left);
-        row.Children.Add(kind);
-        row.Children.Add(title);
-        row.Children.Add(detail);
-
-        var item = new ListBoxItem { Content = row, Tag = entry };
-        item.SetResourceReference(StyleProperty, "Aurora.Suggest.Item");
-        return item;
-    }
 
     // ---------------------------------------------------------------- 全局快捷键
 
@@ -524,7 +517,7 @@ internal partial class ShellWindow
         var invalid = _bus.Validate(text);
         if (invalid != null)
         {
-            _log.Info("nav", $"导航器全局快捷键未注册（{invalid}）；可点右栏的「搜索」或执行 aurora.nav.open");
+            _log.Info("nav", $"导航器全局快捷键未注册（{invalid}）；右栏的搜索框照常可用，或执行 aurora.nav.open");
             return;
         }
 

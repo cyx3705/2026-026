@@ -53,7 +53,6 @@
     <Thickness x:Key="Aurora.Space.Pad">12</Thickness>
     <Thickness x:Key="Aurora.Space.PadTight">8</Thickness>
     <Thickness x:Key="Aurora.Space.ControlPad">10,4</Thickness>
-    <Thickness x:Key="Aurora.Space.TabStrip">3,3,3,0</Thickness>
 
     <sys:Double x:Key="Aurora.Size.Control">28</sys:Double>
     <sys:Double x:Key="Aurora.Size.WindowButton">44</sys:Double>

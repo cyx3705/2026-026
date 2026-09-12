@@ -132,14 +132,16 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.nav.open",
-            HiddenReason = "打开界面里的搜索浮层，只对坐在屏幕前的人有意义",
+            HiddenReason = "把光标放进界面右栏的搜索框，只对坐在屏幕前的人有意义",
             Domain = "aurora",
             CommandClass = "nav",
-            Summary = "打开（再按一次关闭）导航器：搜索并切换场景、页面与动作。全局快捷键由 HistoryMercury 注册",
+            Summary = "聚焦右栏搜索框：搜索并打开场景与页面。全局快捷键由 HistoryMercury 注册",
             RequiresUiThread = true,
-            Handler = CommandDescriptor.Sync(_ => s.Window.ToggleNavigator()
-                ? CommandResult.Ok("导航器已打开")
-                : CommandResult.Ok("导航器已关闭")),
+            Handler = CommandDescriptor.Sync(_ =>
+            {
+                s.Window.FocusNavigatorSearch();
+                return CommandResult.Ok("已聚焦右栏搜索框");
+            }),
         });
     }
 

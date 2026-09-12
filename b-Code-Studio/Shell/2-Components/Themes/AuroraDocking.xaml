@@ -11,117 +11,45 @@
         页签容器样式由那两个样式的 ItemContainerStyle 带下去。
         主题画刷键的覆盖在 AuroraTokens[.Dark].xaml —— 随主题整份切换。
 
-        页签 DataContext 就是 LayoutContent(LayoutDocument / LayoutAnchorable),
-        故可直接绑定 Title / IsSelected / IsActive / CanClose;关闭命令走
-        TemplatedParent 的 LayoutItem.CloseCommand。(经运行期探针确认)
+        1.20.2 起所有页都是 LayoutAnchorable(REQ-UI-102),没有页签行、没有页签切换;
+        1.20.3 起页签模板本身也是空的(REQ-UI-103)。
     -->
 
-    <!-- ================================================================ 页签(UI-06) -->
+    <!-- ================================================================ 页签容器(只剩壳) -->
 
     <!--
-        同心圆角:卡片外圆角 8,页签条相对卡片内缩 3,故页签上圆角取 5。
-        主窗体不再使用横跨整窗的 CaptionHeight 命中区；中央文档页签行的空白
-        由 ShellWindow 单独接管拖动，工具窗格顶部因此始终保持可操作。
+        1.20.3(REQ-UI-103):顶栏视觉的最后一块。1.20.2 删掉了页签**行**,页签本身的模板
+        (标题文字、关闭按钮、悬停与选中触发器,约 90 行)却还留着,在一行高 0、不可见、
+        不接收输入的格子里照常被构造与绑定 —— 画出来给谁看都没有,改坏了也没人看得见。
+        本版把模板清空,只留下面这层最小的壳。
+
+        壳为什么不能一起删:窗格控件是 TabControl,它要靠**生成出来的页签容器**才产出
+        SelectedContent;整份 ItemContainerStyle 拿掉,内容区就是空白(REQ-UI-101 第 1 条)。
+        容器里的 adc:LayoutXxxTabItem 也留着 —— AvalonDock 的激活与选中同步挂在它身上,
+        它只是没有可见的模板了。
+
+        页签 DataContext 就是 LayoutContent(LayoutAnchorable),故可直接绑定 Title / IsSelected。
+        (经运行期探针确认)
     -->
     <ControlTemplate x:Key="Aurora.Docking.TabItemTemplate" TargetType="{x:Type Control}">
-        <Border x:Name="Bd"
-                Margin="0,0,2,0"
-                Background="Transparent"
-                CornerRadius="{DynamicResource Aurora.Radius.TabTop}"
-                SnapsToDevicePixels="True">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="TitleText"
-                           Grid.Column="0"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center"
-                           FontFamily="{DynamicResource Aurora.Font.Family}"
-                           FontSize="{DynamicResource Aurora.Font.Body}"
-                           Foreground="{DynamicResource Aurora.Brush.TextSecondary}"
-                           Text="{Binding Title}"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding Title}" />
-                <Button x:Name="CloseButton"
-                        Grid.Column="1"
-                        Width="18" Height="18"
-                        Margin="6,0,6,0"
-                        VerticalAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Focusable="False"
-                        Visibility="Collapsed"
-                        WindowChrome.IsHitTestVisibleInChrome="True"
-                        Command="{Binding LayoutItem.CloseCommand,
-                                  RelativeSource={RelativeSource TemplatedParent}}">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="CloseBd" Background="{TemplateBinding Background}"
-                                    CornerRadius="4">
-                                <Path Data="M 0,0 L 7,7 M 7,0 L 0,7"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                      Stroke="{DynamicResource Aurora.Brush.TextSecondary}"
-                                      StrokeThickness="1.1" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="CloseBd" Property="Background"
-                                            Value="{DynamicResource Aurora.Brush.SurfacePressed}" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </Grid>
-        </Border>
-        <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background"
-                        Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
-            </Trigger>
-            <DataTrigger Binding="{Binding CanClose}" Value="True">
-                <Setter TargetName="CloseButton" Property="Visibility" Value="Visible" />
-            </DataTrigger>
-            <!-- The outer TabItem is the visual selection source of truth. -->
-            <DataTrigger Binding="{Binding IsSelected,
-                                      RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}"
-                         Value="True">
-                <Setter TargetName="Bd" Property="Background"
-                        Value="{DynamicResource Aurora.Brush.AccentSoft}" />
-                <Setter TargetName="TitleText" Property="Foreground"
-                        Value="{DynamicResource Aurora.Brush.TextPrimary}" />
-                <Setter TargetName="TitleText" Property="FontWeight" Value="SemiBold" />
-            </DataTrigger>
-        </ControlTemplate.Triggers>
+        <Border Background="Transparent" />
     </ControlTemplate>
 
-    <!--
-        窗格控件是 TabControl,页签容器因此是普通 TabItem;AvalonDock 的
-        LayoutDocumentTabItem / LayoutAnchorableTabItem 是容器模板里承担
-        拖拽、激活、上下文菜单的那一层。所以外层样式必须 TargetType=TabItem,
-        内层才换我们的视觉模板 —— 直接给容器套 LayoutXxxTabItem 样式会抛
-        「样式不适用于类型 TabItem」。
-    -->
     <Style x:Key="Aurora.Docking.DocumentTabItemStyle" TargetType="{x:Type adc:LayoutDocumentTabItem}">
-        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Tab}" />
-        <Setter Property="MinWidth" Value="90" />
-        <Setter Property="MaxWidth" Value="220" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         <Setter Property="Template" Value="{StaticResource Aurora.Docking.TabItemTemplate}" />
     </Style>
 
     <Style x:Key="Aurora.Docking.AnchorableTabItemStyle" TargetType="{x:Type adc:LayoutAnchorableTabItem}">
-        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Tab}" />
-        <Setter Property="MinWidth" Value="80" />
-        <Setter Property="MaxWidth" Value="220" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         <Setter Property="Template" Value="{StaticResource Aurora.Docking.TabItemTemplate}" />
     </Style>
 
+    <!--
+        窗格控件是 TabControl,页签容器因此是普通 TabItem;AvalonDock 的
+        LayoutDocumentTabItem / LayoutAnchorableTabItem 是容器模板里承担
+        激活与选中同步的那一层。所以外层样式必须 TargetType=TabItem,
+        内层才换我们的模板 —— 直接给容器套 LayoutXxxTabItem 样式会抛
+        「样式不适用于类型 TabItem」。
+    -->
     <Style x:Key="Aurora.Docking.DocumentTabContainerStyle" TargetType="{x:Type TabItem}">
         <Setter Property="Padding" Value="0" />
         <Setter Property="Margin" Value="0" />
@@ -232,13 +160,21 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                <!-- Ctrl 标签态(REQ-UI-097):内容换成写着页名的大标签,按住就能把整页拖走 -->
+                <!--
+                    Ctrl 标签态(REQ-UI-097):内容换成写着页名的大标签,按住就能把整页拖走。
+
+                    CornerRadius 必须跟着卡片(REQ-UI-105,1.20.3):这块盖板是卡片里**最上面**的一层,
+                    圆角由外层卡片 Border 画、而 WPF 的 CornerRadius 不裁剪子元素 ——
+                    盖板不自己带圆角的话,四个角就被它填成直角,按住 Ctrl 时整页从圆角矩形变成尖角矩形。
+                    它铺满第 1 行,而第 0 行(页签容器)高 0,所以取与卡片同一个 Aurora.Radius.Inner 即可对齐。
+                -->
                 <Border x:Name="PageLabelCover"
                         Grid.Row="1"
                         Panel.ZIndex="3"
                         Tag="PageLabelCover"
                         Visibility="Collapsed"
                         Cursor="SizeAll"
+                        CornerRadius="{DynamicResource Aurora.Radius.Inner}"
                         Background="{DynamicResource Aurora.Brush.Surface}">
                     <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
                     <Border Margin="{DynamicResource Aurora.Space.PadTight}"
@@ -302,13 +238,14 @@
                                   KeyboardNavigation.TabIndex="2"
                                   KeyboardNavigation.TabNavigation="Cycle"
                                   SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                <!-- Ctrl 标签态(REQ-UI-097),与工具窗格同一块 -->
+                <!-- Ctrl 标签态(REQ-UI-097),与工具窗格同一块;圆角同上(REQ-UI-105) -->
                 <Border x:Name="PageLabelCover"
                         Grid.Row="1"
                         Panel.ZIndex="3"
                         Tag="PageLabelCover"
                         Visibility="Collapsed"
                         Cursor="SizeAll"
+                        CornerRadius="{DynamicResource Aurora.Radius.Inner}"
                         Background="{DynamicResource Aurora.Brush.Surface}">
                     <!-- 1.20.1:内容整片隐去,正中只剩一枚页签形的标签(用户原话「整体页面居中显示自己的标签」) -->
                     <Border Margin="{DynamicResource Aurora.Space.PadTight}"

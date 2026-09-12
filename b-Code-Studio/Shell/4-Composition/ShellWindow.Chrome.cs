@@ -222,20 +222,6 @@ internal partial class ShellWindow
         });
     }
 
-    private static IEnumerable<T> FindDescendants<T>(DependencyObject parent)
-        where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(parent);
-        for (var index = 0; index < count; index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T match)
-                yield return match;
-            foreach (var descendant in FindDescendants<T>(child))
-                yield return descendant;
-        }
-    }
-
     // ---------------------------------------------------------------- 专注模式(UI-04)
     //
     // 页面最大化 = 专注态:窗格铺满,右栏(含窗口控制组)照常在右侧。

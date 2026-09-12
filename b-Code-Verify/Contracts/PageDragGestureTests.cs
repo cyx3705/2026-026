@@ -22,8 +22,6 @@ public sealed class PageDragGestureTests
                 new Point(12, 8),
                 "modules",
                 null,
-                "label:modules",
-                false,
                 false);
 
             Assert.True(session.TryTransition(DockingDragState.ThresholdReached));
@@ -48,8 +46,6 @@ public sealed class PageDragGestureTests
                 new Point(12, 8),
                 "modules",
                 null,
-                "label:modules",
-                false,
                 false);
 
             session.TryTransition(DockingDragState.ThresholdReached);
@@ -75,8 +71,6 @@ public sealed class PageDragGestureTests
                 new Point(12, 8),
                 null,
                 new Window(),
-                "floating:modules",
-                false,
                 false);
 
             Assert.True(session.TryTransition(DockingDragState.ThresholdReached));
@@ -157,62 +151,6 @@ public sealed class PageDragGestureTests
             start, new Point(18, 10), 4, 4, multiplier: 2));
         Assert.True(PageDragCoordinator.HasReachedDragThreshold(
             start, new Point(10, 18), 4, 4, multiplier: 2));
-    }
-
-    [Fact]
-    public void DelayedDragRejectsOneHundredNineteenMilliseconds()
-    {
-        var gesture = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        gesture.Begin(1_000, new Point(10, 10), 4, 4);
-
-        Assert.False(gesture.Update(1_119, new Point(14, 10)));
-        Assert.True(gesture.IsActive);
-    }
-
-    [Fact]
-    public void DelayedDragAcceptsOneHundredTwentyMilliseconds()
-    {
-        var gesture = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        gesture.Begin(1_000, new Point(10, 10), 4, 4);
-
-        Assert.True(gesture.Update(1_120, new Point(14, 10)));
-    }
-
-    [Fact]
-    public void DelayedDragRemembersEarlyMovementUntilHoldCompletes()
-    {
-        var gesture = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        gesture.Begin(1_000, new Point(10, 10), 4, 4);
-
-        Assert.False(gesture.Update(1_050, new Point(18, 10)));
-        Assert.True(gesture.HasReachedThreshold);
-        Assert.False(gesture.TryActivate(1_119));
-        Assert.True(gesture.TryActivate(1_120));
-    }
-
-    [Fact]
-    public void DelayedDragWaitsForMovementAfterHoldCompletes()
-    {
-        var gesture = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        gesture.Begin(1_000, new Point(10, 10), 4, 4);
-
-        Assert.False(gesture.TryActivate(1_120));
-        Assert.False(gesture.Update(1_121, new Point(13.99, 10)));
-        Assert.True(gesture.Update(1_122, new Point(14, 10)));
-    }
-
-    [Fact]
-    public void DelayedDragCancellationPreventsActivation()
-    {
-        var gesture = new DelayedDragGesture(TimeSpan.FromMilliseconds(120));
-        gesture.Begin(1_000, new Point(10, 10), 4, 4);
-        gesture.Update(1_050, new Point(18, 10));
-
-        gesture.Cancel();
-
-        Assert.False(gesture.IsActive);
-        Assert.False(gesture.HasReachedThreshold);
-        Assert.False(gesture.TryActivate(1_120));
     }
 
     [Theory]

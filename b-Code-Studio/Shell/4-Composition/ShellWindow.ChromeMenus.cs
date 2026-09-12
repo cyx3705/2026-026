@@ -187,7 +187,7 @@ internal partial class ShellWindow
             scenes.Items.Add(item);
         }
         scenes.Items.Add(new Separator());
-        scenes.Items.Add(Item("搜索场景与页面…", "aurora.nav.open"));
+        scenes.Items.Add(Item("搜索场景与页面（右栏）", "aurora.nav.open"));
         scenes.Items.Add(Item("重置当前场景", "aurora.scene.reset"));
         rebuilt.Add(scenes);
 

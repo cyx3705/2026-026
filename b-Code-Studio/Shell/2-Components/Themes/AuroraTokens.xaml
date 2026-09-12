@@ -52,8 +52,8 @@
     <!-- Q-4:窗体内部唯一圆角值 -->
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
     <!--
-        页签与卡片同心:卡片外圆角 8、页签相对卡片内缩 3(Aurora.Space.TabInset),
-        故页签上圆角 = 8 - 3 = 5,两者的圆心重合,不会出现「方页签套圆卡片」。
+        与卡片同心:卡片外圆角 8、内缩 3,故 5。停靠页签已随顶栏删除,这两个值现在
+        只服务分段工具条与 Ctrl 标签态的那枚标签。
     -->
     <CornerRadius x:Key="Aurora.Radius.TabTop">5,5,0,0</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabInner">5</CornerRadius>
@@ -64,11 +64,13 @@
     <Thickness x:Key="Aurora.Space.Pad">12</Thickness>
     <Thickness x:Key="Aurora.Space.PadTight">8</Thickness>
     <Thickness x:Key="Aurora.Space.ControlPad">10,4</Thickness>
-    <Thickness x:Key="Aurora.Space.TabStrip">3,3,3,0</Thickness>
 
     <sys:Double x:Key="Aurora.Size.Control">28</sys:Double>
     <sys:Double x:Key="Aurora.Size.WindowButton">44</sys:Double>
-    <!-- 页签行高 = 顶部控件条高:窗口按钮与页签必须同处一行(3.1 修订) -->
+    <!--
+        控件条高。页签行已随顶栏删除(REQ-UI-101),这个值现在量的是右栏顶部的窗口按钮组、
+        对话框标题条与 Ctrl 标签态那枚标签的最小高度 —— 键名保留,改名要动四处消费方。
+    -->
     <sys:Double x:Key="Aurora.Size.Tab">32</sys:Double>
 
     <!-- AvalonDock 停靠覆盖按钮：保持可识别，但不要遮住整块工作区。 -->

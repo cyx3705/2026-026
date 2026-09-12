@@ -1332,6 +1332,128 @@ public sealed class ShellChromeContractTests
         => window.Commands.ExecuteAsync("vulcan.app.focusconsole", "test")
             .GetAwaiter().GetResult().Success;
 
+    // ================================================================ 1.20.3
+
+    /// <summary>
+    /// REQ-UI-104：右栏与停靠区是同一片画布——不画左边框，底色取 <c>Aurora.Brush.Canvas</c>。
+    /// 回归对象是深色：底色曾是 <c>SurfaceAlt</c>（#242625），比页底 Canvas（#1A1D1C）亮一截，
+    /// 右栏于是成了一块贴在窗体右边的板子；浅色下两者只差 1 个色阶，肉眼看不出来，所以两种主题都验。
+    /// </summary>
+    [Fact]
+    public void RightRailSharesTheDockingCanvasAndDrawsNoSeam()
+    {
+        RunShell(window =>
+        {
+            var rail = RequireElement<Border>(window, "NavRail");
+            Assert.Equal(default, rail.BorderThickness);
+
+            foreach (var mode in new[] { "light", "dark" })
+            {
+                Assert.True(window.Commands.ExecuteAsync($"aurora.app.theme mode={mode}", "test")
+                    .GetAwaiter().GetResult().Success);
+                UiTestHost.Pump();
+
+                var canvas = (SolidColorBrush)window.FindResource("Aurora.Brush.Canvas");
+                var surfaceAlt = (SolidColorBrush)window.FindResource("Aurora.Brush.SurfaceAlt");
+                var background = Assert.IsType<SolidColorBrush>(rail.Background);
+                Assert.Equal(canvas.Color, background.Color);
+                if (mode == "dark")
+                    Assert.NotEqual(surfaceAlt.Color, background.Color);
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-105：Ctrl 标签态的盖板必须自己带圆角。它是卡片里最上面的一层，而 WPF 的
+    /// <c>CornerRadius</c> 不裁剪子元素——不带圆角时四个角被它填成直角，按住 Ctrl 整页就从
+    /// 圆角矩形变成尖角矩形。
+    /// </summary>
+    [Fact]
+    public void LabelModeCoverKeepsTheCardCorners()
+    {
+        RunShell(window =>
+        {
+            var radius = (CornerRadius)window.FindResource("Aurora.Radius.Inner");
+            var covers = FindVisualDescendants<Border>(window)
+                .Where(border => Equals(border.Tag, "PageLabelCover"))
+                .ToList();
+            Assert.NotEmpty(covers);
+            Assert.All(covers, cover => Assert.Equal(radius, cover.CornerRadius));
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-106：搜索就在右栏第二行，没有浮层。输入随手筛场景与常用页面两段；清空恢复原样。
+    /// </summary>
+    [Fact]
+    public void RailSearchFiltersScenesAndPagesWithoutAnOverlay()
+    {
+        RunShell(window =>
+        {
+            Assert.Null(window.FindName("NavOverlay"));
+            Assert.Null(window.FindName("NavResults"));
+
+            var query = RequireElement<TextBox>(window, "NavQuery");
+            var scenes = RequireElement<Panel>(window, "NavRailItems");
+            var pages = RequireElement<Panel>(window, "NavPageItems");
+            var scenesEmpty = RequireElement<TextBlock>(window, "NavScenesEmpty");
+
+            window.Docking.Hide(StandardWindowIds.Console);
+            window.RefreshNavigatorPages(force: true);
+            var sceneCount = scenes.Children.Count;
+            Assert.True(sceneCount > 0);
+            Assert.Contains(
+                pages.Children.OfType<Border>(),
+                capsule => Equals(capsule.Tag, StandardWindowIds.Console));
+
+            query.Text = "不存在的这一页";
+            UiTestHost.Pump();
+            Assert.Empty(scenes.Children.OfType<Button>());
+            Assert.Empty(pages.Children.OfType<Border>());
+            Assert.Equal(Visibility.Visible, scenesEmpty.Visibility);
+
+            query.Text = StandardWindowIds.Console;
+            UiTestHost.Pump();
+            Assert.Contains(
+                pages.Children.OfType<Border>(),
+                capsule => Equals(capsule.Tag, StandardWindowIds.Console));
+
+            query.Text = "";
+            UiTestHost.Pump();
+            Assert.Equal(sceneCount, scenes.Children.Count);
+            Assert.Equal(Visibility.Collapsed, scenesEmpty.Visibility);
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-107：右栏空白（含滚动区里的空处）是窗口拖动面，按钮、搜索框与常用页面胶囊仍归它们自己。
+    /// 回归对象是「只有一小部分区域可以拖」：拖动原先挂在冒泡事件上，右栏里占了两整行的滚动区
+    /// 先把按下吃掉，冒泡上来时能拖的只剩边角那几条缝。
+    /// </summary>
+    [Fact]
+    public void RailBlankSpaceIsAWindowDragSurface()
+    {
+        RunShell(window =>
+        {
+            var rail = RequireElement<Border>(window, "NavRail");
+
+            Assert.False(ShellWindow.IsInteractiveSurface(rail, rail));
+            // 滚动区里的列表面板：走到 rail 之前只经过面板与滚动宿主，一律是拖动面。
+            Assert.False(ShellWindow.IsInteractiveSurface(RequireElement<Panel>(window, "NavRailItems"), rail));
+            Assert.False(ShellWindow.IsInteractiveSurface(RequireElement<Panel>(window, "NavPageItems"), rail));
+
+            Assert.True(ShellWindow.IsInteractiveSurface(RequireButton(window, "CloseButton"), rail));
+            Assert.True(ShellWindow.IsInteractiveSurface(RequireElement<TextBox>(window, "NavQuery"), rail));
+
+            window.Docking.Hide(StandardWindowIds.Console);
+            window.RefreshNavigatorPages(force: true);
+            var capsule = RequireElement<Panel>(window, "NavPageItems").Children
+                .OfType<Border>()
+                .Single(border => Equals(border.Tag, StandardWindowIds.Console));
+            Assert.True(ShellWindow.IsInteractiveSurface(capsule, rail));
+        });
+    }
+
     private static void RunShell(
         Action<ShellWindow> assert,
         Action<ShellConfig>? configure = null,

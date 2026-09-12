@@ -54,6 +54,34 @@ internal interface IDockingService
     event EventHandler? WindowsChanged;
 }
 
+/// <summary>
+/// 场景切换要用到的那一小块停靠面（REQ-UI-085）。
+///
+/// 不并进 <see cref="IDockingService"/>：那个接口在测试里有四个替身，
+/// 场景只需要这里的六项，没有理由让四个替身陪着改。
+/// </summary>
+internal interface ISceneDocking
+{
+    IReadOnlyList<ToolWindowInfo> ListWindows();
+
+    void Show(string id);
+
+    void Hide(string id);
+
+    /// <summary>按场景初值露面：位置空着才露面，不顶掉任何一页；默认就不显示的页不动。</summary>
+    void ShowIfSeatFree(string id);
+
+    void SaveLayout(string name);
+
+    void ApplyScene(
+        string name,
+        IReadOnlyCollection<string> seed,
+        bool rebuild,
+        IReadOnlyCollection<string>? prefer = null);
+
+    event EventHandler? WindowsChanged;
+}
+
 internal enum DockSide
 {
     Left = 0,

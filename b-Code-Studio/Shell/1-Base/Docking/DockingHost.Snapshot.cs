@@ -1,11 +1,15 @@
-﻿using System.IO;
-using System.Windows;
+using System.IO;
 using System.Windows.Controls;
+using System.Windows;
 using AvalonDock.Layout;
+using HistoryVulcan.Core.Logging;
 
 namespace HistoryAurora.Shell.Base.Docking;
 
-internal sealed partial class DockingHost
+/// <summary>
+/// 存取这一面：布局快照的序列化与恢复，以及建在它之上的场景切换（场景只是一份命名布局，REQ-UI-094）。
+/// </summary>
+internal sealed partial class DockingHost : ISceneDocking
 {
     private DockLayoutSnapshot CaptureLayoutSnapshot(LayoutRoot root)
     {
@@ -211,7 +215,7 @@ internal sealed partial class DockingHost
         var pane = new CenterDocumentPane { ShowHeader = snapshot.ShowHeader };
         foreach (var content in snapshot.Contents)
         {
-            if (RestoreContent(content, documentPane: true, seen) is { } restored)
+            if (RestoreContent(content, seen) is { } restored)
                 pane.Children.Add(restored);
         }
         Select(pane, snapshot.SelectedContentId);
@@ -225,7 +229,7 @@ internal sealed partial class DockingHost
         var pane = new LayoutAnchorablePane();
         foreach (var content in snapshot.Contents)
         {
-            if (RestoreContent(content, documentPane: false, seen) is LayoutAnchorable restored)
+            if (RestoreContent(content, seen) is LayoutAnchorable restored)
                 pane.Children.Add(restored);
         }
         Select(pane, snapshot.SelectedContentId);
@@ -260,17 +264,17 @@ internal sealed partial class DockingHost
         return group;
     }
 
-    private LayoutContent? RestoreContent(
-        DockContentSnapshot snapshot,
-        bool documentPane,
-        HashSet<string> seen)
+    /// <summary>
+    /// 1.20.2 起所有页都是工具页（REQ-UI-102）：旧快照里命令集的文档节点在这里就地换成工具页。
+    /// 因此**不再有** documentPane 这个参数——它在 1.20.2 就已经没人读了。
+    /// </summary>
+    private LayoutContent? RestoreContent(DockContentSnapshot snapshot, HashSet<string> seen)
     {
         if (!_byId.TryGetValue(snapshot.Id, out var descriptor))
             return null;
         if (!seen.Add(snapshot.Id))
             throw new InvalidDataException($"布局快照包含重复窗口: {snapshot.Id}");
 
-        // 1.20.2 起所有页都是工具页：旧快照里命令集的文档节点在这里就地换成工具页。
         LayoutContent content = CreateAnchorable(descriptor);
         ApplyFloatingGeometry(content, snapshot);
         return content;
@@ -328,7 +332,7 @@ internal sealed partial class DockingHost
             var group = new LayoutAnchorGroup();
             foreach (var content in snapshot.Contents)
             {
-                if (RestoreContent(content, documentPane: false, seen) is LayoutAnchorable anchorable)
+                if (RestoreContent(content, seen) is LayoutAnchorable anchorable)
                     group.Children.Add(anchorable);
             }
             if (group.ChildrenCount == 0)
@@ -346,32 +350,28 @@ internal sealed partial class DockingHost
         }
     }
 
-    private static void ApplyPosition(
-        ILayoutPanelElement element,
-        DockLayoutNodeSnapshot snapshot)
+    /// <summary>
+    /// 布局节点的尺寸四项（DockWidth / DockHeight / DockMinWidth / DockMinHeight）。
+    ///
+    /// 承载它们的是 AvalonDock 的 <c>ILayoutPositionableElement</c>，而那个接口是 internal——
+    /// 拿不到接口，就只能按具体类型逐个 case。1.20.2 及以前这里是一段五路 switch 取值
+    /// 加五个同名同体的 <c>Set</c> 重载，一百多行里没有一行是各自不同的判断。
+    /// 而同一个 internal，本类的 <c>GetDockLength</c> / <c>SetDockLength</c> 早就用反射绕过去了：
+    /// 同一个问题两种写法，改一处忘一处只是时间问题。1.20.3（REQ-UI-103）统一走反射。
+    /// </summary>
+    private static bool IsPositionable(ILayoutElement element)
+        => element is LayoutPanel or LayoutDocumentPane or LayoutAnchorablePane
+            or LayoutDocumentPaneGroup or LayoutAnchorablePaneGroup;
+
+    private static void ApplyPosition(ILayoutPanelElement element, DockLayoutNodeSnapshot snapshot)
     {
-        var width = RestoreLength(snapshot.DockWidth);
-        var height = RestoreLength(snapshot.DockHeight);
-        var minWidth = FiniteOrZero(snapshot.DockMinWidth);
-        var minHeight = FiniteOrZero(snapshot.DockMinHeight);
-        switch (element)
-        {
-            case LayoutPanel item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
-            case LayoutDocumentPane item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
-            case LayoutAnchorablePane item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
-            case LayoutDocumentPaneGroup item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
-            case LayoutAnchorablePaneGroup item:
-                Set(item, width, height, minWidth, minHeight);
-                break;
-        }
+        if (!IsPositionable(element))
+            return;
+
+        SetDockLength(element, horizontal: true, RestoreLength(snapshot.DockWidth));
+        SetDockLength(element, horizontal: false, RestoreLength(snapshot.DockHeight));
+        SetDouble(element, "DockMinWidth", FiniteOrZero(snapshot.DockMinWidth));
+        SetDouble(element, "DockMinHeight", FiniteOrZero(snapshot.DockMinHeight));
     }
 
     private static bool TryGetPosition(
@@ -381,100 +381,28 @@ internal sealed partial class DockingHost
         out double minWidth,
         out double minHeight)
     {
-        switch (element)
-        {
-            case LayoutPanel item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            case LayoutDocumentPane item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            case LayoutAnchorablePane item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            case LayoutDocumentPaneGroup item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            case LayoutAnchorablePaneGroup item:
-                (width, height, minWidth, minHeight) =
-                    (item.DockWidth, item.DockHeight, item.DockMinWidth, item.DockMinHeight);
-                return true;
-            default:
-                width = GridLength.Auto;
-                height = GridLength.Auto;
-                minWidth = 0;
-                minHeight = 0;
-                return false;
-        }
+        width = GridLength.Auto;
+        height = GridLength.Auto;
+        minWidth = 0;
+        minHeight = 0;
+        if (!IsPositionable(element))
+            return false;
+
+        width = GetDockLength(element, horizontal: true);
+        height = GetDockLength(element, horizontal: false);
+        minWidth = GetDouble(element, "DockMinWidth");
+        minHeight = GetDouble(element, "DockMinHeight");
+        return true;
     }
 
-    private static void Set(
-        LayoutPanel item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
-    {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
-    }
+    private static double GetDouble(ILayoutElement element, string name)
+        => element.GetType().GetProperty(name)?.GetValue(element) is double value ? value : 0;
 
-    private static void Set(
-        LayoutDocumentPane item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
+    private static void SetDouble(ILayoutElement element, string name, double value)
     {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
-    }
-
-    private static void Set(
-        LayoutAnchorablePane item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
-    {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
-    }
-
-    private static void Set(
-        LayoutDocumentPaneGroup item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
-    {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
-    }
-
-    private static void Set(
-        LayoutAnchorablePaneGroup item,
-        GridLength width,
-        GridLength height,
-        double minWidth,
-        double minHeight)
-    {
-        item.DockWidth = width;
-        item.DockHeight = height;
-        item.DockMinWidth = minWidth;
-        item.DockMinHeight = minHeight;
+        var property = element.GetType().GetProperty(name);
+        if (property is { CanWrite: true })
+            property.SetValue(element, value);
     }
 
     private static void ApplyFloatingGeometry(
@@ -559,4 +487,136 @@ internal sealed partial class DockingHost
     }
 
     private static double FiniteOrZero(double value) => double.IsFinite(value) ? value : 0;
+
+
+    // ---------------------------------------------------------------- 场景（REQ-UI-085 / 094）
+
+    /// <summary>
+    /// 切到一个场景：换掉停靠布局。
+    ///
+    /// 场景只是一份命名布局（REQ-UI-094），<paramref name="seed"/> 是它的**初值**——
+    /// 场景没有布局可恢复时，哪些页露面。布局的来路按先后：
+    /// <list type="number">
+    ///   <item><paramref name="rebuild"/> 为 true：按各页 placement 重建默认布局，再按初值定显隐（场景重置）；</item>
+    ///   <item>存有同名命名布局：恢复它，显隐就是它记着的样子。存下之后才登记的页这个场景没见过，按初值定；</item>
+    ///   <item>都没有：保留当前布局树，按初值定显隐。</item>
+    /// </list>
+    /// 一格一页（REQ-UI-100）：按初值露面的页不顶掉任何一页，位置被占着就不露面；
+    /// 只有 <paramref name="prefer"/> 里的页（模块场景传该模块自己的页）会顶掉它位置上的页——
+    /// 于是 Janus 的「图」与常驻的控制台同一格时，进 Janus 露「图」。
+    ///
+    /// **页面视图不重建**：内容对象按 id 缓存在 <c>_contents</c>，恢复快照换的只是停靠模型
+    /// （REQ-UI-086）。切走再切回来，页面里选好的来源、表格的选中行都还在。
+    /// </summary>
+    public void ApplyScene(
+        string name,
+        IReadOnlyCollection<string> seed,
+        bool rebuild,
+        IReadOnlyCollection<string>? prefer = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(seed);
+        RestoreLayoutFromMaximized();
+
+        var initial = new HashSet<string>(seed, StringComparer.OrdinalIgnoreCase);
+        var preferred = new HashSet<string>(prefer ?? [], StringComparer.OrdinalIgnoreCase);
+        string? payload = null;
+        if (!rebuild)
+        {
+            try
+            {
+                payload = _store.ReadNamed(name);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn(LayoutSource, $"读取场景布局 {name} 失败，保留当前布局只按初值定显隐: {ex.Message}");
+            }
+        }
+
+        using (Suppress())
+        {
+            var restored = false;
+            if (payload != null)
+            {
+                try
+                {
+                    var known = ApplyLayoutSnapshot(payload);
+                    if (!LayoutHasMainDocumentPane())
+                        throw new InvalidOperationException("布局中缺少中央主文档区");
+                    EnsureRegisteredWindows();
+                    // 1.20.1 及以前存下的场景布局里一格可能有好几页：每格留选中的那一页。
+                    EvictExtraPages();
+                    SeedVisibility(name, _descriptors.Where(d => !known.Contains(d.Id)).ToArray(), initial, preferred);
+
+                    restored = true;
+                    _seedRatiosFromLayout = true;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn(LayoutSource, $"场景布局 {name} 无法恢复，按默认布局重建: {ex.Message}");
+                    rebuild = true;
+                }
+            }
+
+            if (rebuild)
+            {
+                BuildDefaultLayout();
+                _seedRatiosFromLayout = false;
+                foreach (var d in _descriptors)
+                    _ratios[d.Id] = NormalizeRatio(d.DefaultRatio, 0.25);
+            }
+
+            if (!restored)
+                SeedVisibility(name, _descriptors.ToArray(), initial, preferred);
+
+            EnsureCentralWorkspace();
+            AttachLayout();
+            CurrentLayoutName = name;
+        }
+
+        ScheduleReapplyRatios();
+        RebaseSoon();
+        WindowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 按初值定显隐，分三步：不在初值里的藏起来；在初值里、默认就该露面而此刻藏着的，位置空着才露面；
+    /// 最后 <paramref name="preferred"/> 里的页露面并顶掉它位置上的页。
+    /// 默认就不显示的页（DefaultVisible = false）不替它做主。
+    /// </summary>
+    private void SeedVisibility(
+        string scene,
+        IReadOnlyList<ToolWindowDescriptor> descriptors,
+        HashSet<string> initial,
+        HashSet<string> preferred)
+    {
+        foreach (var descriptor in descriptors.Where(d => !initial.Contains(d.Id)))
+            Seed(scene, descriptor.Id, () => HidePage(FindRequiredAnchorable(descriptor.Id)));
+
+        var shown = descriptors
+            .Where(d => initial.Contains(d.Id) && d.DefaultVisible)
+            .OrderBy(d => preferred.Contains(d.Id))
+            .ToArray();
+        foreach (var descriptor in shown)
+        {
+            var id = descriptor.Id;
+            if (preferred.Contains(id))
+                Seed(scene, id, () => Show(id));
+            else if (!ComputeState(id).Visible)
+                Seed(scene, id, () => ShowIfSeatFree(id));
+        }
+    }
+
+    private void Seed(string scene, string id, Action action)
+    {
+        try
+        {
+            EnsureRegistered(id);
+            action();
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(LayoutSource, $"场景 {scene} 处理窗口 {id} 失败: {ex.Message}");
+        }
+    }
 }

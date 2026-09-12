@@ -1,24 +1,36 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows;
+using AvalonDock.Controls;
+using AvalonDock.Layout;
+using AvalonDock;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
-using AvalonDock;
-using AvalonDock.Controls;
-using AvalonDock.Layout;
 
 namespace HistoryAurora.Shell.Base.Docking;
 
 /// <summary>
-/// AvalonDock 二次封装(§14.2)。Shell 对外只暴露 IDockingService,
+/// AvalonDock 二次封装（§14.2）。Shell 对外只暴露 <see cref="IDockingService"/>，
 /// 派生应用与四类标准窗口不接触任何 AvalonDock 类型。
-/// 职责:窗口注册、默认布局构建、布局持久化(含损坏回退 N-06)、
-/// 布局手势 → 等价指令(W-10,含防再入抑制)。
+///
+/// 职责：窗口注册、默认布局构建、布局持久化（含损坏回退 N-06）、
+/// 布局手势 → 等价指令（W-10，含防再入抑制），以及「每一页此刻在哪」的状态计算。
+///
+/// 1.20.3（REQ-UI-103）从七个 partial 收成三个，各自答一个问题：
+/// <list type="bullet">
+///   <item>本文件：**对外是什么**——生命周期、<see cref="IDockingService"/> 的每一条、
+///         布局差分回吐指令，以及状态与查找；</item>
+///   <item><c>DockingHost.Layout.cs</c>：**布局树怎么摆**——默认布局、放置、一格一页、比例、中央区修复；</item>
+///   <item><c>DockingHost.Snapshot.cs</c>：**怎么存怎么取**——快照序列化与恢复，以及建在它之上的场景切换。</item>
+/// </list>
+/// 原来的七份是「一格多页 + 事后挑一页」时代分出来的：等位账、每页在哪一格的历史、
+/// 挑选偏好各占一个文件。那条链在 1.20.2 已经删干净（DEC-034），留下的是七个文件、
+/// 每个都只剩一两件事，跨文件找一条调用链要开三四个标签页。
 /// </summary>
 internal sealed partial class DockingHost : IDockingService
 {
@@ -610,8 +622,6 @@ internal sealed partial class DockingHost : IDockingService
         RebaseSoon();
     }
 
-    // ---------------------------------------------------------------- 布局构建与序列化
-
     // ---------------------------------------------------------------- 布局事件 → 指令(W-10)
 
     private void AttachLayout()
@@ -793,4 +803,129 @@ internal sealed partial class DockingHost : IDockingService
 
     private static string FormatRatio(double value)
         => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+
+    // ---------------------------------------------------------------- 状态与查找
+
+    private sealed record WinState(bool Visible, bool Floating, DockSide? Side, double Ratio);
+
+    private WinState ComputeState(string id)
+    {
+        var a = FindAnchorable(id);
+        if (a == null || a.IsHidden || _hiddenCenterIds.Contains(id))
+            return new WinState(false, false, null, 0);
+
+        if (IsFloating(a))
+            return new WinState(true, true, null, 0);
+
+        if (IsHostedInDocumentPane(a))
+            return new WinState(true, false, DockSide.Center, 0);
+
+        var side = DetectSide(a);
+        return new WinState(true, false, side, DetectRatio(a, side));
+    }
+
+    private static bool IsFloating(LayoutContent content)
+        => IsInsideFloatingWindow(content);
+
+    private static bool IsInsideFloatingWindow(ILayoutElement element)
+    {
+        for (ILayoutContainer? p = element.Parent; p != null; p = (p as ILayoutElement)?.Parent)
+        {
+            if (p is LayoutFloatingWindow)
+                return true;
+        }
+
+        return false;
+    }
+
+    private DockSide? DetectSide(LayoutAnchorable a)
+    {
+        if (a.IsHidden || IsFloating(a))
+            return null;
+
+        ILayoutElement? centerAnchor = TryFindMainDocumentPane();
+        if (centerAnchor == null)
+            return null;
+
+        for (ILayoutContainer? parent = centerAnchor.Parent;
+             parent != null;
+             parent = (parent as ILayoutElement)?.Parent)
+        {
+            if (parent is not LayoutPanel panel)
+                continue;
+            var windowChild = ChildContaining(panel, a);
+            var centerChild = ChildContaining(panel, centerAnchor);
+            if (windowChild == null || centerChild == null || ReferenceEquals(windowChild, centerChild))
+                continue;
+
+            var before = panel.Children.IndexOf(windowChild) < panel.Children.IndexOf(centerChild);
+            return panel.Orientation == Orientation.Horizontal
+                ? before ? DockSide.Left : DockSide.Right
+                : before ? DockSide.Top : DockSide.Bottom;
+        }
+
+        return null;
+    }
+
+    private double DetectRatio(LayoutAnchorable a, DockSide? side)
+    {
+        if (side == null)
+            return 0;
+
+        var pane = a.Parent as ILayoutElement;
+        if (pane == null)
+            return 0;
+
+        var fe = FindControlFor(pane);
+        if (fe == null || _manager.ActualWidth <= 0 || _manager.ActualHeight <= 0)
+            return 0;
+
+        if (side == DockSide.Center)
+            return 0;
+        var ratio = side is DockSide.Left or DockSide.Right
+            ? fe.ActualWidth / _manager.ActualWidth
+            : fe.ActualHeight / _manager.ActualHeight;
+        ratio = Math.Round(ratio, 2);
+        return double.IsFinite(ratio) && ratio is > 0 and < 1 ? ratio : 0;
+    }
+
+    private static ILayoutPanelElement? ChildContaining(LayoutPanel panel, ILayoutElement element)
+    {
+        ILayoutElement current = element;
+        while (current.Parent != null && !ReferenceEquals(current.Parent, panel))
+            current = current.Parent;
+        return ReferenceEquals(current.Parent, panel) ? current as ILayoutPanelElement : null;
+    }
+
+    private FrameworkElement? FindControlFor(ILayoutElement model)
+        => FindVisualDescendants(_manager)
+            .FirstOrDefault(fe => fe is ILayoutControl lc && ReferenceEquals(lc.Model, model));
+
+    private static IEnumerable<FrameworkElement> FindVisualDescendants(DependencyObject parent)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is FrameworkElement fe)
+                yield return fe;
+            foreach (var g in FindVisualDescendants(child))
+                yield return g;
+        }
+    }
+
+    private LayoutAnchorable? FindAnchorable(string id)
+        => _manager.Layout.Descendents()
+            .OfType<LayoutAnchorable>()
+            .Concat(_manager.Layout.Hidden)
+            .FirstOrDefault(a => string.Equals(a.ContentId, id, StringComparison.OrdinalIgnoreCase));
+
+    private LayoutAnchorable FindRequiredAnchorable(string id)
+    {
+        if (!_byId.ContainsKey(id))
+            throw new ArgumentException($"未注册的窗口: {id}", nameof(id));
+        return FindAnchorable(id)
+               ?? throw new InvalidOperationException($"窗口 {id} 不在当前布局中");
+    }
 }

@@ -66,16 +66,18 @@
 
             <!--
                 右栏(REQ-UI-088 / 099):顶部是窗口控制组 —— 原来挂在顶栏右上角,
-                搬过来之后仍在整个窗体的右上角;上半列场景,下半列常用页面胶囊。
+                搬过来之后仍在整个窗体的右上角;搜索行之下是场景,再下面是常用页面胶囊。
                 空白处可拖动窗口、双击最大化。按钮与内容由 ShellWindow.Navigator.cs 填。
                 宽 200:菜单 36 + 三个窗口按钮 44 要放得下。
+
+                1.20.3(REQ-UI-104):底色取 Canvas、不画左边框 —— 右栏与停靠区的画布是同一片底,
+                卡片浮在上面。此前底色是 SurfaceAlt,浅色下与 Canvas 只差 1 个色阶看不出来,
+                深色下 #242625 比 #1A1D1C 亮一截,右栏就成了一块贴在窗体右边的板子。
             -->
             <Border x:Name="NavRail"
                     Grid.Column="1"
                     Width="200"
-                    Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
-                    BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
-                    BorderThickness="1,0,0,0">
+                    Background="{DynamicResource Aurora.Brush.Canvas}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -148,6 +150,9 @@
                     </ContentControl>
 
                     <!--
+                        搜索行(REQ-UI-106,1.20.3):搜索就在这里,不再弹独立浮层。
+                        输入随手筛下面两段 —— 场景与常用页面,回车打开排在最前的那个候选。
+
                         UI-05.3:错误计数(原状态栏)。1.20.0 从窗口控制组里拿出来放在搜索行:
                         右栏只有 200 宽,四个按钮之外再挤一块徽章会把关闭按钮挤出去。
                     -->
@@ -158,16 +163,33 @@
                                 Style="{StaticResource Aurora.ErrorBadge}"
                                 Visibility="Collapsed"
                                 Click="OnErrorBadgeClick" />
-                        <Button x:Name="NavSearchButton"
-                                Style="{StaticResource Aurora.Button.Base}"
-                                HorizontalContentAlignment="Left"
-                                Content="搜索…" />
+                        <Grid>
+                            <TextBox x:Name="NavQuery" />
+                            <!-- 占位提示:TextBox 自己没有 placeholder,叠一层、有字就藏 -->
+                            <TextBlock x:Name="NavQueryHint"
+                                       Margin="8,0,0,0"
+                                       IsHitTestVisible="False"
+                                       VerticalAlignment="Center"
+                                       Text="搜索场景与页面"
+                                       FontFamily="{DynamicResource Aurora.Font.Family}"
+                                       FontSize="{DynamicResource Aurora.Font.Body}"
+                                       Foreground="{DynamicResource Aurora.Brush.TextDisabled}" />
+                        </Grid>
                     </DockPanel>
 
                     <ScrollViewer Grid.Row="2"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel x:Name="NavRailItems" Margin="6,0,6,6" />
+                        <StackPanel Margin="6,0,6,6">
+                            <StackPanel x:Name="NavRailItems" />
+                            <TextBlock x:Name="NavScenesEmpty"
+                                       Margin="2,2,0,0"
+                                       Text="没有匹配的场景"
+                                       Visibility="Collapsed"
+                                       FontFamily="{DynamicResource Aurora.Font.Family}"
+                                       FontSize="{DynamicResource Aurora.Font.Small}"
+                                       Foreground="{DynamicResource Aurora.Brush.TextSecondary}" />
+                        </StackPanel>
                     </ScrollViewer>
 
                     <!-- 常用页面(REQ-UI-099):胶囊只用来拖,按住拖出来落到蓝色停靠点上嵌入;点一下什么都不做 -->
@@ -200,38 +222,6 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
-
-            <!-- 导航器搜索浮层(REQ-UI-089):盖住整个窗体,点底板或 Esc 关闭 -->
-            <Grid x:Name="NavOverlay"
-                  Grid.ColumnSpan="2"
-                  Panel.ZIndex="100"
-                  Visibility="Collapsed">
-                <Border x:Name="NavBackdrop"
-                        Background="{DynamicResource Aurora.Brush.Canvas}"
-                        Opacity="0.6" />
-                <Border x:Name="NavCard"
-                        Width="620"
-                        Margin="0,72,0,0"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Top"
-                        Style="{StaticResource Aurora.Suggest.Surface}">
-                    <DockPanel Margin="{DynamicResource Aurora.Space.PadTight}">
-                        <TextBox x:Name="NavQuery"
-                                 DockPanel.Dock="Top"
-                                 Style="{StaticResource Aurora.Segment.TextBox}" />
-                        <TextBlock x:Name="NavHint"
-                                   DockPanel.Dock="Bottom"
-                                   Margin="4,6,4,0"
-                                   Style="{StaticResource Aurora.Suggest.Hint}" />
-                        <ListBox x:Name="NavResults"
-                                 Margin="0,6,0,0"
-                                 MaxHeight="420"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
-                    </DockPanel>
-                </Border>
-            </Grid>
 
         </Grid>
     </Border>
