@@ -71,17 +71,7 @@
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"
                                           SnapsToDevicePixels="True" />
-                        <TextBlock x:Name="ActivityStatus"
-                                   Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(actions:AuroraCommandActivity.Activity).Status}"
-                                   Visibility="Collapsed"
-                                   HorizontalAlignment="Right"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,6,0"
-                                   Padding="4,1"
-                                   Background="{DynamicResource Aurora.Brush.AccentSoft}"
-                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
-                                   FontSize="{DynamicResource Aurora.Font.Small}"
-                                   IsHitTestVisible="False" />
+                        <TextBlock x:Name="ActivityStatus" Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(actions:AuroraCommandActivity.Activity).Status}" Visibility="Collapsed" Margin="0,0,6,0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False" />
                         <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}"
                                      IsIndeterminate="True" Visibility="Collapsed"
                                      Foreground="{TemplateBinding Foreground}" Background="Transparent"
@@ -1563,17 +1553,7 @@
                         <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           Content="{TemplateBinding Content}" />
-                        <TextBlock x:Name="ActivityStatus"
-                                   Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(actions:AuroraCommandActivity.Activity).Status}"
-                                   Visibility="Collapsed"
-                                   HorizontalAlignment="Right"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,6,0"
-                                   Padding="4,1"
-                                   Background="{DynamicResource Aurora.Brush.AccentSoft}"
-                                   Foreground="{DynamicResource Aurora.Brush.TextPrimary}"
-                                   FontSize="{DynamicResource Aurora.Font.Small}"
-                                   IsHitTestVisible="False" />
+                        <TextBlock x:Name="ActivityStatus" Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(actions:AuroraCommandActivity.Activity).Status}" Visibility="Collapsed" Margin="0,0,6,0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False" />
                         <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}" Foreground="{TemplateBinding Foreground}"
                                      IsIndeterminate="True" Visibility="Collapsed" IsHitTestVisible="False" />
                         </Grid>
