@@ -144,3 +144,7 @@ aurora.ui.dialog kind=confirm title=确认 body="覆盖现有文件？" danger=t
 ## 已经删掉的
 
 `aurora.scene.add` / `aurora.scene.remove` 在 1.20.0 删除，调用会得到「未知指令」；显隐用 `aurora.ui.show` / `hide`。
+
+## 1.21.1 单模块页面刷新
+
+aurora.ui.invalidate 在建页前刷新该模块动作声明。模块无需自行调用 reloadactions，也无需为热重载后的动作注册时序增加等待。
