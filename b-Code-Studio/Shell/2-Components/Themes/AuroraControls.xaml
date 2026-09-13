@@ -108,7 +108,7 @@
                                     Value="{DynamicResource Aurora.Brush.TextDisabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
-                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).IsRunning}" Value="True">
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.IsActive)}" Value="True">
                             <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
                             <Setter TargetName="ActivityStatus" Property="Visibility" Value="Visible" />
                             <Setter TargetName="Ct" Property="Opacity" Value="0.5" />
@@ -1589,7 +1589,7 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.55" />
                         </Trigger>
-                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).IsRunning}" Value="True">
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.IsActive)}" Value="True">
                             <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
                             <Setter TargetName="ActivityStatus" Property="Visibility" Value="Visible" />
                             <Setter Property="IsEnabled" Value="False" />

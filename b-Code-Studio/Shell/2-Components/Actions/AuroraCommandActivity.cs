@@ -1,12 +1,11 @@
 using System.Windows;
-using System.ComponentModel;
 
 namespace HistoryAurora.Shell.Components.Actions;
 
 /// <summary>一个动作的运行状态。可由多个按钮共享，不依附于虚拟化容器的生命周期。</summary>
-public sealed class AuroraCommandActivity : DependencyObject, INotifyPropertyChanged
+public sealed class AuroraCommandActivity : DependencyObject
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
+    public static readonly DependencyProperty IsActiveProperty = DependencyProperty.RegisterAttached("IsActive", typeof(bool), typeof(AuroraCommandActivity), new PropertyMetadata(false));
     public static readonly DependencyProperty ActivityProperty = DependencyProperty.RegisterAttached(
         "Activity", typeof(AuroraCommandActivity), typeof(AuroraCommandActivity));
 
@@ -24,9 +23,15 @@ public sealed class AuroraCommandActivity : DependencyObject, INotifyPropertyCha
     public static void SetActivity(DependencyObject target, AuroraCommandActivity? value)
     {
         target.SetValue(ActivityProperty, value);
+        if (value != null) { value._targets.Add(new WeakReference<DependencyObject>(target)); target.SetValue(IsActiveProperty, value.IsRunning); }
     }
 
-    private void PublishActive(bool active) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRunning)));
+    private readonly List<WeakReference<DependencyObject>> _targets = [];
+    private void PublishActive(bool active)
+    {
+        foreach (var r in _targets.ToArray()) if (r.TryGetTarget(out var t)) t.Dispatcher.InvokeAsync(() => t.SetValue(IsActiveProperty, active)); else _targets.Remove(r);
+    }
+
 
     /// <summary>同步进入运行态、拒绝重复执行；成功、失败及异常都恢复可操作状态。</summary>
     public async Task RunAsync(Func<Task<bool>> execute)
