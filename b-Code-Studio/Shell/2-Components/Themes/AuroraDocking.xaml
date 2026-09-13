@@ -200,8 +200,7 @@
             </Grid>
         </Border>
         <ControlTemplate.Triggers>
-            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
-                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+            <DataTrigger Binding="{Binding Tag.IsChecked, RelativeSource={RelativeSource Self}}"
                          Value="True">
                 <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
             </DataTrigger>
@@ -271,8 +270,7 @@
             </Grid>
         </Border>
         <ControlTemplate.Triggers>
-            <DataTrigger Binding="{Binding Path=(base:PageLabelMode.IsActive),
-                                      RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+            <DataTrigger Binding="{Binding Tag.IsChecked, RelativeSource={RelativeSource Self}}"
                          Value="True">
                 <Setter TargetName="PageLabelCover" Property="Visibility" Value="Visible" />
             </DataTrigger>
