@@ -94,6 +94,10 @@ public sealed class StatefulButtonContractTests
                 Assert.True(activity.IsRunning);
                 Assert.Equal(1, calls);
                 Assert.Contains(Descendants<ProgressBar>(button), bar => bar.IsVisible && bar.IsIndeterminate);
+                var progress = Descendants<ProgressBar>(button).Single();
+                Assert.InRange(progress.ActualWidth, button.ActualWidth - 4, button.ActualWidth);
+                Assert.InRange(progress.ActualHeight, button.ActualHeight - 4, button.ActualHeight);
+                Assert.True(Descendants<System.Windows.Shapes.Rectangle>(progress).Single().HasAnimatedProperties);
                 Assert.False(button.IsHitTestVisible);
                 var originalRow = button.DataContext;
                 button.DataContext = new Dictionary<string, string> { ["name"] = "另一行" };

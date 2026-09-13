@@ -16,6 +16,32 @@
 
     <!-- ================================================================ 按钮 -->
 
+    <Style x:Key="Aurora.Progress.Perimeter" TargetType="ProgressBar">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Rectangle x:Name="Track" Margin="1" RadiusX="6" RadiusY="6"
+                               Stroke="{TemplateBinding Foreground}" StrokeThickness="2"
+                               StrokeDashArray="4 6" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsVisible" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="Flow">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Track" Storyboard.TargetProperty="StrokeDashOffset"
+                                                         From="0" To="-10" Duration="0:0:0.8" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions><RemoveStoryboard BeginStoryboardName="Flow" /></Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Aurora.Button.Base" TargetType="ButtonBase">
         <Setter Property="AutomationProperties.ItemStatus" Value="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).Status}" />
         <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
@@ -45,9 +71,9 @@
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"
                                           SnapsToDevicePixels="True" />
-                        <ProgressBar x:Name="RunningProgress" Height="3" Margin="6,0,6,3"
-                                     VerticalAlignment="Bottom" IsIndeterminate="True" Visibility="Collapsed"
-                                     Foreground="{DynamicResource Aurora.Brush.Accent}" Background="Transparent"
+                        <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}"
+                                     IsIndeterminate="True" Visibility="Collapsed"
+                                     Foreground="{TemplateBinding Foreground}" Background="Transparent"
                                      IsHitTestVisible="False" />
                         </Grid>
                     </Border>
@@ -1520,13 +1546,12 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
-                            CornerRadius="{DynamicResource Aurora.Radius.Inner}"
-                            Padding="{TemplateBinding Padding}">
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}">
                         <Grid>
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           Content="{TemplateBinding Content}" />
-                        <ProgressBar x:Name="RunningProgress" Height="3" VerticalAlignment="Bottom"
+                        <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}" Foreground="{TemplateBinding Foreground}"
                                      IsIndeterminate="True" Visibility="Collapsed" IsHitTestVisible="False" />
                         </Grid>
                     </Border>
