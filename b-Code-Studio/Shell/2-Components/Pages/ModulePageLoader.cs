@@ -174,6 +174,11 @@ internal sealed class ModulePageLoader(
             return new PageLoadReport(0, 0, [], Missing);
 
         var owner = ModuleCommandProbe.ExpectedOwner(domain);
+        // Invalidation can arrive after module registration but before full discovery.
+        // Load this owner's actions directly; the global discovery cache may still
+        // describe the interval in which the module was detached.
+        if (actions != null)
+            await actions.ReloadOwnerAsync(domain, cancellation).ConfigureAwait(true);
         Drop(owner);
         _missing.RemoveAll(m => string.Equals(m.Owner, owner, StringComparison.OrdinalIgnoreCase));
 

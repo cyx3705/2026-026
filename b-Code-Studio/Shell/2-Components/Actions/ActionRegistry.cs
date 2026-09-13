@@ -107,6 +107,25 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
         return new ActionLoadReport(owners.Count, _actions.Count, skipped, Broken);
     }
 
+    /// <summary>单模块页面失效时，在建页前刷新该模块的动作，不依赖全量目录缓存。</summary>
+    internal async Task ReloadOwnerAsync(string domain, CancellationToken cancellation)
+    {
+        var owner = ModuleCommandProbe.ExpectedOwner(domain);
+        foreach (var id in _actions.Values.Where(a => a.Owner.Equals(owner, StringComparison.OrdinalIgnoreCase))
+                     .Select(a => a.Id).ToList())
+            _actions.Remove(id);
+        // Modules without an actions contract are valid; do not call an unknown command.
+        ModuleCommandProbe.ResetRemoteListCache();
+        var owners = await ModuleCommandProbe.OwnersWithSuffixAsync(
+            bus, log, Source, ActionsSuffix, cancellation).ConfigureAwait(true);
+        if (bus.Registry.TryGet(domain + ActionsSuffix, out _) || owners.Contains(domain, StringComparer.OrdinalIgnoreCase))
+            await LoadOwnerAsync(domain, [], cancellation).ConfigureAwait(true);
+        _broken.Clear();
+        foreach (var action in _actions.Values)
+            if (!bus.Registry.TryGet(action.Command, out _) && bus.RemoteExecutor == null)
+                _broken.Add($"{action.Id} → {action.Command}（注册表里没有这条指令）");
+    }
+
     /// <summary>
     /// 按 id 取动作。取不到时返回**为什么**取不到，调用方必须把它显示出来——
     /// 「按钮点了没反应」是本轮要消灭的形态，静默禁用只是把它换了个样子。

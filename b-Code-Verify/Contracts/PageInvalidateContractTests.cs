@@ -22,6 +22,57 @@ namespace HistoryAurora.Verify;
 public sealed class PageInvalidateContractTests
 {
     [Fact]
+    public void ReloadOwner_LoadsActionsBeforeRenderingAndRemovesRetiredActions()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandRegistry();
+            var log = new MemoryLog();
+            var bus = new CommandBus(registry, log);
+            var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
+            var actionId = "mercury.entry.refresh";
+            registry.Register(new CommandDescriptor
+            {
+                Name = "mercury.ui.actions",
+                Domain = "mercury",
+                Summary = "actions",
+                Readonly = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    schemaVersion = 1,
+                    owner = "HistoryMercury",
+                    actions = new[] { new { id = actionId, command = "mercury.ui.actions" } },
+                }))),
+            });
+            registry.Register(new CommandDescriptor
+            {
+                Name = "mercury.ui.describe",
+                Domain = "mercury",
+                Summary = "page",
+                Readonly = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    schemaVersion = 1,
+                    owner = "HistoryMercury",
+                    pages = new[] { new { id = "dock.manager", title = "dock", content = new
+                    {
+                        type = "panel", id = "dock.ops", rows = new[] { new { widgets = new[]
+                        { new { kind = "button", action = actionId, text = "refresh" } } } },
+                    } } },
+                }))),
+            });
+            var loader = new ModulePageLoader(bus, new FakeDocking(), log, actions: actions);
+            loader.ReloadOwnerAsync("HistoryMercury").GetAwaiter().GetResult();
+            Assert.True(actions.Resolve(actionId).Ok);
+            actionId = "mercury.entry.newrefresh";
+            loader.ReloadOwnerAsync("HistoryMercury").GetAwaiter().GetResult();
+            Assert.True(actions.Resolve(actionId).Ok);
+            Assert.False(actions.Resolve("mercury.entry.refresh").Ok);
+            Assert.DoesNotContain(log.Snapshot(), e => e.Message.Contains("未声明的动作"));
+        });
+    }
+
+    [Fact]
     public void ReloadOwner_AcceptsTheModuleNameFromTheCommandExample()
     {
         // 渲染要建真的 WPF 控件，因此整条路径必须跑在 STA 上。
