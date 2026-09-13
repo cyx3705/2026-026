@@ -6,6 +6,8 @@ namespace HistoryAurora.Shell.Components.Actions;
 public sealed class AuroraCommandActivity : DependencyObject
 {
     public static readonly DependencyProperty IsActiveProperty = DependencyProperty.RegisterAttached("IsActive", typeof(bool), typeof(AuroraCommandActivity), new PropertyMetadata(false));
+    public static bool GetIsActive(DependencyObject target) => (bool)target.GetValue(IsActiveProperty);
+    public static void SetIsActive(DependencyObject target, bool value) => target.SetValue(IsActiveProperty, value);
     public static readonly DependencyProperty ActivityProperty = DependencyProperty.RegisterAttached(
         "Activity", typeof(AuroraCommandActivity), typeof(AuroraCommandActivity));
 
