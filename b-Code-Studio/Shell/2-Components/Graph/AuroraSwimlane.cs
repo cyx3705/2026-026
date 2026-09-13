@@ -66,8 +66,8 @@ public sealed class AuroraSwimlane : UserControl
         _canvas = new Canvas { Background = Brushes.Transparent };
         _viewport = new ScrollViewer
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             Content = _canvas,
         };
         _viewport.ScrollChanged += OnScrollChanged;

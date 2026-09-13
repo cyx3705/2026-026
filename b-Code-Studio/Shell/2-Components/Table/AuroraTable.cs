@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using HistoryAurora.Shell.Components.Actions;
 using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Windows;
@@ -51,6 +53,7 @@ public sealed class AuroraTable : UserControl
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
+    private readonly ConditionalWeakTable<object, Dictionary<string, AuroraCommandActivity>> _activities = new();
     private readonly ListView _list;
     private readonly GridView _view;
     private readonly TextBlock _empty;
@@ -559,6 +562,7 @@ public sealed class AuroraTable : UserControl
             StyleProperty,
             column.CellAction.Danger ? "Aurora.Table.CellActionDanger" : "Aurora.Table.CellAction");
         button.AddHandler(ClickEvent, new RoutedEventHandler(OnCellActionClick));
+        button.AddHandler(LoadedEvent, new RoutedEventHandler(OnActionLoaded));
 
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding("[" + column.Key + "]"));
@@ -629,6 +633,7 @@ public sealed class AuroraTable : UserControl
                 StyleProperty,
                 action.Danger ? "Aurora.Table.RowActionDanger" : "Aurora.Table.RowAction");
             button.AddHandler(ClickEvent, new RoutedEventHandler(OnRowActionClick));
+            button.AddHandler(LoadedEvent, new RoutedEventHandler(OnActionLoaded));
             panel.AppendChild(button);
         }
 
@@ -710,7 +715,13 @@ public sealed class AuroraTable : UserControl
             candidate => candidate.Id.Equals(actionId, StringComparison.Ordinal));
         if (action == null)
             return;
-        RowActionInvoked?.Invoke(this, new AuroraRowActionEventArgs(action, row));
+        var activity = Activity(row, actionId);
+        _ = activity.RunAsync(() =>
+        {
+            var args = new AuroraRowActionEventArgs(action, row);
+            RowActionInvoked?.Invoke(this, args);
+            return args.Completion ?? Task.FromResult(true);
+        });
     }
 
     /// <summary>供测试与键盘路径复用：按动作和列键触发某一格。</summary>
@@ -726,7 +737,38 @@ public sealed class AuroraTable : UserControl
             return;
         if (!row.TryGetValue(columnKey, out var value) || string.IsNullOrWhiteSpace(value))
             return;
-        CellActionInvoked?.Invoke(this, new AuroraCellActionEventArgs(action, columnKey, row));
+        var activity = Activity(row, actionId);
+        _ = activity.RunAsync(() =>
+        {
+            var args = new AuroraCellActionEventArgs(action, columnKey, row);
+            CellActionInvoked?.Invoke(this, args);
+            return args.Completion ?? Task.FromResult(true);
+        });
+    }
+
+    private AuroraCommandActivity Activity(object row, string actionId)
+    {
+        var map = _activities.GetOrCreateValue(row);
+        if (!map.TryGetValue(actionId, out var activity))
+            map[actionId] = activity = new AuroraCommandActivity();
+        return activity;
+    }
+
+    private void OnActionLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element) return;
+        element.DataContextChanged -= OnActionContextChanged;
+        element.DataContextChanged += OnActionContextChanged;
+        BindActivity(element);
+    }
+
+    private void OnActionContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        => BindActivity((FrameworkElement)sender);
+
+    private void BindActivity(FrameworkElement element)
+    {
+        var id = element.Tag is CellActionTag tag ? tag.ActionId : element.Tag as string;
+        AuroraCommandActivity.SetActivity(element, element.DataContext is { } row && id != null ? Activity(row, id) : null);
     }
 
     private sealed record CellActionTag(string ActionId, string ColumnKey);

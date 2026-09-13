@@ -540,7 +540,11 @@ public static partial class PageRenderer
             grid.MinColumnWidth = min;
 
         foreach (var child in node.Children ?? [])
-            grid.Children.Add(Build(child, state));
+        {
+            var element = Build(child, state);
+            element.SetValue(AuroraGridPanel.FillHeightProperty, IsGreedy(child));
+            grid.Children.Add(element);
+        }
 
         return grid;
     }
@@ -764,8 +768,12 @@ public static partial class PageRenderer
             map[id] = action;
         }
 
+        private async Task<bool> ExecuteActionAsync(string text)
+            => (await Task.Run(() => context.Bus.ExecuteAsync(text, "UI"))).Success;
+
         private void InvokeRowAction(AuroraTable table, AuroraRowActionEventArgs e)
         {
+            e.Completion = Task.FromResult(false);
             if (!_rowActions.TryGetValue(table, out var map)
                 || !map.TryGetValue(e.Action.Id, out var declared))
                 return;
@@ -790,7 +798,7 @@ public static partial class PageRenderer
                 return;
             }
 
-            _ = context.Bus.ExecuteAsync(text, "UI");
+            e.Completion = ExecuteActionAsync(text);
         }
 
         /// <summary>把表格的单元格动作接到动作台账；同一张表只挂一次事件。</summary>
@@ -802,6 +810,7 @@ public static partial class PageRenderer
 
         private void InvokeCellAction(AuroraCellActionEventArgs e)
         {
+            e.Completion = Task.FromResult(false);
             // 与行操作一致，点击时现取声明，避免模块热重载后继续执行旧指令。
             var binding = ResolveAction(e.Action.Id);
             if (!binding.Ok)
@@ -822,7 +831,7 @@ public static partial class PageRenderer
                 return;
             }
 
-            _ = context.Bus.ExecuteAsync(text, "UI");
+            e.Completion = ExecuteActionAsync(text);
         }
 
         /// <summary>
@@ -937,77 +946,72 @@ public static partial class PageRenderer
             PageDataSource source,
             string? nodeId)
         {
-            var running = false;
+            Task? active = null;
             var requested = 0;
             string? previousText = null;
             string? revision = null;
-            async Task Reload()
+            Task Reload()
             {
                 requested++;
-                if (running)
-                    return;
-                running = true;
-                try
+                return active is { IsCompleted: false } ? active : active = ReloadCore();
+            }
+            async Task ReloadCore()
+            {
+                int generation;
+                do
                 {
-                    int generation;
-                    do
+                    generation = requested;
+                    var text = Compose(source, out var reason);
+                    if (text == null)
                     {
-                        generation = requested;
-                        var text = Compose(source, out var reason);
-                        if (text == null)
+                        table.EmptyText = reason;
+                        table.SetData(AuroraTableData.Create(columns, []));
+                        table.ShowStatus(reason);
+                        previousText = null;
+                        revision = null;
+                        continue;
+                    }
+                    var sameQuery = text == previousText;
+                    var delta = sameQuery && revision != null && !string.IsNullOrWhiteSpace(source.DeltaCommand);
+                    var command = delta
+                        ? source.DeltaCommand + text[source.Command.Length..] + " since=" + CommandParser.QuoteArg(revision!)
+                        : text;
+                    table.ShowStatus(sameQuery ? "正在刷新" : "正在加载（显示上次内容）");
+                    try
+                    {
+                        var result = await Task.Run(async () =>
                         {
-                            table.EmptyText = reason;
-                            table.SetData(AuroraTableData.Create(columns, []));
-                            table.ShowStatus(reason);
-                            previousText = null;
-                            revision = null;
+                            var payload = await FetchAsync(command).ConfigureAwait(false);
+                            if (payload == null)
+                                throw new InvalidOperationException("取数失败，详见日志");
+                            return TableUpdate.Read(payload);
+                        }).ConfigureAwait(true);
+                        // 合并刷新风暴；旧查询的结果永远不落到新选择上。
+                        if (generation != requested || text != Compose(source, out _))
                             continue;
-                        }
-                        var sameQuery = text == previousText;
-                        var delta = sameQuery && revision != null && !string.IsNullOrWhiteSpace(source.DeltaCommand);
-                        var command = delta
-                            ? source.DeltaCommand + text[source.Command.Length..] + " since=" + CommandParser.QuoteArg(revision!)
-                            : text;
-                        table.ShowStatus(sameQuery ? "正在刷新" : "正在加载（显示上次内容）");
-                        try
+                        if (result.IsDelta)
                         {
-                            var result = await Task.Run(async () =>
-                            {
-                                var payload = await FetchAsync(command).ConfigureAwait(false);
-                                if (payload == null)
-                                    throw new InvalidOperationException("取数失败，详见日志");
-                                return TableUpdate.Read(payload);
-                            }).ConfigureAwait(true);
-                            // 合并刷新风暴；旧查询的结果永远不落到新选择上。
-                            if (generation != requested || text != Compose(source, out _))
-                                continue;
-                            if (result.IsDelta)
-                            {
-                                if (!delta || string.IsNullOrWhiteSpace(source.RowKey))
-                                    throw new InvalidOperationException("增量结果需要完整快照、rowKey 和 deltaCommand");
-                                table.ApplyDelta(source.RowKey, result.Rows, result.Removes);
-                            }
-                            else
-                            {
-                                if (!string.IsNullOrWhiteSpace(source.RowKey))
-                                    result.ValidateKeys(source.RowKey);
-                                table.SetSnapshot(AuroraTableData.Create(columns, result.Rows), source.RowKey);
-                            }
-                            table.EmptyText = "暂无数据";
-                            previousText = text;
-                            revision = result.Revision;
+                            if (!delta || string.IsNullOrWhiteSpace(source.RowKey))
+                                throw new InvalidOperationException("增量结果需要完整快照、rowKey 和 deltaCommand");
+                            table.ApplyDelta(source.RowKey, result.Rows, result.Removes);
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            if (generation == requested)
-                                table.ShowStatus("刷新失败，保留原内容：" + ex.Message);
+                            if (!string.IsNullOrWhiteSpace(source.RowKey))
+                                result.ValidateKeys(source.RowKey);
+                            table.SetSnapshot(AuroraTableData.Create(columns, result.Rows), source.RowKey);
                         }
-                    } while (generation != requested);
-                }
-                finally
-                {
-                    running = false;
-                }
+                        table.EmptyText = "暂无数据";
+                        previousText = text;
+                        revision = result.Revision;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (generation == requested)
+                            table.ShowStatus("刷新失败，保留原内容：" + ex.Message);
+                    }
+                } while (generation != requested);
+
             }
             Bind(table, source, nodeId, Reload);
         }
