@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Neutral.Commands;
 using HistoryVulcan.Core.Logging;
 
 namespace HistoryAurora.Shell.HostedPages.Console;

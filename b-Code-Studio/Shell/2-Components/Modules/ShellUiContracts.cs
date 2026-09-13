@@ -1,4 +1,5 @@
 using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;

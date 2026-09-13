@@ -91,5 +91,5 @@ internal sealed class ShellConfig
     /// 由派生应用创建并传入(而非框架创建后回取),是因为工具窗口内容工厂在 ShellWindow
     /// 构造期间(DockingHost 构建默认布局时)即被调用,那时派生应用尚拿不到 window 实例。
     /// </summary>
-    public HistoryVulcan.Core.Commands.CommandSelectionState? CommandSelection { get; set; }
+    public HistoryAurora.Shell.Neutral.Commands.CommandSelectionState? CommandSelection { get; set; }
 }

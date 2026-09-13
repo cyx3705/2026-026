@@ -10,6 +10,8 @@ using System.Windows.Shell;
 using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Neutral.Commands;
+using HistoryAurora.Shell.Neutral.Storage;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
@@ -222,7 +224,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
         _panels = new Components.Panels.PanelManager(
-            HistoryVulcan.Services.AppPaths.GetPanelsDir(dataDirectory),
+            AuroraPaths.PanelsDirOf(dataDirectory),
             config.Panels,
             _bus,
             log,
@@ -570,9 +572,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         Interlocked.Increment(ref _errorCount);
         UpdateErrorBadge();
     }
-
-    /// <summary>模块托管宿主。5.0 起由 HistoryVulcan 独占，界面侧恒为 null。</summary>
-    public HistoryVulcan.Services.Modules.ModuleHost? Modules => null;
 
     /// <summary>
     /// 界面注册器。进程内形态下由模块交回宿主，宿主再转给其余 UI 模块——

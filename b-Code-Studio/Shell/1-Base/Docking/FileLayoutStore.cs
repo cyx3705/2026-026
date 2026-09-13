@@ -1,5 +1,4 @@
 using System.IO;
-using HistoryVulcan.Services;
 
 namespace HistoryAurora.Shell.Base.Docking;
 
@@ -10,8 +9,6 @@ internal sealed class FileLayoutStore : ILayoutStore
     private const string CurrentName = "layout";
 
     private readonly string _dir;
-
-    public FileLayoutStore(AppPaths paths) => _dir = paths.LayoutDir;
 
     public FileLayoutStore(string layoutDirectory)
     {
