@@ -1083,6 +1083,9 @@
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.ResetWindow(System.String)">
             <summary>把一页摆回登记时的默认位置并露面，那一格原来那一页被藏起来。</summary>
         </member>
+        <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.ReplaceWindow(HistoryAurora.Shell.Base.Docking.ToolWindowDescriptor,System.String)">
+            <summary>热重载只换内容，保留停靠节点、隐藏、分栏、浮窗与专注布局。</summary>
+        </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.Suppress">
             <summary>防再入(§14.2 清单 4):指令/API 驱动的布局变更不回声成新指令。</summary>
         </member>
@@ -2077,6 +2080,9 @@
         </member>
         <member name="P:HistoryAurora.Shell.Components.Pages.PageDescription.Id">
             <summary>指令可寻址的窗口名，要求小写、无空格、进程内唯一。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Components.Pages.PageDescription.Scene">
+            <summary>声明初值所属的模块场景。省略时兼容为 owner；不授权修改其他场景。</summary>
         </member>
         <member name="T:HistoryAurora.Shell.Components.Pages.PagePlacement">
             <summary>
@@ -3185,6 +3191,9 @@
         </member>
         <member name="E:HistoryAurora.Shell.Components.Scenes.SceneManager.Changed">
             <summary>场景集合或当前场景变了：右栏与菜单据此重画。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Components.Scenes.SceneManager.RestoreActiveLayout">
+            <summary>初次发现完成才恢复完整布局：启动前半轮还没有模块的停靠节点。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Components.Scenes.SceneManager.List">
             <summary>全部场景，按使用频次、最近使用、标题排序。</summary>
@@ -4903,7 +4912,7 @@
         <member name="M:HistoryAurora.Shell.Composition.ShellWindow.CancelScheduledDiscover">
             <summary>撤掉尚未触发的防抖发现；已经确定要整轮重拉时用，省掉紧随其后的重复一轮。</summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.DiscoverModuleSurfacesAsync">
+        <member name="F:HistoryAurora.Shell.Composition.ShellWindow._initialSceneRestored">
              <summary>
              拉取 <c>*.ui.describe</c> 页面并认领 <c>ui.window</c> 注解窗格。
             

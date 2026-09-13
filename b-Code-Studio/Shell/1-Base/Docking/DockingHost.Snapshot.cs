@@ -151,6 +151,8 @@ internal sealed partial class DockingHost : ISceneDocking
         var snapshot = DockLayoutSnapshotCodec.Deserialize(payload);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _hiddenCenterIds.Clear();
+        _orphanPlacements.Clear();
+        _lastVisiblePlacements.Clear();
 
         foreach (var (id, placement) in snapshot.Placements)
         {
@@ -517,15 +519,17 @@ internal sealed partial class DockingHost : ISceneDocking
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(seed);
         RestoreLayoutFromMaximized();
+        SetRegistrationScene(name);
 
         var initial = new HashSet<string>(seed, StringComparer.OrdinalIgnoreCase);
         var preferred = new HashSet<string>(prefer ?? [], StringComparer.OrdinalIgnoreCase);
         string? payload = null;
-        if (!rebuild)
+        var defaultsName = name + ".defaults";
+        if (!rebuild || _store.ReadNamed(defaultsName) != null)
         {
             try
             {
-                payload = _store.ReadNamed(name);
+                payload = _store.ReadNamed(rebuild ? defaultsName : name);
             }
             catch (Exception ex)
             {
@@ -549,6 +553,7 @@ internal sealed partial class DockingHost : ISceneDocking
                     SeedVisibility(name, _descriptors.Where(d => !known.Contains(d.Id)).ToArray(), initial, preferred);
 
                     restored = true;
+                    rebuild = false;
                     _seedRatiosFromLayout = true;
                 }
                 catch (Exception ex)
@@ -560,6 +565,8 @@ internal sealed partial class DockingHost : ISceneDocking
 
             if (rebuild)
             {
+                _orphanPlacements.Clear();
+                _lastVisiblePlacements.Clear();
                 BuildDefaultLayout();
                 _seedRatiosFromLayout = false;
                 foreach (var d in _descriptors)

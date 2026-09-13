@@ -41,6 +41,12 @@ internal interface IDockingService
 
     void RegisterWindow(ToolWindowDescriptor descriptor, string owner);
 
+    void ReplaceWindow(ToolWindowDescriptor descriptor, string owner)
+    {
+        UnregisterWindow(descriptor.Id);
+        RegisterWindow(descriptor, owner);
+    }
+
     void UnregisterWindow(string id);
 
     void UnregisterOwner(string owner);
@@ -62,6 +68,8 @@ internal interface IDockingService
 /// </summary>
 internal interface ISceneDocking
 {
+    void SetRegistrationScene(string id) { }
+
     IReadOnlyList<ToolWindowInfo> ListWindows();
 
     void Show(string id);
@@ -99,6 +107,8 @@ internal enum DockSide
 
 internal sealed class ToolWindowDescriptor
 {
+    public string? Scene { get; init; }
+
     public required string Id { get; init; }
 
     public required string Title { get; init; }

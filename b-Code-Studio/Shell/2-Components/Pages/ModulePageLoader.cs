@@ -125,11 +125,11 @@ internal sealed class ModulePageLoader(
 
     private async Task<PageLoadReport> ReloadCoreAsync(CancellationToken cancellation)
     {
-        foreach (var owner in _owners.ToList())
+        var owners = await DescribableOwnersAsync(cancellation).ConfigureAwait(true);
+        var liveOwners = owners.Select(ModuleCommandProbe.ExpectedOwner).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var owner in _owners.Where(owner => !liveOwners.Contains(owner)).ToList())
             Drop(owner);
         _missing.Clear();
-
-        var owners = await DescribableOwnersAsync(cancellation).ConfigureAwait(true);
         var registered = 0;
         var skipped = new List<string>();
 
@@ -179,7 +179,6 @@ internal sealed class ModulePageLoader(
         // describe the interval in which the module was detached.
         if (actions != null)
             await actions.ReloadOwnerAsync(domain, cancellation).ConfigureAwait(true);
-        Drop(owner);
         _missing.RemoveAll(m => string.Equals(m.Owner, owner, StringComparison.OrdinalIgnoreCase));
 
         var skipped = new List<string>();
@@ -212,6 +211,13 @@ internal sealed class ModulePageLoader(
         if (!parsed.Ok)
             return Skip(skipped, domain, parsed.Error!);
 
+        // 描述验证通过才换内容。同 id 的停靠节点留在原位，包括隐藏、分栏与浮窗。
+        var pageOwner = parsed.Value!.Owner;
+        channels?.DropOwner(pageOwner);
+        refresher?.DropOwner(pageOwner);
+        var pageIds = parsed.Value.Pages.Select(page => page.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var old in docking.ListWindows().Where(w => w.Owner.Equals(pageOwner, StringComparison.OrdinalIgnoreCase) && !pageIds.Contains(w.Id)))
+            docking.UnregisterWindow(old.Id);
         var registered = 0;
         foreach (var page in parsed.Value!.Pages)
         {
