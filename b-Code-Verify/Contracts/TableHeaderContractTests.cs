@@ -36,7 +36,8 @@ public sealed class TableHeaderContractTests
             Assert.Equal(GridViewColumnHeaderRole.Padding, trigger.Value);
 
             // 换的必须是**模板**：只改背景的话，右缘那条分隔线还在，看起来仍是一列。
-            var setter = Assert.Single(trigger.Setters.OfType<Setter>());
+            var setter = Assert.Single(trigger.Setters.OfType<Setter>(), item => item.Property == Control.TemplateProperty);
+            Assert.Contains(trigger.Setters.OfType<Setter>(), item => item.Property == UIElement.VisibilityProperty && Equals(item.Value, Visibility.Collapsed));
             Assert.Equal(Control.TemplateProperty, setter.Property);
         });
     }

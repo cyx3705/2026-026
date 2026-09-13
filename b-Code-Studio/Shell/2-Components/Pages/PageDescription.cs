@@ -197,6 +197,12 @@ public sealed class PageDataSource
 {
     public string Command { get; init; } = "";
 
+    /// <summary>可选增量命令；收到首次完整快照后使用，自动追加 since 参数。</summary>
+    public string? DeltaCommand { get; init; }
+
+    /// <summary>增量更新所用的唯一行键。</summary>
+    public string? RowKey { get; init; }
+
     public IReadOnlyDictionary<string, string>? Args { get; init; }
 }
 
