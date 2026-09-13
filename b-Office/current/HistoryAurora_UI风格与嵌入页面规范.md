@@ -1,4 +1,4 @@
-﻿# HistoryAurora UI 风格与嵌入页面规范
+# HistoryAurora UI 风格与嵌入页面规范
 
 > 现行视觉合同。2026-08-22 从 HistoryVulcan `b-Office/package/` 迁入本目录：界面令牌、
 > 嵌入页结构和顶栏归属属于 HistoryAurora，不再随宿主消费包发布。
@@ -91,6 +91,8 @@
 
 页面只能有一层 8px 内部圆角，不把卡片嵌套进卡片。固定格式控件应明确 `MinHeight`、网格列宽、
 `MinWidth` 或 `MaxWidth`，动态文本必须换行或省略，不能撑动顶栏和工具栏。
+
+1.20.4：表格表头同样复用 `Aurora.Panel.Surface`，高度为控件高度加底板上下 Padding，不绘制末尾空白列；表格正文仍平铺，状态栏常驻于底部。
 
 ### 控制面板与控制台顶栏用同一份底板，厚薄必须一致（REQ-UI-061）
 

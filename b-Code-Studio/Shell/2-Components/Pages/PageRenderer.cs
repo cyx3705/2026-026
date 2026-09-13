@@ -157,10 +157,7 @@ public static partial class PageRenderer
             "popup.trigger",
         };
 
-    private static readonly JsonSerializerOptions RowOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
+
 
     /// <summary>
     /// 取数参数里的通道引用。只认 <c>selection.</c> 打头的那一种——
@@ -939,7 +936,81 @@ public static partial class PageRenderer
             IReadOnlyList<AuroraTableColumn> columns,
             PageDataSource source,
             string? nodeId)
-            => Bind(table, source, nodeId, () => LoadRowsAsync(table, columns, source));
+        {
+            var running = false;
+            var requested = 0;
+            string? previousText = null;
+            string? revision = null;
+            async Task Reload()
+            {
+                requested++;
+                if (running)
+                    return;
+                running = true;
+                try
+                {
+                    int generation;
+                    do
+                    {
+                        generation = requested;
+                        var text = Compose(source, out var reason);
+                        if (text == null)
+                        {
+                            table.EmptyText = reason;
+                            table.SetData(AuroraTableData.Create(columns, []));
+                            table.ShowStatus(reason);
+                            previousText = null;
+                            revision = null;
+                            continue;
+                        }
+                        var sameQuery = text == previousText;
+                        var delta = sameQuery && revision != null && !string.IsNullOrWhiteSpace(source.DeltaCommand);
+                        var command = delta
+                            ? source.DeltaCommand + text[source.Command.Length..] + " since=" + CommandParser.QuoteArg(revision!)
+                            : text;
+                        table.ShowStatus(sameQuery ? "正在刷新" : "正在加载（显示上次内容）");
+                        try
+                        {
+                            var result = await Task.Run(async () =>
+                            {
+                                var payload = await FetchAsync(command).ConfigureAwait(false);
+                                if (payload == null)
+                                    throw new InvalidOperationException("取数失败，详见日志");
+                                return TableUpdate.Read(payload);
+                            }).ConfigureAwait(true);
+                            // 合并刷新风暴；旧查询的结果永远不落到新选择上。
+                            if (generation != requested || text != Compose(source, out _))
+                                continue;
+                            if (result.IsDelta)
+                            {
+                                if (!delta || string.IsNullOrWhiteSpace(source.RowKey))
+                                    throw new InvalidOperationException("增量结果需要完整快照、rowKey 和 deltaCommand");
+                                table.ApplyDelta(source.RowKey, result.Rows, result.Removes);
+                            }
+                            else
+                            {
+                                if (!string.IsNullOrWhiteSpace(source.RowKey))
+                                    result.ValidateKeys(source.RowKey);
+                                table.SetSnapshot(AuroraTableData.Create(columns, result.Rows), source.RowKey);
+                            }
+                            table.EmptyText = "暂无数据";
+                            previousText = text;
+                            revision = result.Revision;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (generation == requested)
+                                table.ShowStatus("刷新失败，保留原内容：" + ex.Message);
+                        }
+                    } while (generation != requested);
+                }
+                finally
+                {
+                    running = false;
+                }
+            }
+            Bind(table, source, nodeId, Reload);
+        }
 
         public void BindSwimlane(AuroraSwimlane swimlane, PageDataSource source, string? nodeId)
             => Bind(swimlane, source, nodeId, () => LoadSwimlaneAsync(swimlane, source));
@@ -957,8 +1028,9 @@ public static partial class PageRenderer
             string? nodeId,
             Func<Task> reload)
         {
-            WhenLoaded(element, reload);
-            context.Refresher?.Register(context.Owner, pageId, nodeId, ChannelsOf(source), reload);
+            Task DispatchReload() => element.Dispatcher.InvokeAsync(reload).Task.Unwrap();
+            WhenLoaded(element, DispatchReload);
+            context.Refresher?.Register(context.Owner, pageId, nodeId, ChannelsOf(source), DispatchReload);
         }
 
         private static void WhenLoaded(FrameworkElement element, Func<Task> load)
@@ -1038,43 +1110,6 @@ public static partial class PageRenderer
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private async Task LoadRowsAsync(
-            AuroraTable table,
-            IReadOnlyList<AuroraTableColumn> columns,
-            PageDataSource source)
-        {
-            var text = Compose(source, out var reason);
-            if (text == null)
-            {
-                // 空表加一句"为什么空"。空表本身说不出它是没数据还是没选中。
-                table.EmptyText = reason;
-                table.SetData(columns.Count > 0
-                    ? AuroraTableData.Create(columns, [])
-                    : AuroraTableData.Empty);
-                return;
-            }
-
-            table.EmptyText = "暂无数据";
-
-            // 模块取数可能在第一次 await 前做同步磁盘/Git 工作。放在线程池执行，
-            // 避免模块实现细节阻塞 Aurora 的 UI 线程；await 后回 UI 线程更新控件。
-            var payload = await Task.Run(() => FetchAsync(text)).ConfigureAwait(true);
-            if (payload == null)
-                return;
-
-            var rows = ParseRows(payload);
-            if (rows == null)
-            {
-                context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": 取数返回的不是合法行集: " + text);
-                return;
-            }
-
-            // 列没声明时由数据自己决定行列数（REQ-UI-007）。
-            table.SetData(columns.Count > 0
-                ? AuroraTableData.Create(columns, rows)
-                : AuroraTableData.FromRows(rows));
-        }
-
         private async Task LoadSwimlaneAsync(AuroraSwimlane swimlane, PageDataSource source)
         {
             var text = Compose(source, out var reason);
@@ -1143,18 +1178,5 @@ public static partial class PageRenderer
             return payload;
         }
 
-        private static List<Dictionary<string, string>>? ParseRows(string? payload)
-        {
-            if (string.IsNullOrWhiteSpace(payload))
-                return null;
-            try
-            {
-                return JsonSerializer.Deserialize<List<Dictionary<string, string>>>(payload, RowOptions);
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
     }
 }

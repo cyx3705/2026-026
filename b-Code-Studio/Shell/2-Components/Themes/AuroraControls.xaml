@@ -447,14 +447,14 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Padding" Value="8,0" />
-        <Setter Property="Height" Value="26" />
+        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Control}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="GridViewColumnHeader">
                     <Grid>
                         <Border x:Name="Bd"
-                                Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                                Background="Transparent"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -493,10 +493,11 @@
         -->
         <Style.Triggers>
             <Trigger Property="Role" Value="Padding">
+                <Setter Property="Visibility" Value="Collapsed" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="GridViewColumnHeader">
-                            <Border Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                            <Border Background="Transparent"
                                     SnapsToDevicePixels="True" />
                         </ControlTemplate>
                     </Setter.Value>
@@ -1059,6 +1060,47 @@
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListView">
+                    <ScrollViewer x:Name="PART_ScrollViewer" CanContentScroll="True"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer.Template>
+                            <ControlTemplate TargetType="ScrollViewer">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.ColumnSpan="2" Style="{DynamicResource Aurora.Panel.Surface}">
+                                        <GridViewHeaderRowPresenter Margin="-2,0" SnapsToDevicePixels="True"
+                                            Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.GridHeader}"
+                                            AllowsColumnReorder="True" />
+                                    </Border>
+                                    <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="1"
+                                        CanContentScroll="True" Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                    <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Row="1" Grid.Column="1"
+                                        Orientation="Vertical" Maximum="{TemplateBinding ScrollableHeight}"
+                                        ViewportSize="{TemplateBinding ViewportHeight}" Value="{TemplateBinding VerticalOffset}"
+                                        Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                                </Grid>
+                            </ControlTemplate>
+                        </ScrollViewer.Template>
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--
@@ -1125,7 +1167,7 @@
         连成表格后每一行都像一张卡片,列也就对不齐了。
     -->
     <Style x:Key="Aurora.Table.Row" TargetType="ListViewItem">
-        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Height" Value="30" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
