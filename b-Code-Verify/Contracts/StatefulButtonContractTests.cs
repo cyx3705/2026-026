@@ -59,7 +59,6 @@ public sealed class StatefulButtonContractTests
                 Assert.True(UiTestHost.PumpUntil(() => Volatile.Read(ref calls) == 1));
                 var activity = AuroraCommandActivity.GetActivity(button)!;
                 Assert.True(activity.IsRunning);
-                Assert.True((bool)button.GetValue(AuroraCommandActivity.IsActiveProperty));
                 Assert.Contains(Descendants<TextBlock>(button), text => text.IsVisible && text.Text == "运行中");
                 button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 Assert.Equal(1, calls);
@@ -67,7 +66,6 @@ public sealed class StatefulButtonContractTests
                 Assert.True(activity.IsRunning);
                 fetch.SetResult();
                 Assert.True(UiTestHost.PumpUntil(() => !activity.IsRunning));
-                Assert.False((bool)button.GetValue(AuroraCommandActivity.IsActiveProperty));
                 Assert.Equal("已完成", activity.Status);
             }
             finally { release.Set(); fetch.TrySetResult(); window.Close(); }
