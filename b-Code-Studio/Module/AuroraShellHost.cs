@@ -7,8 +7,7 @@ using HistoryVulcan.Core;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
-using HistoryVulcan.Services;
-using HistoryAurora.Shell.Base.Dialogs;
+using HistoryAurora.Shell.Neutral.Storage;
 using HistoryAurora.Shell.Composition;
 
 
@@ -158,13 +157,13 @@ internal static class AuroraShellHost
     {
         try
         {
-            var paths = new AppPaths(AppIdentity.Current.Name);
+            var paths = AuroraPaths.ForApplication(AppIdentity.Current.Name);
             var config = CreateConfig();
             var log = new MemoryShellLog();
-            var settings = new SettingsService(paths);
+            var settings = new JsonSettingsStore(paths.SettingsFile);
             var window = new ShellWindow(
                 config,
-                new FileLayoutStore(paths),
+                new FileLayoutStore(paths.LayoutDir),
                 log,
                 settings,
                 paths.Root);
@@ -262,13 +261,8 @@ internal static class AuroraShellHost
         window.Commands.ShouldUseRemoteCommand = (text, source) =>
             ShouldUseRemote(window.Commands.Registry, context.Bus.Registry, text, source);
 
-        // 反向：宿主收到界面命令时打回来。进程内直接指向界面总线，不经网关。
-        context.Bus.FrontendExecutor = (name, source, cancellation) =>
-            window.Dispatcher.InvokeAsync(() => DispatchFrontendCommand(window, name, source, cancellation)).Task.Unwrap();
-
-        var uiConfirm = new MessageBoxConfirmation(window);
-        context.Bus.Confirmation = uiConfirm;
-        context.Bus.ConfirmationRouter = (_, prompt) => uiConfirm.Confirm(prompt);
+        // 反向中继、二次确认与界面线程不在这里改写宿主总线：宿主 5.4 起由 AuroraFrontend
+        // 经 IModuleContext.RegisterFrontend 一次登记（见 AuroraBusinessComposition.Attach）。
 
         window.AttachHostBus(context.Bus);
     }
@@ -320,7 +314,7 @@ internal static class AuroraShellHost
         }
     }
 
-    private static Task<CommandResult> DispatchFrontendCommand(
+    internal static Task<CommandResult> DispatchFrontendCommand(
         ShellWindow window, string name, string source, CancellationToken cancellation)
     {
         if (name.Equals("vulcan.app.show", StringComparison.OrdinalIgnoreCase)

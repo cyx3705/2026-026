@@ -1,7 +1,4 @@
-using System.Windows.Threading;
-using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
 
 namespace HistoryAurora.Module;
@@ -11,12 +8,12 @@ namespace HistoryAurora.Module;
 ///
 /// 5.0 起宿主只注入总线与指令登记口，不再编排 CreateUi / DestroyUi，
 /// 也不再向其余模块转发 IShellUiProvider。界面在 Attach 里启动，
-/// 卸载走 <see cref="IDisposable"/>。
+/// 卸载走 <see cref="IDisposable"/>。宿主 5.4 起前端经 RegisterFrontend 登记，不再改写宿主总线。
 /// </summary>
 public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
 {
     private IModuleContext? _context;
-    private SynchronizationContext? _previousHostUiContext;
+    private IDisposable? _frontend;
     private bool _disposed;
 
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(20);
@@ -24,14 +21,12 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
     public void Attach(IModuleContext context)
     {
         _context = context;
-        _previousHostUiContext = context.Bus.UiContext;
         AuroraShellHost.EnsureStarted(context, ReadyTimeout);
 
-        // The host bus normally runs on the service loop. UI-annotated module
-        // commands (such as Minerva's pane factory) must create WPF objects on
-        // Aurora's STA dispatcher instead.
+        // 登记为宿主唯一前端：确认、界面线程（Minerva 窗格工厂等 UI 注解指令要在
+        // Aurora 的 STA 线程上建 WPF 对象）与 vulcan.app.* 生命周期中继一次交出。
         if (AuroraShellHost.Window is { } window)
-            context.Bus.UiContext = new DispatcherSynchronizationContext(window.Dispatcher);
+            _frontend = context.RegisterFrontend(new AuroraFrontend(window));
 
         AuroraShellHost.ShowMainWindowIdle();
     }
@@ -46,11 +41,8 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        if (_context != null)
-        {
-            _context.Bus.FrontendExecutor = null;
-            _context.Bus.UiContext = _previousHostUiContext;
-        }
+        _frontend?.Dispose();
+        _frontend = null;
         AuroraShellHost.Shutdown(log: null);
     }
 }

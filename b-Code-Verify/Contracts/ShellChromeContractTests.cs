@@ -14,7 +14,8 @@ using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Neutral.CommandSurface;
-using HistoryVulcan.Services;
+using HistoryAurora.Shell.Neutral.Commands;
+using HistoryAurora.Shell.Neutral.Storage;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Widgets;
@@ -960,10 +961,10 @@ public sealed class ShellChromeContractTests
     public void ThemeChoiceSurvivesSettingsAndWindowRecreation()
     {
         var appName = $"HistoryVulcan.Theme.Tests.{Guid.NewGuid():N}";
-        var paths = new AppPaths(appName);
+        var paths = AuroraPaths.ForApplication(appName);
         try
         {
-            var firstSettings = new SettingsService(paths);
+            var firstSettings = new JsonSettingsStore(paths.SettingsFile);
             RunShell(
                 window =>
                 {
@@ -973,7 +974,7 @@ public sealed class ShellChromeContractTests
                 },
                 settings: firstSettings);
 
-            var reloadedSettings = new SettingsService(paths);
+            var reloadedSettings = new JsonSettingsStore(paths.SettingsFile);
             Assert.Equal("dark", reloadedSettings.Get("ui.theme"));
             RunShell(
                 window =>

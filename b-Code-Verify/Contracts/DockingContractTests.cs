@@ -565,7 +565,6 @@ public sealed class DockingContractTests
 
             try
             {
-                Assert.Null(window.Modules);
                 // 界面自己不注册指令目录：vulcan.command.* 归宿主（Vulcan 4.4.0）。
                 Assert.False(window.Commands.Registry.TryGet("vulcan.command.list", out _));
                 // 两个名字都不许出现：改名前的与改名后的。

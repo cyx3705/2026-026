@@ -176,14 +176,21 @@ public sealed class AuroraDialogContractTests
     [Fact]
     public void InProcessShellClaimsHostConfirmationChannel()
     {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "b-Code-Studio",
-            "Module",
-            "AuroraShellHost.cs");
-        var source = File.ReadAllText(path);
-        Assert.Contains("new MessageBoxConfirmation(window)", source, StringComparison.Ordinal);
-        Assert.Contains("ConfirmationRouter", source, StringComparison.Ordinal);
+        var module = Path.Combine(RepositoryRoot(), "b-Code-Studio", "Module");
+        var frontend = File.ReadAllText(Path.Combine(module, "AuroraFrontend.cs"));
+        Assert.Contains("new MessageBoxConfirmation(window)", frontend, StringComparison.Ordinal);
+
+        // 宿主 5.4：确认经唯一前端登记交出，不得再改写宿主总线的确认开关。
+        var composition = File.ReadAllText(Path.Combine(RepositoryRoot(), "b-Code-Studio", "AuroraBusinessComposition.cs"));
+        Assert.Contains("RegisterFrontend(new AuroraFrontend(window))", composition, StringComparison.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(module, "*.cs").Append(Path.Combine(RepositoryRoot(), "b-Code-Studio", "AuroraBusinessComposition.cs")))
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("Bus.ConfirmationRouter", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Bus.Confirmation =", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Bus.FrontendExecutor", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Bus.UiContext =", source, StringComparison.Ordinal);
+        }
     }
 
     private static string RepositoryRoot()
