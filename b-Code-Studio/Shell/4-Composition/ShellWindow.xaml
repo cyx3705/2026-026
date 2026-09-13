@@ -181,6 +181,13 @@
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="6,0,6,6">
+                            <ToggleButton x:Name="PageAdjustmentToggle"
+                                          Content="页面调整：关"
+                                          Margin="0,0,0,8"
+                                          HorizontalContentAlignment="Left"
+                                          Style="{StaticResource Aurora.Panel.Switch}"
+                                          ToolTip="开关页面调整模式；也可按住 Ctrl 临时调整"
+                                          Click="OnPageAdjustmentClick" />
                             <StackPanel x:Name="NavRailItems" />
                             <TextBlock x:Name="NavScenesEmpty"
                                        Margin="2,2,0,0"

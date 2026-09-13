@@ -59,7 +59,7 @@ public sealed class ModulePageLoaderContractTests
     }
 
     [Fact]
-    public void Reload_DropsPreviousPagesInsteadOfAccumulating()
+    public void Reload_RebuildsContentWithoutDroppingTheOwnersLayout()
     {
         UiTestHost.RunSta(() =>
         {
@@ -71,9 +71,8 @@ public sealed class ModulePageLoaderContractTests
             loader.ReloadAsync().GetAwaiter().GetResult();
             loader.ReloadAsync().GetAwaiter().GetResult();
 
-            // 第二轮必须先撤掉 HistoryDemo 的旧页面，否则重复注册会堆成幽灵条目——
-            // 宿主侧 web.frontendcatalog 正是因为不回收，前端改名后留下了永久幻影。
-            Assert.Equal(["HistoryDemo"], docking.Dropped);
+            // 同 id 原位换内容；先撤整组会丢失用户的分栏与隐藏状态。
+            Assert.Empty(docking.Dropped);
             Assert.Equal(2, docking.Registered.Count);
         });
     }

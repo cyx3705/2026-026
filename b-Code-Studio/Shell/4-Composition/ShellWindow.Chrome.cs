@@ -159,6 +159,9 @@ internal partial class ShellWindow
         style.Setters.Add(new Setter(TabControl.TabStripPlacementProperty, Dock.Top));
         style.Setters.Add(new Setter(Control.PaddingProperty, default(Thickness)));
         style.Setters.Add(new Setter(Control.TemplateProperty, template));
+        // 模板可能由 WPF 跨热重载缓存；用框架自身的 Tag/IsChecked 连接当前实例，
+        // 避免旧 ALC 的 PageLabelMode 附加属性与新实例的属性身份不一致。
+        style.Setters.Add(new Setter(FrameworkElement.TagProperty, PageAdjustmentToggle));
 
         // 窗格样式同时应用到 AvalonDock 的独立内容宿主。Ctrl 标签态的按下与拖动必须随样式下发，
         // 不能只扫描主 DockingManager 的视觉树，否则浮窗里的页名标签收不到输入。

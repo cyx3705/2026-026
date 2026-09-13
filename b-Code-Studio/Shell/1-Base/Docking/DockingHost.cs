@@ -38,6 +38,15 @@ internal sealed partial class DockingHost : IDockingService
     private const string LayoutSource = "layout";
     private const double RatioEpsilon = 0.02;
     private const string PlacementSettingsKey = "layout.placements";
+    private string _registrationScene = "all";
+
+    public void SetRegistrationScene(string id) => _registrationScene = id;
+
+    private bool IsSceneDefault(ToolWindowDescriptor descriptor, string owner)
+        => _registrationScene.Equals("all", StringComparison.OrdinalIgnoreCase)
+           || (descriptor.Scene ?? (owner == "framework" ? "HistoryAurora" : owner))
+               .Equals(_registrationScene, StringComparison.OrdinalIgnoreCase)
+           || owner == "framework" && descriptor.Id is StandardWindowIds.Console or StandardWindowIds.Mcp;
 
     private readonly DockingManager _manager;
     private readonly ILayoutStore _store;
@@ -163,6 +172,17 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>启动时调用:恢复上次布局,失败或不存在则构建默认布局(W-07 / N-06)。</summary>
     public void Initialize()
     {
+        // 升级时保留用户已调好的每个场景作为本机注册基线，完整拓扑留在用户数据目录。
+        try
+        {
+            foreach (var name in _store.ListNamed().Where(name => !name.EndsWith(".defaults", StringComparison.Ordinal)))
+                if (_store.ReadNamed(name + ".defaults") == null && _store.ReadNamed(name) is { } saved)
+                    _store.WriteNamed(name + ".defaults", saved);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(LayoutSource, $"保留场景注册基线失败: {ex.Message}");
+        }
         LoadOrphanPlacements();
         var placementFallback = new Dictionary<string, DockPlacementSnapshot>(
             _orphanPlacements, StringComparer.OrdinalIgnoreCase);
@@ -473,7 +493,8 @@ internal sealed partial class DockingHost : IDockingService
         }
     }
 
-    public IReadOnlyList<string> ListLayouts() => _store.ListNamed();
+    public IReadOnlyList<string> ListLayouts() => _store.ListNamed()
+        .Where(name => !name.EndsWith(".defaults", StringComparison.Ordinal)).ToList();
 
     public void RegisterWindow(ToolWindowDescriptor descriptor, string owner)
     {
@@ -483,8 +504,6 @@ internal sealed partial class DockingHost : IDockingService
             throw new InvalidOperationException(
                 $"工具窗口 Id 冲突: {descriptor.Id}(禁止静默覆盖,§5.3)");
         }
-
-        RestoreLayoutFromMaximized();
 
         // 新登记的页不抢位（REQ-UI-100）：它的位置上已经有页，就留原来那一页，新来的藏着——
         // 不记账、不等位，要它露面走右栏常用页面或 aurora.ui.show。
@@ -497,7 +516,7 @@ internal sealed partial class DockingHost : IDockingService
             _owners[descriptor.Id] = owner;
             var placement = TakeOrphanPlacement(descriptor.Id);
             var hidden = placement?.Hidden ??
-                         (_hiddenCenterIds.Contains(descriptor.Id) || !descriptor.DefaultVisible);
+                         (_hiddenCenterIds.Contains(descriptor.Id) || !descriptor.DefaultVisible || !IsSceneDefault(descriptor, owner));
             var anchorable = MoveToAnchorable(descriptor);
             PlaceAtSide(
                 anchorable,
@@ -514,6 +533,37 @@ internal sealed partial class DockingHost : IDockingService
         WindowsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>热重载只换内容，保留停靠节点、隐藏、分栏、浮窗与专注布局。</summary>
+    public void ReplaceWindow(ToolWindowDescriptor descriptor, string owner)
+    {
+        if (!_byId.TryGetValue(descriptor.Id, out var previous))
+        {
+            RegisterWindow(descriptor, owner);
+            return;
+        }
+        if (!_owners[descriptor.Id].Equals(owner, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"窗口 {descriptor.Id} 已由其他模块注册");
+        var content = descriptor.ContentFactory?.Invoke();
+        using (Suppress())
+        {
+            _byId[descriptor.Id] = descriptor;
+            _descriptors[_descriptors.IndexOf(previous)] = descriptor;
+            var roots = new[] { _manager.Layout, _rootBeforeMaximize }.OfType<LayoutRoot>().Distinct();
+            foreach (var root in roots)
+            foreach (var node in root.Descendents().OfType<LayoutContent>().Concat(root.Hidden)
+                         .Where(node => node.ContentId == descriptor.Id).Distinct())
+            {
+                node.Title = descriptor.Title;
+                node.Content = content;
+            }
+            if (_contents.Remove(descriptor.Id, out var old) && !ReferenceEquals(old, content))
+                TryDispose(old, descriptor.Id);
+            if (content != null)
+                _contents[descriptor.Id] = content;
+        }
+        WindowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public void UnregisterWindow(string id)
     {
         if (!_byId.TryGetValue(id, out var descriptor))
@@ -522,6 +572,8 @@ internal sealed partial class DockingHost : IDockingService
         RestoreLayoutFromMaximized();
         using (Suppress())
         {
+            if (CapturePlacements().TryGetValue(id, out var previousPlacement))
+                _orphanPlacements[id] = previousPlacement;
             var anchorable = FindAnchorable(id);
             if (anchorable != null)
             {

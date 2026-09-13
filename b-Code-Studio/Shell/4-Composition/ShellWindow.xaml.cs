@@ -513,6 +513,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <c>aurora.host.ready</c> 依赖这一点——它要回一个说得出数的结果，
     /// 而不是把在途那一轮（问的还是半成品目录）的结果冒充成自己的。
     /// </summary>
+    private bool _initialSceneRestored;
+
     internal Task<PageLoadReport?> DiscoverModuleSurfacesAsync()
         => _discover.RunAsync(DiscoverModuleSurfacesCoreAsync);
 
@@ -527,6 +529,12 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             var report = await _pageLoader.ReloadAsync().ConfigureAwait(true);
             if (_annotationClaimer != null)
                 await _annotationClaimer.ClaimAsync().ConfigureAwait(true);
+
+            if (!_initialSceneRestored)
+            {
+                _initialSceneRestored = true;
+                _scenes.RestoreActiveLayout();
+            }
 
             // 导航器热键挂在发现这一轮，不挂在 aurora.host.ready：单独热重载 Aurora 时
             // 宿主不会再发就绪通知（1.19.0 真机实测：装上了，Mercury 那边一条都没有）。

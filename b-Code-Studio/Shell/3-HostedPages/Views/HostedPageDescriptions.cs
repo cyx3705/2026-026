@@ -29,6 +29,7 @@ internal static class HostedPageDescriptions
             {
               "id": "mcp",
               "title": "命令集",
+              "scene": "HistoryAurora",
               "placement": { "side": "center", "ratio": 0.5, "visible": true, "singleton": true },
               "content": {
                 "type": "stack",
@@ -91,6 +92,7 @@ internal static class HostedPageDescriptions
             {
               "id": "commanddetail",
               "title": "指令详情",
+              "scene": "HistoryAurora",
               "placement": { "side": "right", "ratio": 0.28, "visible": true, "singleton": true },
               "content": {
                 "type": "stack",
@@ -147,6 +149,7 @@ internal static class HostedPageDescriptions
             {
               "id": "modules",
               "title": "模块管理",
+              "scene": "HistoryAurora",
               "placement": { "side": "right", "ratio": 0.32, "visible": true, "singleton": true },
               "content": {
                 "type": "stack",
@@ -184,6 +187,7 @@ internal static class HostedPageDescriptions
             {
               "id": "components",
               "title": "组件测试",
+              "scene": "HistoryAurora",
               "placement": { "side": "center", "visible": true, "singleton": true },
               "content": {
                 "type": "stack",

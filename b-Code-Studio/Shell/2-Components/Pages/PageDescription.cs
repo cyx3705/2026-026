@@ -32,6 +32,9 @@ public sealed class PageDescription
 
     public string Title { get; init; } = "";
 
+    /// <summary>声明初值所属的模块场景。省略时兼容为 owner；不授权修改其他场景。</summary>
+    public string? Scene { get; init; }
+
     public PagePlacement Placement { get; init; } = new();
 
     public PageNode? Content { get; init; }
@@ -302,6 +305,8 @@ public static class PageDescriptionReader
 
         foreach (var page in set.Pages)
         {
+            if (page.Scene != null && !string.Equals(page.Scene, set.Owner, StringComparison.OrdinalIgnoreCase))
+                return PageDescriptionParse.Fail($"页面 {page.Id} 只能声明自己的模块场景 {set.Owner}");
             if (string.IsNullOrWhiteSpace(page.Id))
                 return PageDescriptionParse.Fail("存在缺少 id 的页面");
             if (page.Id != page.Id.ToLowerInvariant() || page.Id.Contains(' '))
