@@ -33,4 +33,7 @@ public sealed class AuroraRowActionEventArgs(AuroraRowAction action, IReadOnlyDi
     /// <summary>被操作的行。**总是**触发时那一行，与"当前选中行"无关——
     /// 行内按钮点的是它所在的行，右键菜单点的是指针底下那一行。</summary>
     public IReadOnlyDictionary<string, string> Row { get; } = row;
+
+    /// <summary>异步消费者设置命令完成任务，组件据此显示运行态并防止重复触发。</summary>
+    public Task<bool>? Completion { get; set; }
 }

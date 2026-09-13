@@ -48,6 +48,9 @@ public sealed class AuroraCellActionEventArgs(
     public string ColumnKey { get; } = columnKey;
 
     public IReadOnlyDictionary<string, string> Row { get; } = row;
+
+    /// <summary>异步消费者设置命令完成任务，组件据此显示运行态并防止重复触发。</summary>
+    public Task<bool>? Completion { get; set; }
 }
 
 /// <summary>

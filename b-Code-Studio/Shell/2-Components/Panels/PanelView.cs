@@ -362,10 +362,14 @@ public sealed partial class PanelView : UserControl
         _setters[widget.Id!] = value => toggle.IsChecked = ParseBoolean(value);
         var action = widget.Action ?? widget.CommitAction;
         if (!string.IsNullOrWhiteSpace(action))
-            toggle.Click += (_, _) => Fire(action, new Dictionary<string, string>
+        {
+            var activity = new AuroraCommandActivity();
+            AuroraCommandActivity.SetActivity(toggle, activity);
+            toggle.Click += (_, _) => _ = activity.RunAsync(() => FireAsync(action, new Dictionary<string, string>
             {
                 ["value"] = (toggle.IsChecked == true).ToString().ToLowerInvariant(),
-            });
+            }));
+        }
         return toggle;
     }
 
@@ -460,7 +464,9 @@ public sealed partial class PanelView : UserControl
             });
             button.Content = content;
         }
-        button.Click += (_, _) => Fire(widget.Action!);
+        var activity = new AuroraCommandActivity();
+        AuroraCommandActivity.SetActivity(button, activity);
+        button.Click += (_, _) => _ = activity.RunAsync(() => FireAsync(widget.Action!));
 
         if (widget.EnabledWhen?.Selected is { Length: > 0 } channel)
         {
@@ -589,12 +595,15 @@ public sealed partial class PanelView : UserControl
     /// 模块热重载后声明会变，固化下来的那份就是下一个「点了没反应」。
     /// </summary>
     private void Fire(string actionId, IReadOnlyDictionary<string, string>? overrides = null)
+        => _ = FireAsync(actionId, overrides);
+
+    private Task<bool> FireAsync(string actionId, IReadOnlyDictionary<string, string>? overrides = null)
     {
         var binding = _actions.Resolve(actionId);
         if (!binding.Ok)
         {
             _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
-            return;
+            return Task.FromResult(false);
         }
 
         var text = ActionRegistry.BuildCommandText(
@@ -608,23 +617,23 @@ public sealed partial class PanelView : UserControl
         if (text == null)
         {
             _log.Error("panel", "面板 " + _definition.Id + ": " + error);
-            return;
+            return Task.FromResult(false);
         }
 
-        _ = RunAndRefreshAsync(text);
+        return RunAndRefreshAsync(text);
     }
 
     /// <summary>
     /// 面板动作成功后必须把本页表格再取一遍。Minerva 选完来源文件后零件已经进了
     /// 模块内存，但表只在 Loaded 取过一次空结果——不刷新就会一直空着，整页像死了。
     /// </summary>
-    private async Task RunAndRefreshAsync(string text)
+    private async Task<bool> RunAndRefreshAsync(string text)
     {
-        var result = await _bus.ExecuteAsync(text, "UI").ConfigureAwait(true);
+        var result = await Task.Run(() => _bus.ExecuteAsync(text, "UI")).ConfigureAwait(true);
         if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
-            return;
+            return result.Success;
         // 选完文件后同一帧刷新表格会叠在对话框关闭的布局上，列宽空转把主进程打满。
-        await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
-        _refresher.Refresh(_pageId, null);
+        await Dispatcher.InvokeAsync(() => _refresher.RefreshAsync(_pageId, null), DispatcherPriority.ApplicationIdle).Task.Unwrap();
+        return true;
     }
 }

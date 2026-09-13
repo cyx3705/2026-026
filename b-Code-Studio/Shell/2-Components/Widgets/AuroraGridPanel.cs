@@ -15,6 +15,11 @@ namespace HistoryAurora.Shell.Components.Widgets;
 /// </summary>
 internal sealed class AuroraGridPanel : Panel
 {
+    internal static readonly DependencyProperty FillHeightProperty = DependencyProperty.RegisterAttached(
+        "FillHeight", typeof(bool), typeof(AuroraGridPanel), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsParentMeasure));
+    private double[] _naturalHeights = [];
+    private bool[] _fillRows = [];
+
     public static readonly DependencyProperty MinColumnWidthProperty = DependencyProperty.Register(
         nameof(MinColumnWidth),
         typeof(double),
@@ -69,12 +74,26 @@ internal sealed class AuroraGridPanel : Panel
 
         var rows = (int)Math.Ceiling(children.Count / (double)Columns);
         var heights = new double[rows];
+        _fillRows = new bool[rows];
+        for (var i = 0; i < children.Count; i++)
+            _fillRows[i / Columns] |= (bool)children[i].GetValue(FillHeightProperty);
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
+            if ((bool)child.GetValue(FillHeightProperty)) continue;
             child.Measure(new Size(cell, double.PositiveInfinity));
             var row = i / Columns;
             heights[row] = Math.Max(heights[row], child.DesiredSize.Height);
+        }
+
+        _naturalHeights = heights;
+        heights = AllocateHeights(availableSize.Height, gap);
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!(bool)children[i].GetValue(FillHeightProperty)) continue;
+            children[i].Measure(new Size(cell, double.IsInfinity(availableSize.Height) ? double.PositiveInfinity : heights[i / Columns]));
+            if (double.IsInfinity(availableSize.Height))
+                heights[i / Columns] = Math.Max(heights[i / Columns], children[i].DesiredSize.Height);
         }
 
         var height = heights.Sum() + (gap * (rows - 1));
@@ -94,9 +113,7 @@ internal sealed class AuroraGridPanel : Panel
         var cell = Math.Max(1, (finalSize.Width - (gap * (Columns - 1))) / Columns);
         var rows = (int)Math.Ceiling(children.Count / (double)Columns);
 
-        var heights = new double[rows];
-        for (var i = 0; i < children.Count; i++)
-            heights[i / Columns] = Math.Max(heights[i / Columns], children[i].DesiredSize.Height);
+        var heights = AllocateHeights(finalSize.Height, gap);
 
         var y = 0d;
         for (var row = 0; row < rows; row++)
@@ -117,5 +134,17 @@ internal sealed class AuroraGridPanel : Panel
         }
 
         return finalSize;
+    }
+
+    private double[] AllocateHeights(double available, double gap)
+    {
+        var heights = (double[])_naturalHeights.Clone();
+        var count = _fillRows.Count(fill => fill);
+        if (count == 0 || double.IsInfinity(available)) return heights;
+        var fixedHeight = heights.Where((_, i) => !_fillRows[i]).Sum();
+        var share = Math.Max(0, available - fixedHeight - gap * Math.Max(0, heights.Length - 1)) / count;
+        for (var i = 0; i < heights.Length; i++)
+            if (_fillRows[i]) heights[i] = share;
+        return heights;
     }
 }

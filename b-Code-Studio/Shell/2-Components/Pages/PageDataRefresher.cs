@@ -117,6 +117,16 @@ public sealed class PageDataRefresher
             (page == null || string.Equals(entry.Page, page, StringComparison.OrdinalIgnoreCase))
             && (node == null || string.Equals(entry.Node, node, StringComparison.OrdinalIgnoreCase)));
 
+    /// <summary>与 Refresh 同样的选择规则，但等待取数完成，供按钮保持运行态。</summary>
+    public async Task<int> RefreshAsync(string? page, string? node)
+    {
+        var targets = _entries.Where(entry =>
+            (page == null || string.Equals(entry.Page, page, StringComparison.OrdinalIgnoreCase))
+            && (node == null || string.Equals(entry.Node, node, StringComparison.OrdinalIgnoreCase))).ToList();
+        await Task.WhenAll(targets.Select(entry => entry.Reload()));
+        return targets.Count;
+    }
+
     private int Refresh(Func<Entry, bool> match)
     {
         // 先拍一份快照再跑：取数是异步的，回来时可能已经有人重载了页面，

@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:actions="clr-namespace:HistoryAurora.Shell.Components.Actions"
                     xmlns:widgets="clr-namespace:HistoryAurora.Shell.Components.Widgets">
 
     <ResourceDictionary.MergedDictionaries>
@@ -16,6 +17,7 @@
     <!-- ================================================================ 按钮 -->
 
     <Style x:Key="Aurora.Button.Base" TargetType="ButtonBase">
+        <Setter Property="AutomationProperties.ItemStatus" Value="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).Status}" />
         <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
         <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
         <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
@@ -36,12 +38,18 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource Aurora.Radius.Inner}"
                             SnapsToDevicePixels="True">
+                        <Grid>
                         <ContentPresenter x:Name="Ct"
                                           Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"
                                           SnapsToDevicePixels="True" />
+                        <ProgressBar x:Name="RunningProgress" Height="3" Margin="6,0,6,3"
+                                     VerticalAlignment="Bottom" IsIndeterminate="True" Visibility="Collapsed"
+                                     Foreground="{DynamicResource Aurora.Brush.Accent}" Background="Transparent"
+                                     IsHitTestVisible="False" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -63,6 +71,12 @@
                                     Value="{DynamicResource Aurora.Brush.TextDisabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).IsRunning}" Value="True">
+                            <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Ct" Property="Opacity" Value="0.5" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Setter Property="Cursor" Value="Wait" />
+                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -447,14 +461,14 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Padding" Value="8,0" />
-        <Setter Property="Height" Value="26" />
+        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Control}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="GridViewColumnHeader">
                     <Grid>
                         <Border x:Name="Bd"
-                                Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                                Background="Transparent"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -493,10 +507,11 @@
         -->
         <Style.Triggers>
             <Trigger Property="Role" Value="Padding">
+                <Setter Property="Visibility" Value="Collapsed" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="GridViewColumnHeader">
-                            <Border Background="{DynamicResource Aurora.Brush.SurfaceAlt}"
+                            <Border Background="Transparent"
                                     SnapsToDevicePixels="True" />
                         </ControlTemplate>
                     </Setter.Value>
@@ -1059,6 +1074,47 @@
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListView">
+                    <ScrollViewer x:Name="PART_ScrollViewer" CanContentScroll="True"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer.Template>
+                            <ControlTemplate TargetType="ScrollViewer">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.ColumnSpan="2" Style="{DynamicResource Aurora.Panel.Surface}">
+                                        <GridViewHeaderRowPresenter Margin="-2,0" SnapsToDevicePixels="True"
+                                            Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.GridHeader}"
+                                            AllowsColumnReorder="True" />
+                                    </Border>
+                                    <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="1"
+                                        CanContentScroll="True" Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                    <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Row="1" Grid.Column="1"
+                                        Orientation="Vertical" Maximum="{TemplateBinding ScrollableHeight}"
+                                        ViewportSize="{TemplateBinding ViewportHeight}" Value="{TemplateBinding VerticalOffset}"
+                                        Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                                </Grid>
+                            </ControlTemplate>
+                        </ScrollViewer.Template>
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--
@@ -1125,7 +1181,7 @@
         连成表格后每一行都像一张卡片,列也就对不齐了。
     -->
     <Style x:Key="Aurora.Table.Row" TargetType="ListViewItem">
-        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Height" Value="30" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -1466,9 +1522,13 @@
                             BorderThickness="0"
                             CornerRadius="{DynamicResource Aurora.Radius.Inner}"
                             Padding="{TemplateBinding Padding}">
+                        <Grid>
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           Content="{TemplateBinding Content}" />
+                        <ProgressBar x:Name="RunningProgress" Height="3" VerticalAlignment="Bottom"
+                                     IsIndeterminate="True" Visibility="Collapsed" IsHitTestVisible="False" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
@@ -1481,6 +1541,10 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.55" />
                         </Trigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=(actions:AuroraCommandActivity.Activity).IsRunning}" Value="True">
+                            <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

@@ -75,11 +75,11 @@ internal static partial class BuiltinCommands
                 new ParameterSpec { Name = "page", Description = "只刷这一页；省略则全部", Position = 0 },
                 new ParameterSpec { Name = "node", Description = "只刷这一个节点 id", Position = 1 },
             ],
-            Handler = CommandDescriptor.Sync(ctx =>
+            Handler = async ctx =>
             {
                 var page = ctx.GetString("page");
                 var node = ctx.GetString("node");
-                var count = refresher.Refresh(
+                var count = await refresher.RefreshAsync(
                     string.IsNullOrWhiteSpace(page) ? null : page,
                     string.IsNullOrWhiteSpace(node) ? null : node);
 
@@ -94,7 +94,7 @@ internal static partial class BuiltinCommands
                     + (known.Count == 0
                         ? ""
                         : ": " + string.Join(" / ", known.Select(b => b.Page + "#" + b.Node))));
-            }),
+            },
         });
     }
 }

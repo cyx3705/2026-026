@@ -1,4 +1,7 @@
+using System.Runtime.CompilerServices;
+using HistoryAurora.Shell.Components.Actions;
 using System.Collections.Specialized;
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -50,9 +53,14 @@ public sealed class AuroraTable : UserControl
     private static readonly RoutedEvent ClickEvent =
         System.Windows.Controls.Primitives.ButtonBase.ClickEvent;
 
+    private readonly ConditionalWeakTable<object, Dictionary<string, AuroraCommandActivity>> _activities = new();
     private readonly ListView _list;
     private readonly GridView _view;
     private readonly TextBlock _empty;
+    private readonly TextBlock _status;
+    private readonly ObservableCollection<IReadOnlyDictionary<string, string>> _rows = [];
+    private DateTimeOffset? _updatedAt;
+    private bool _changingRows;
     /// <summary>数据列的权重。行操作列不在其中——它不参与分摊。</summary>
     private readonly Dictionary<GridViewColumn, double> _weights = [];
 
@@ -106,7 +114,8 @@ public sealed class AuroraTable : UserControl
         };
         _list.SetResourceReference(StyleProperty, "Aurora.Table.ListView");
         _list.SetResourceReference(ItemsControl.ItemContainerStyleProperty, "Aurora.Table.Row");
-        _list.SelectionChanged += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
+        _list.SelectionChanged += (_, _) => { if (!_changingRows) SelectionChanged?.Invoke(this, EventArgs.Empty); };
+        _list.ItemsSource = _rows;
         _list.PreviewMouseRightButtonDown += OnRowRightButtonDown;
         _list.ContextMenuOpening += OnRowContextMenuOpening;
         SizeChanged += OnHostSizeChanged;
@@ -121,7 +130,15 @@ public sealed class AuroraTable : UserControl
 
         var surface = new Border { Child = new Grid { Children = { _list, _empty } } };
         surface.SetResourceReference(StyleProperty, "Aurora.Table.Surface");
+        _status = new TextBlock { Margin = new Thickness(8, 4, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        _status.SetResourceReference(StyleProperty, "Aurora.Text.Caption");
+        var layout = (Grid)surface.Child;
+        layout.RowDefinitions.Add(new RowDefinition());
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(_status, 1);
+        layout.Children.Add(_status);
         Content = surface;
+        ShowStatus("尚未加载");
 
         // GridView 是 DependencyObject 而非 FrameworkElement，拿不到 SetResourceReference；
         // 表头样式只能在进入可视树后按键查一次。它本身内部全用 DynamicResource 取色，
@@ -183,14 +200,116 @@ public sealed class AuroraTable : UserControl
         => (_view.Columns.Select(column => column.Header as string ?? "").ToList(), _list.ContextMenu);
 
     /// <summary>换一份数据并重建列。传 null 等同清空。</summary>
-    public void SetData(AuroraTableData? data)
+    public void SetData(AuroraTableData? data) => SetSnapshot(data, null);
+
+    internal void SetSnapshot(AuroraTableData? data, string? rowKey)
     {
-        _data = data ?? AuroraTableData.Empty;
-        RestartWidthLayout();
-        RebuildColumns();
-        _list.ItemsSource = BuildRows(_data);
+        data ??= AuroraTableData.Empty;
+        var columnsChanged = !_data.Columns.SequenceEqual(data.Columns);
+        _data = data;
+        if (columnsChanged)
+            RebuildColumns();
+        var rows = BuildRows(_data);
+        var selected = SelectedIndex;
+        var oldSelection = SelectedRow;
+        var selectedKey = rowKey == null ? null : oldSelection?.GetValueOrDefault(rowKey);
+        _changingRows = true;
+        try
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (i >= _rows.Count)
+                    _rows.Add(rows[i]);
+                else if (!SameRow(_rows[i], rows[i]))
+                    _rows[i] = rows[i];
+            }
+            while (_rows.Count > rows.Count)
+                _rows.RemoveAt(_rows.Count - 1);
+            if (selected >= 0 && selected < _rows.Count)
+                SelectedIndex = selected;
+            if (rowKey != null && selectedKey != null)
+                _list.SelectedItem = _rows.FirstOrDefault(row => row.GetValueOrDefault(rowKey) == selectedKey);
+        }
+        finally { _changingRows = false; }
+        NotifySelection(oldSelection);
         _empty.Visibility = _data.RowCount == 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplyHeaderStyle();
+        RestartWidthLayout();
+        _updatedAt = DateTimeOffset.Now;
+        ShowStatus("已更新");
+    }
+
+    private void NotifySelection(IReadOnlyDictionary<string, string>? previous)
+    {
+        var current = SelectedRow;
+        if (previous == null ? current != null : current == null || !SameRow(previous, current))
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static bool SameRow(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right)
+        => left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var value) && value == pair.Value);
+
+    /// <summary>常驻显示加载状态；保留最后成功更新时间和当前行数。</summary>
+    public void ShowStatus(string message)
+    {
+        _status.Text = $"{message} · {RowCount} 条 · 更新时间：{(_updatedAt is { } time ? time.ToString("yyyy-MM-dd HH:mm:ss") : "—")}";
+        _status.ToolTip = _status.Text;
+    }
+
+    /// <summary>按唯一行键局部更新；upserts 合并字段，新增行追加，removes 删除行。输入无效时整批拒绝。</summary>
+    public void ApplyDelta(string rowKey, IReadOnlyList<IReadOnlyDictionary<string, string>> upserts, IReadOnlyList<string>? removes = null)
+    {
+        Dispatcher.VerifyAccess();
+        ArgumentException.ThrowIfNullOrWhiteSpace(rowKey);
+        ArgumentNullException.ThrowIfNull(upserts);
+        var current = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < _rows.Count; i++)
+        {
+            if (!_rows[i].TryGetValue(rowKey, out var key) || string.IsNullOrEmpty(key) || !current.TryAdd(key, i))
+                throw new ArgumentException("现有行缺少唯一行键：" + rowKey);
+        }
+        var updates = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var row in upserts)
+        {
+            if (row == null || !row.TryGetValue(rowKey, out var key) || string.IsNullOrEmpty(key) || !updates.TryAdd(key, row))
+                throw new ArgumentException("更新行缺少唯一行键或行键重复：" + rowKey);
+        }
+        var deleted = new HashSet<string>(removes ?? [], StringComparer.Ordinal);
+        if (deleted.Overlaps(updates.Keys))
+            throw new ArgumentException("同一行不能同时更新与删除");
+        var oldSelection = SelectedRow;
+        var selectedKey = oldSelection?.GetValueOrDefault(rowKey);
+        _changingRows = true;
+        try
+        {
+            foreach (var (key, patch) in updates)
+            {
+                var row = current.TryGetValue(key, out var index)
+                    ? new Dictionary<string, string>(_rows[index], StringComparer.Ordinal)
+                    : new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var pair in patch)
+                    row[pair.Key] = pair.Value ?? "";
+                foreach (var column in _data.Columns)
+                    row.TryAdd(column.Key, "");
+                if (current.ContainsKey(key))
+                {
+                    if (!SameRow(_rows[index], row))
+                        _rows[index] = row;
+                }
+                else
+                    _rows.Add(row);
+            }
+            foreach (var index in deleted.Where(current.ContainsKey).Select(key => current[key]).OrderDescending())
+                _rows.RemoveAt(index);
+            _data = AuroraTableData.Create(_data.Columns, _rows);
+            if (selectedKey != null)
+                _list.SelectedItem = _rows.FirstOrDefault(row => row.GetValueOrDefault(rowKey) == selectedKey);
+        }
+        finally { _changingRows = false; }
+        NotifySelection(oldSelection);
+        _empty.Visibility = RowCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _updatedAt = DateTimeOffset.Now;
+        ShowStatus("已更新");
         RestartWidthLayout();
     }
 
@@ -443,6 +562,7 @@ public sealed class AuroraTable : UserControl
             StyleProperty,
             column.CellAction.Danger ? "Aurora.Table.CellActionDanger" : "Aurora.Table.CellAction");
         button.AddHandler(ClickEvent, new RoutedEventHandler(OnCellActionClick));
+        button.AddHandler(LoadedEvent, new RoutedEventHandler(OnActionLoaded));
 
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetBinding(TextBlock.TextProperty, new Binding("[" + column.Key + "]"));
@@ -513,6 +633,7 @@ public sealed class AuroraTable : UserControl
                 StyleProperty,
                 action.Danger ? "Aurora.Table.RowActionDanger" : "Aurora.Table.RowAction");
             button.AddHandler(ClickEvent, new RoutedEventHandler(OnRowActionClick));
+            button.AddHandler(LoadedEvent, new RoutedEventHandler(OnActionLoaded));
             panel.AppendChild(button);
         }
 
@@ -594,7 +715,13 @@ public sealed class AuroraTable : UserControl
             candidate => candidate.Id.Equals(actionId, StringComparison.Ordinal));
         if (action == null)
             return;
-        RowActionInvoked?.Invoke(this, new AuroraRowActionEventArgs(action, row));
+        var activity = Activity(row, actionId);
+        _ = activity.RunAsync(() =>
+        {
+            var args = new AuroraRowActionEventArgs(action, row);
+            RowActionInvoked?.Invoke(this, args);
+            return args.Completion ?? Task.FromResult(true);
+        });
     }
 
     /// <summary>供测试与键盘路径复用：按动作和列键触发某一格。</summary>
@@ -610,7 +737,38 @@ public sealed class AuroraTable : UserControl
             return;
         if (!row.TryGetValue(columnKey, out var value) || string.IsNullOrWhiteSpace(value))
             return;
-        CellActionInvoked?.Invoke(this, new AuroraCellActionEventArgs(action, columnKey, row));
+        var activity = Activity(row, actionId);
+        _ = activity.RunAsync(() =>
+        {
+            var args = new AuroraCellActionEventArgs(action, columnKey, row);
+            CellActionInvoked?.Invoke(this, args);
+            return args.Completion ?? Task.FromResult(true);
+        });
+    }
+
+    private AuroraCommandActivity Activity(object row, string actionId)
+    {
+        var map = _activities.GetOrCreateValue(row);
+        if (!map.TryGetValue(actionId, out var activity))
+            map[actionId] = activity = new AuroraCommandActivity();
+        return activity;
+    }
+
+    private void OnActionLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element) return;
+        element.DataContextChanged -= OnActionContextChanged;
+        element.DataContextChanged += OnActionContextChanged;
+        BindActivity(element);
+    }
+
+    private void OnActionContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        => BindActivity((FrameworkElement)sender);
+
+    private void BindActivity(FrameworkElement element)
+    {
+        var id = element.Tag is CellActionTag tag ? tag.ActionId : element.Tag as string;
+        AuroraCommandActivity.SetActivity(element, element.DataContext is { } row && id != null ? Activity(row, id) : null);
     }
 
     private sealed record CellActionTag(string ActionId, string ColumnKey);
