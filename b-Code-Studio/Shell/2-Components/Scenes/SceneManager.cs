@@ -85,6 +85,7 @@ internal sealed class SceneManager
         _usage = usage;
         _log = log;
         _state = SceneState.Parse(settings.Get(SettingsKey), log);
+        _docking.SetRegistrationScene(ActiveId);
         RefreshKnown();
     }
 
@@ -92,6 +93,13 @@ internal sealed class SceneManager
     public event EventHandler? Changed;
 
     public string ActiveId => _state.Active ?? AllId;
+
+    /// <summary>初次发现完成才恢复完整布局：启动前半轮还没有模块的停靠节点。</summary>
+    public void RestoreActiveLayout()
+    {
+        if (Find(ActiveId) is { } active)
+            Apply(active, rebuild: false);
+    }
 
     // ---------------------------------------------------------------- 查询
 
@@ -292,36 +300,7 @@ internal sealed class SceneManager
         if (fresh.Count == 0)
             return;
 
-        var active = Find(ActiveId);
-        if (active is { Source: not SceneSource.All })
-        {
-            foreach (var window in fresh.Where(w => w.IsVisible && !IsSeeded(active, w)))
-            {
-                try
-                {
-                    _docking.Hide(window.Id);
-                }
-                catch (Exception ex)
-                {
-                    _log.Warn(LogSource, $"新登记的页面 {window.Id} 不在当前场景的初值里，隐藏失败: {ex.Message}");
-                }
-            }
-
-            // 登记不抢位（REQ-UI-100）：本场景的新页登记时，位置可能正被一个外来页占着，上面刚把外来页藏掉。
-            // 按场景初值再看一次位置——空着就露面。只看这一次，不是等位。
-            foreach (var window in fresh.Where(w => !w.IsVisible && IsSeeded(active, w)))
-            {
-                try
-                {
-                    _docking.ShowIfSeatFree(window.Id);
-                }
-                catch (Exception ex)
-                {
-                    _log.Warn(LogSource, $"新登记的页面 {window.Id} 按场景初值露面失败: {ex.Message}");
-                }
-            }
-        }
-
+        // 注册时同步决定显隐；延迟回调只更新导航，不能复活用户隐藏的页。
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

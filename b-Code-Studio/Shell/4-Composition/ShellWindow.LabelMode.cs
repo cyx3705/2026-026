@@ -43,9 +43,13 @@ internal partial class ShellWindow
         _labelPoll = new DispatcherTimer(DispatcherPriority.Input) { Interval = LabelModePollInterval };
         _labelPoll.Tick += (_, _) => PollLabelMode();
         Loaded += (_, _) => _labelPoll.Start();
+        if (IsLoaded)
+            _labelPoll.Start();
 
         _pageDrag.DragFinished += OnLabelDragFinished;
         DockManager.LayoutFloatingWindowControlCreated += OnLabelFloatingWindowCreated;
+        if (_settings.Get("aurora.pages.adjust") == "true")
+            SetLabelMode(true);
     }
 
     private void ShutdownLabelMode()
@@ -93,9 +97,18 @@ internal partial class ShellWindow
             return;
 
         _labelMode = active;
+        PageAdjustmentToggle.IsChecked = active;
+        PageAdjustmentToggle.Content = active ? "页面调整：开" : "页面调整：关";
         _pageDrag.LabelMode = active;
         PageLabelMode.SetIsActive(this, active);
         ApplyLabelModeToFloatingWindows();
+    }
+
+    private void OnPageAdjustmentClick(object sender, System.Windows.RoutedEventArgs e)
+    {
+        var active = PageAdjustmentToggle.IsChecked == true;
+        SetLabelMode(active);
+        _settings.Set("aurora.pages.adjust", active ? "true" : "false");
     }
 
     private void ApplyLabelModeToFloatingWindows()

@@ -136,17 +136,22 @@ internal sealed class PageRegistrar(
 
         try
         {
-            docking.RegisterWindow(new ToolWindowDescriptor
+            var descriptor = new ToolWindowDescriptor
             {
                 Id = page.Id,
                 Title = page.Title,
+                Scene = page.Scene ?? owner,
                 DefaultSide = ParseSide(page.Placement.Side),
                 DefaultRatio = Clamp(page.Placement.Ratio),
                 DefaultTabTarget = page.Placement.TabTarget,
                 DefaultVisible = page.Placement.Visible,
                 IsSingleton = page.Placement.Singleton,
                 ContentFactory = () => content,
-            }, owner);
+            };
+            if (docking.ListWindows().Any(w => w.Id.Equals(page.Id, StringComparison.OrdinalIgnoreCase)))
+                docking.ReplaceWindow(descriptor, owner);
+            else
+                docking.RegisterWindow(descriptor, owner);
         }
         catch (Exception ex)
         {

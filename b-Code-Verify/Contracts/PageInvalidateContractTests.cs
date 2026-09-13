@@ -104,7 +104,7 @@ public sealed class PageInvalidateContractTests
     }
 
     [Fact]
-    public void ReloadOwner_DropsTheOldPagesUnderTheOwnerName()
+    public void ReloadOwner_DoesNotDropAllPagesBeforeReplacingContent()
     {
         UiTestHost.RunSta(() =>
         {
@@ -113,8 +113,8 @@ public sealed class PageInvalidateContractTests
 
             loader.ReloadOwnerAsync("HistoryMercury").GetAwaiter().GetResult();
 
-            // 撤销用的是模块名；用域去撤会撤不掉，随后同 id 重注册就会失败。
-            Assert.Equal("HistoryMercury", Assert.Single(docking.Dropped));
+            // 同 owner 重拉保留停靠节点；撤整组会破坏当前场景的手调布局。
+            Assert.Empty(docking.Dropped);
             Assert.Equal(2, docking.Registered.Count);
         });
     }
