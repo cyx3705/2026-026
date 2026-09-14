@@ -46,7 +46,7 @@ HistoryDiana 的 `diana.log.read` 在当前进程命令总线上调用。日志�
 | `b-Code-Studio/Module/` | 模块工程与程序集元数据 |
 | `b-Code-Studio/Shell/` | 界面源码，**按层分目录**，见下 |
 | `b-Code-Studio/eng/` | 构建与门禁脚本 |
-| `b-Code-Verify/` | `Contracts` 合同测试、`Smoke` 冒烟、`ModuleSmoke` 模块装载冒烟 |
+| `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟 |
 | `b-Office/current/` | 现行合同：项目概览、技术合同、有效决策、验证合同 |
 | `b-Office/package/` | 对外消费合同编辑源 |
 | `z-Publish/` | 根部为当前候选，`history/` 为不可变发布归档。**纳入 git，排除规则不得触碰** |

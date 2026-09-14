@@ -1102,6 +1102,22 @@
         <member name="T:HistoryAurora.Shell.Base.Docking.ILayoutStore">
             <summary>布局文件存取。5.0 起从宿主 Core 迁入 Aurora。</summary>
         </member>
+        <member name="T:HistoryAurora.Shell.Base.Docking.DockingDragSession">
+             <summary>
+             一次页面拖动：按下 → 过阈值 → 浮出载体 → 系统移动循环 → 落进一格或隐藏。
+            
+             1.22（REQ-UI-120）起只有页面这一种会话。此前还有「按住一个已经浮着的窗口整窗移动」
+             （<c>DockingDragKind.Window</c>，带宿主窗口与最大化标记），它只服务独立浮窗，随独立浮窗一起删除。
+             </summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Base.Docking.DockingDragSession.#ctor(System.Int64,System.Windows.FrameworkElement,System.Windows.Point,System.Windows.Point,System.String)">
+             <summary>
+             一次页面拖动：按下 → 过阈值 → 浮出载体 → 系统移动循环 → 落进一格或隐藏。
+            
+             1.22（REQ-UI-120）起只有页面这一种会话。此前还有「按住一个已经浮着的窗口整窗移动」
+             （<c>DockingDragKind.Window</c>，带宿主窗口与最大化标记），它只服务独立浮窗，随独立浮窗一起删除。
+             </summary>
+        </member>
         <member name="T:HistoryAurora.Shell.Base.Docking.DockingHost">
              <summary>
              AvalonDock 二次封装（§14.2）。Shell 对外只暴露 <see cref="T:HistoryAurora.Shell.Base.Docking.IDockingService"/>，
@@ -1167,6 +1183,13 @@
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.Hide(System.String)">
             <summary>明确隐藏一页。它的位置就空着，不会有别的页自己补进来。</summary>
+        </member>
+        <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.FloatForDrag(System.String)">
+            <summary>
+            把一页浮出，**只给页面拖动当载体**（REQ-UI-120）。浮出之后由系统移动循环带着走，
+            落到停靠点上就进那一格，落空由拖动协调器隐藏——不会留下一个独立浮窗。
+            不在 <see cref="T:HistoryAurora.Shell.Base.Docking.IDockingService"/> 上：没有指令、菜单或模块能单独把页面浮出来。
+            </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.ResetWindow(System.String)">
             <summary>把一页摆回登记时的默认位置并露面，那一格原来那一页被藏起来。</summary>
@@ -1402,6 +1425,12 @@
             drag and no collectible-context URI lookup is performed by the probe.
             </summary>
         </member>
+        <member name="T:HistoryAurora.Shell.Base.Docking.DockContentSnapshot">
+            <summary>
+            一格里的一页。1.22（REQ-UI-120）起没有独立浮窗：旧文件里的 <c>floatingWindows</c>、
+            <c>floatingLeft/Top/Width/Height</c> 与 <c>isMaximized</c> 反序列化时直接忽略，原先浮着的页按「快照里缺的页」处理。
+            </summary>
+        </member>
         <member name="T:HistoryAurora.Shell.Base.Docking.FileLayoutStore">
             <summary>当前布局为 layout/layout.v1.json，命名方案为 layout/&lt;名称&gt;.layout.v1.json。</summary>
         </member>
@@ -1458,11 +1487,13 @@
              顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、双击页签专注、拖页签、
              拖页头移动窗口一并没有了。页面只剩两种拖法，走同一条 浮出 → 系统移动循环 → 蓝色停靠点 的路：
              <list type="bullet">
-               <item>Ctrl 标签态（REQ-UI-097）：按住 Ctrl，每一格窗格盖上写着页名的标签，按住标签拖走整页；
-                     浮窗里只有这一页时，拖的是那个浮窗本身；</item>
+               <item>Ctrl 标签态（REQ-UI-097）：按住 Ctrl，每一格窗格盖上写着页名的标签，按住标签拖走整页；</item>
                <item>右栏常用页面胶囊（REQ-UI-099）：按住拖出来。</item>
              </list>
              拖出去没落到停靠点的页隐藏（REQ-UI-098）。
+            
+             1.22（REQ-UI-120）起没有独立浮窗：浮出只是拖动途中的载体，拖完要么落进一格、要么隐藏。
+             「按住已经浮着的单页浮窗整窗移动」「多页浮窗拆出一页」「浮窗最大化」三条路因此一起删掉。
              </summary>
         </member>
         <member name="P:HistoryAurora.Shell.Base.PageDragCoordinator.LabelMode">
@@ -1475,39 +1506,30 @@
             <summary>拖动会话结束（完成或取消）。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.HandlePaneMouseLeftButtonDown(System.Object,System.Windows.Input.MouseButtonEventArgs)">
-            <summary>窗格上的按下：只认标签态下按在页名标签上的那一下，其余一律归页面内容自己。</summary>
+            <summary>
+            窗格上的按下：只认标签态下按在页名标签上的那一下，其余一律归页面内容自己。
+            整页拖走，指针在浮出载体里的落点取它在原窗格里的位置。
+            </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.BeginExternalPageDrag(System.String,System.Windows.FrameworkElement,System.Windows.Point)">
              <summary>
              从主窗体之外拖一页进来——右栏的常用页面胶囊（REQ-UI-099）。
             
              调用方已经判过拖动阈值，会话直接从「过阈值」起步。<paramref name="anchor"/> 是指针
-             在新浮窗里的落点。
+             在浮出载体里的落点。
              </summary>
-        </member>
-        <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.BeginLabelDrag(System.Windows.FrameworkElement,System.Windows.FrameworkElement,System.String,System.Windows.Input.MouseButtonEventArgs)">
-            <summary>
-            标签态下按在页名标签上：整页拖走。浮窗里只有这一页时拖的是那个浮窗本身；
-            浮窗里有好几格时把这一格拆成独立浮窗。指针在新浮窗里的落点取它在原窗格里的位置。
-            </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.ParkIfStillFloating(System.String)">
             <summary>
-            拖出去的页没有落在停靠点上（REQ-UI-098）：隐藏它。悬浮页很少单独用（用户拍板）。
-            放到 ContextIdle：AvalonDock 在系统移动循环收尾时才落停靠，等它落完再看页还在不在浮窗里。
+            拖出去的页没有落在停靠点上（REQ-UI-098）：隐藏它。
+            放到 ContextIdle：AvalonDock 在系统移动循环收尾时才落停靠，等它落完再看页还在不在载体里。
             </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.TryResolvePageId(System.Windows.DependencyObject,System.String@)">
             <summary>从窗格里任一点认出这一格的那一页（一格只有一页，就是窗格的选中页）。</summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.DetachFloatingPageAsync(HistoryAurora.Shell.Base.Docking.DockingDragSession)">
-            <summary>浮窗里有好几格时，把被拖的这一格拆成独立浮窗。</summary>
-        </member>
-        <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.BeginHostWindowGesture(System.Windows.Window,System.Windows.FrameworkElement,System.Windows.Input.MouseButtonEventArgs)">
-            <summary>单页浮窗的标签被按住：拖的是这个浮窗本身，过阈值才进系统移动循环。</summary>
-        </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.ResolveEmbeddedPaneSize(System.String)">
-            <summary>这一页此刻所在窗格的尺寸，浮出去的窗口按它开。</summary>
+            <summary>这一页此刻所在窗格的尺寸，浮出去的载体按它开。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.PageDragCoordinator.TryResolveSelectedItem(System.Object,System.String@)">
             <summary>窗格控件的选中项：可能是页签容器，也可能直接是模型。</summary>
@@ -2393,13 +2415,21 @@
              **这一层归 Aurora，不归页面作者。** 描述协议里没有任何字段能表达它，
              这是刻意的：内边距是页面与窗格之间的关系，不属于页面里的任何一个组件，
              让模块各自声明只会得到一堆互不相同的值。
+            
+             1.22 页面新风格（REQ-UI-119）由 12 收窄到 8（6 实测圆角过小、控件发僵），并与圆角绑定：
+             <c>Aurora.Radius.Page = Aurora.Radius.Inner + PagePad</c>，贴角组件与卡片同心。
+             控制台不走 <see cref="M:HistoryAurora.Shell.Components.Pages.PageRegistrar.Inset(System.Windows.FrameworkElement)"/>（停靠层要按类型认出 <c>ConsoleView</c>），
+             但取的是同一个 <see cref="P:HistoryAurora.Shell.Components.Pages.PageRegistrar.PageInset"/>，两边不可能再差出 10,8 与 12 那样的值。
              </summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Components.Pages.PageRegistrar.PageInset">
+            <summary>页面内边距。与令牌 <c>Aurora.Space.PageInset</c> 同值，由合同测试钉住。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Components.Pages.PageRegistrar.Inset(System.Windows.FrameworkElement)">
              <summary>
-             <c>Aurora.Space.Pad</c> 的值，**不走 DynamicResource**。
+             包边**不走 DynamicResource**。
             
-             间距令牌在浅色与深色里取值相同（都是 12），不随主题变化；而要让
+             间距令牌在浅色与深色里取值相同，不随主题变化；而要让
              <c>SetResourceReference</c> 在这一层解析得到，就得把主题字典并进这个 Border——
              那会把整棵页面钉在被并进来的那一套配色上，主题一切换它不跟。
              一个不随主题变的数字，不值得用一条会破坏主题跟随的机制去取。

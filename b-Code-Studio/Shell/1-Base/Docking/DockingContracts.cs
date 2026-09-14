@@ -23,8 +23,6 @@ internal interface IDockingService
 
     void Hide(string id);
 
-    void Float(string id);
-
     void Dock(string id, DockSide side, double? ratio = null, string? targetId = null);
 
     void SetRatio(string id, double ratio);

@@ -31,7 +31,8 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <DockPanel Margin="10,8,10,10">
+    <!-- 页面内边距不在这里写:构造函数取 PageRegistrar.PageInset,与其它页同一个值(REQ-UI-119) -->
+    <DockPanel>
         <!--
             过滤器工具条(C-04 / C-07)。3.1 修订:整条是一个圆角矩形,
             内部用发丝线切成 筛选 / 关键字 / 开关 / 动作 四段,

@@ -49,11 +49,17 @@
 
     <!-- UI-02.1 / Q-4:Win10 IoT 无系统窗口圆角,窗体外缘恒为直角 -->
     <CornerRadius x:Key="Aurora.Radius.Window">0</CornerRadius>
-    <!-- Q-4:窗体内部唯一圆角值 -->
+    <!--
+        REQ-UI-119(1.22 页面新风格):页面与组件分开两级圆角,且**同心**——
+        Page = Inner + 页面内边距(PageRegistrar.PagePad / Aurora.Space.PageInset)。
+        贴着页面四角的组件(面板底板、表头、控制台工具条)因此与卡片外缘平行。
+        三个数改任何一个都要同步另外两个,合同测试按这条等式判。
+    -->
+    <CornerRadius x:Key="Aurora.Radius.Page">16</CornerRadius>
+    <!-- 组件圆角:按钮、输入、底板、弹层。4 实测显得僵硬,回到 8 -->
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
     <!--
-        与卡片同心:卡片外圆角 8、内缩 3,故 5。停靠页签已随顶栏删除,这两个值现在
-        只服务分段工具条与 Ctrl 标签态的那枚标签。
+        停靠页签已随顶栏删除,这两个值现在只服务分段工具条与 Ctrl 标签态的那枚标签。
     -->
     <CornerRadius x:Key="Aurora.Radius.TabTop">5,5,0,0</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabInner">5</CornerRadius>
@@ -62,6 +68,8 @@
 
     <Thickness x:Key="Aurora.Space.Gap">1</Thickness>
     <Thickness x:Key="Aurora.Space.Pad">12</Thickness>
+    <!-- 页面内容相对卡片的内边距(REQ-UI-119),与 PageRegistrar.PagePad 同值 -->
+    <Thickness x:Key="Aurora.Space.PageInset">8</Thickness>
     <Thickness x:Key="Aurora.Space.PadTight">8</Thickness>
     <Thickness x:Key="Aurora.Space.ControlPad">10,4</Thickness>
 

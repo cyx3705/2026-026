@@ -62,7 +62,7 @@ if (Test-Path -LiteralPath $moduleProj) {
         $violations += 'module project must reference host assemblies with Private=false'
     }
 }
-foreach ($name in @('Contracts', 'Smoke', 'ModuleSmoke')) {
+foreach ($name in @('Contracts', 'ModuleSmoke')) {
     $proj = Join-Path $repoRoot "b-Code-Verify\$name\$name.csproj"
     if (Test-Path -LiteralPath $proj) {
         $text = Get-Content -LiteralPath $proj -Raw -Encoding UTF8

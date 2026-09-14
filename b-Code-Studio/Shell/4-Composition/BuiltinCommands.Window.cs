@@ -61,8 +61,6 @@ internal static partial class BuiltinCommands
             (d, id) => { d.Show(id); return $"{id} 已显示"; });
         RegisterWindowVerb(r, s, "aurora.ui.hide", "隐藏窗口(状态保留,可再唤出)",
             (d, id) => { d.Hide(id); return $"{id} 已隐藏"; });
-        RegisterWindowVerb(r, s, "aurora.ui.float", "把窗口浮动为独立顶层窗口",
-            (d, id) => { d.Float(id); return $"{id} 已浮动"; });
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.autohide",
@@ -116,35 +114,6 @@ internal static partial class BuiltinCommands
                     s.Docking.MaximizeWindow(id);
                     return $"{id} 已最大化";
                 });
-            }),
-        });
-
-        RegisterFrontend(r, new CommandDescriptor
-        {
-            Name = "aurora.ui.floatstate",
-            Domain = "aurora",
-            CommandClass = "ui",
-            Summary = "设置独立浮窗宿主的最大化状态",
-            Example = $"aurora.ui.floatstate name={StandardWindowIds.Console} state=toggle",
-            RequiresUiThread = true,
-            Parameters =
-            [
-                nameParam,
-                new ParameterSpec
-                {
-                    Name = "state",
-                    Description = "maximized、normal 或 toggle",
-                    Default = "toggle",
-                    Position = 1,
-                    AllowedValues = ["maximized", "normal", "toggle"],
-                },
-            ],
-            Handler = CommandDescriptor.Sync(ctx =>
-            {
-                if (ResolveWindow(s, ctx) is { } error)
-                    return error;
-                return s.Window.SetFloatingWindowState(
-                    ctx.RequireString("name"), ctx.GetString("state") ?? "toggle");
             }),
         });
 

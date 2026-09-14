@@ -81,7 +81,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Smoke" />
     <InternalsVisibleTo Include="Contracts" />
     <InternalsVisibleTo Include="ModuleSmoke" />
   </ItemGroup>

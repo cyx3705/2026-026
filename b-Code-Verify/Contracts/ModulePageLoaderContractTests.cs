@@ -237,9 +237,9 @@ public sealed class ModulePageLoaderContractTests
             var border = Assert.IsType<System.Windows.Controls.Border>(factory!());
             Assert.IsType<System.Windows.Controls.TextBlock>(border.Child);
 
-            // Aurora.Space.Pad 的值。间距令牌浅色与深色相同，因此写成数字而不是资源引用——
+            // 页面内边距（REQ-UI-119 起为 8）。间距令牌浅色与深色相同，因此不走资源引用——
             // 详见 PageRegistrar.PagePad 上的说明。
-            Assert.Equal(new System.Windows.Thickness(12), border.Padding);
+            Assert.Equal(PageRegistrar.PageInset, border.Padding);
 
             // **与自持页逐项对比**，而不是各自记一个 12。
             //
@@ -317,8 +317,6 @@ public sealed class ModulePageLoaderContractTests
         public void Show(string id) { }
 
         public void Hide(string id) { }
-
-        public void Float(string id) { }
 
         public void Dock(string id, DockSide side, double? ratio = null, string? targetId = null) { }
 

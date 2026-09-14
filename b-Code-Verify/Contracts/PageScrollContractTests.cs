@@ -102,7 +102,7 @@ public sealed class PageScrollContractTests
             var inset = PageRegistrar.Inset(new TextBlock { Text = "x" });
             Assert.True(inset.ClipToBounds);
             Assert.IsType<Border>(inset);
-            Assert.Equal(new Thickness(12), ((Border)inset).Padding);
+            Assert.Equal(PageRegistrar.PageInset, ((Border)inset).Padding);
         });
     }
 

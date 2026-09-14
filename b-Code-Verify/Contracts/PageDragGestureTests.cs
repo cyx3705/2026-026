@@ -16,13 +16,10 @@ public sealed class PageDragGestureTests
         {
             var session = new DockingDragSession(
                 1,
-                DockingDragKind.Tab,
                 new Border(),
                 new Point(10, 10),
                 new Point(12, 8),
-                "modules",
-                null,
-                false);
+                "modules");
 
             Assert.True(session.TryTransition(DockingDragState.ThresholdReached));
             Assert.True(session.TryTransition(DockingDragState.FloatRequested));
@@ -40,13 +37,10 @@ public sealed class PageDragGestureTests
         {
             var session = new DockingDragSession(
                 2,
-                DockingDragKind.Tab,
                 new Border(),
                 new Point(10, 10),
                 new Point(12, 8),
-                "modules",
-                null,
-                false);
+                "modules");
 
             session.TryTransition(DockingDragState.ThresholdReached);
             session.TryTransition(DockingDragState.FloatRequested);
@@ -55,27 +49,6 @@ public sealed class PageDragGestureTests
             Assert.True(session.ButtonReleased);
             Assert.Equal(new Point(500, 300), session.LastScreenPoint);
             Assert.Equal(DockingDragState.FloatRequested, session.State);
-        });
-    }
-
-    [Fact]
-    public void WindowDragSessionReachesMovingOnlyAfterThreshold()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var session = new DockingDragSession(
-                3,
-                DockingDragKind.Window,
-                new Border(),
-                new Point(10, 10),
-                new Point(12, 8),
-                null,
-                new Window(),
-                false);
-
-            Assert.True(session.TryTransition(DockingDragState.ThresholdReached));
-            Assert.True(session.TryTransition(DockingDragState.WindowMoving));
-            Assert.Equal(DockingDragState.WindowMoving, session.State);
         });
     }
 
@@ -139,28 +112,6 @@ public sealed class PageDragGestureTests
             horizontalThreshold: 4,
             verticalThreshold: 4));
     }
-
-    [Fact]
-    public void MaximizedWindowRequiresTwiceTheSystemDragThreshold()
-    {
-        var start = new Point(10, 10);
-
-        Assert.False(PageDragCoordinator.HasReachedDragThreshold(
-            start, new Point(17.99, 10), 4, 4, multiplier: 2));
-        Assert.True(PageDragCoordinator.HasReachedDragThreshold(
-            start, new Point(18, 10), 4, 4, multiplier: 2));
-        Assert.True(PageDragCoordinator.HasReachedDragThreshold(
-            start, new Point(10, 18), 4, 4, multiplier: 2));
-    }
-
-    [Theory]
-    [InlineData(WindowState.Normal, WindowState.Maximized)]
-    [InlineData(WindowState.Maximized, WindowState.Normal)]
-    [InlineData(WindowState.Minimized, WindowState.Maximized)]
-    public void FloatingWindowToggleHasOneDeterministicTarget(
-        WindowState current,
-        WindowState expected)
-        => Assert.Equal(expected, PageDragCoordinator.GetToggledWindowState(current));
 
     [Theory]
     [InlineData(96, 720, 520)]

@@ -218,14 +218,9 @@ public sealed class DockingContractTests
                 host.Show(StandardWindowIds.Mcp);
                 Assert.Equal(DockSide.Center, InfoOf(host, StandardWindowIds.Mcp).Side);
 
-                host.Float(StandardWindowIds.Mcp);
-                UiTestHost.Pump();
-                Assert.True(InfoOf(host, StandardWindowIds.Mcp).IsFloating);
-
                 host.Dock(StandardWindowIds.Mcp, DockSide.Right, 0.25);
                 var docked = InfoOf(host, StandardWindowIds.Mcp);
                 Assert.True(docked.IsVisible);
-                Assert.False(docked.IsFloating);
                 Assert.Equal(DockSide.Right, docked.Side);
                 Assert.IsType<LayoutAnchorable>(((DockingManager)window.Content).Layout.Descendents()
                     .OfType<LayoutContent>().Single(item => item.ContentId == StandardWindowIds.Mcp));
@@ -333,7 +328,7 @@ public sealed class DockingContractTests
 
             void DropFromFloating(LayoutAnchorable page, ILayoutContainer target)
             {
-                host.Float(page.ContentId!);
+                host.FloatForDrag(page.ContentId!);
                 UiTestHost.PumpFor(150);
                 ((ILayoutContainer)page.Parent!).RemoveChild(page);
                 switch (target)
@@ -407,8 +402,8 @@ public sealed class DockingContractTests
             try
             {
                 host.Show(StandardWindowIds.Mcp);
-                host.Float("tool");
-                host.Float("page");
+                host.FloatForDrag("tool");
+                host.FloatForDrag("page");
                 UiTestHost.Pump();
                 Assert.True(InfoOf(host, "tool").IsFloating);
                 Assert.True(InfoOf(host, "page").IsFloating);
@@ -631,7 +626,7 @@ public sealed class DockingContractTests
             Assert.True(details.CanDockAsTabbedDocument);
 
             // 拖动一律先浮出、再落停靠：从浮窗落进主文档区，留拖进来的页（REQ-UI-100）。
-            host.Float("details");
+            host.FloatForDrag("details");
             UiTestHost.Pump();
             ((ILayoutContainer)details.Parent!).RemoveChild(details);
             pane.Children.Add(details);
@@ -788,51 +783,6 @@ public sealed class DockingContractTests
         });
     }
 
-    [Fact]
-    public void FloatingCenterPageRoundTripsWithoutInvalidatingMainLayout()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var store = new MemoryLayoutStore();
-            var descriptors = new[]
-            {
-                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                Tool("business", DockSide.Center, 1),
-            };
-            var window = ShowHost(descriptors, store, out var host);
-            try
-            {
-                // 命令集留在主文档区，business 此刻被顶掉藏着：从藏着的状态直接浮出，也得报「浮着」。
-                host.Show(StandardWindowIds.Mcp);
-                host.Float("business");
-                UiTestHost.Pump();
-                Assert.True(host.ListWindows().Single(item => item.Id == "business").IsFloating);
-                host.SaveCurrentLayout();
-            }
-            finally
-            {
-                window.Close();
-            }
-
-            var recoveredManager = new DockingManager();
-            var recoveredHost = new DockingHost(
-                recoveredManager,
-                descriptors,
-                store,
-                new NullLog());
-            recoveredHost.Initialize();
-
-            var recovered = recoveredHost.ListWindows().Single(item => item.Id == "business");
-            Assert.True(recovered.IsVisible);
-            Assert.True(recovered.IsFloating);
-            var mainPane = Assert.Single(
-                recoveredManager.Layout.RootPanel.Descendents().OfType<LayoutDocumentPane>());
-            Assert.Contains(
-                mainPane.Children.OfType<LayoutAnchorable>(),
-                item => item.ContentId == StandardWindowIds.Mcp);
-        });
-    }
-
     /// <summary>
     /// 回归(2026-09-06 真机):把中央页拖出去再丢回中央区,AvalonDock 会把中央区拆成
     /// <c>LayoutDocumentPaneGroup</c> 下的两个 <c>LayoutDocumentPane</c>。
@@ -929,7 +879,7 @@ public sealed class DockingContractTests
     }
 
     [Fact]
-    public void JsonSnapshotPreservesNestedSplitsTabsSelectionAndMultipleFloatingWindows()
+    public void JsonSnapshotPreservesNestedSplitsTabsAndSelection()
     {
         UiTestHost.RunSta(() =>
         {
@@ -941,11 +891,7 @@ public sealed class DockingContractTests
                 Tool("left.bottom", DockSide.Left, 0.2),
                 Tool("right.one", DockSide.Right, 0.25),
                 Tool("right.two", DockSide.Right, 0.25),
-                Tool("float.one", DockSide.Right, 0.25),
-                Tool("float.two", DockSide.Right, 0.25),
             };
-            double savedFloatTwoWidth = 0;
-            double savedFloatTwoHeight = 0;
             double savedLeftTopHeight = 0;
             GridUnitType savedLeftTopHeightUnit = GridUnitType.Auto;
             var first = ShowHost(descriptors, store, out var firstHost);
@@ -990,13 +936,9 @@ public sealed class DockingContractTests
                 rootPanel.Children.Add(centerColumn);
                 rootPanel.Children.Add(rightPane);
                 var root = new LayoutRoot { RootPanel = rootPanel, ActiveContent = anchorables["right.two"] };
-                AddFloating(root, anchorables["float.one"], 1_000_000, 1_000_000, 720, 510);
-                AddFloating(root, anchorables["float.two"], 120, 90, 540, 360);
                 manager.Layout = root;
                 manager.UpdateLayout();
                 UiTestHost.Pump();
-                savedFloatTwoWidth = anchorables["float.two"].FloatingWidth;
-                savedFloatTwoHeight = anchorables["float.two"].FloatingHeight;
                 savedLeftTopHeight = leftTop.DockHeight.Value;
                 savedLeftTopHeightUnit = leftTop.DockHeight.GridUnitType;
 
@@ -1005,6 +947,7 @@ public sealed class DockingContractTests
                 Assert.StartsWith("{", payload, StringComparison.Ordinal);
                 Assert.Contains("\"schemaVersion\": 1", payload, StringComparison.Ordinal);
                 Assert.DoesNotContain("AvalonDock", payload, StringComparison.Ordinal);
+                Assert.DoesNotContain("floating", payload, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("$type", payload, StringComparison.Ordinal);
             }
             finally
@@ -1042,20 +985,6 @@ public sealed class DockingContractTests
                 restoredHost.Show("right.one");
                 Assert.Same(rightPane, one.Parent);
                 Assert.Equal(["right.one"], rightPane.Children.Select(item => item.ContentId));
-
-                Assert.Equal(2, manager.Layout.FloatingWindows.Count);
-                var floating = manager.Layout.FloatingWindows
-                    .SelectMany(window => window.Descendents().OfType<LayoutAnchorable>())
-                    .ToDictionary(item => item.ContentId!);
-                Assert.Equal(2, floating.Count);
-                Assert.InRange(
-                    floating["float.one"].FloatingLeft,
-                    SystemParameters.VirtualScreenLeft,
-                    SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth);
-                Assert.InRange(
-                    Math.Abs(floating["float.two"].FloatingWidth - savedFloatTwoWidth), 0, 1);
-                Assert.InRange(
-                    Math.Abs(floating["float.two"].FloatingHeight - savedFloatTwoHeight), 0, 1);
             }
             finally
             {
@@ -1916,25 +1845,6 @@ public sealed class DockingContractTests
         DefaultRatio = ratio,
         ContentFactory = () => new Border(),
     };
-
-    private static void AddFloating(
-        LayoutRoot root,
-        LayoutAnchorable content,
-        double left,
-        double top,
-        double width,
-        double height)
-    {
-        content.FloatingLeft = left;
-        content.FloatingTop = top;
-        content.FloatingWidth = width;
-        content.FloatingHeight = height;
-        var pane = new LayoutAnchorablePane(content);
-        root.FloatingWindows.Add(new LayoutAnchorableFloatingWindow
-        {
-            RootPanel = new LayoutAnchorablePaneGroup(pane),
-        });
-    }
 
     private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent)
         where T : DependencyObject

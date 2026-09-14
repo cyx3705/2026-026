@@ -43,6 +43,8 @@
     <!-- ================================================================ 形状 -->
 
     <CornerRadius x:Key="Aurora.Radius.Window">0</CornerRadius>
+    <!-- 同心:Page = Inner + PageInset(REQ-UI-119),见浅色令牌 -->
+    <CornerRadius x:Key="Aurora.Radius.Page">16</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabTop">5,5,0,0</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabInner">5</CornerRadius>
@@ -51,6 +53,7 @@
 
     <Thickness x:Key="Aurora.Space.Gap">1</Thickness>
     <Thickness x:Key="Aurora.Space.Pad">12</Thickness>
+    <Thickness x:Key="Aurora.Space.PageInset">8</Thickness>
     <Thickness x:Key="Aurora.Space.PadTight">8</Thickness>
     <Thickness x:Key="Aurora.Space.ControlPad">10,4</Thickness>
 

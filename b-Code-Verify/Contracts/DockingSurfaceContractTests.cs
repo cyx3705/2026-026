@@ -50,7 +50,8 @@ public sealed class DockingSurfaceContractTests
     {
         // 授权给产品程序集等于把刚收起来的停靠面重新放开一条缝，
         // 而失效的授权（分仓后不再编译本程序集的宿主测试）看起来与有效的一模一样。
-        string[] allowed = ["Smoke", "Contracts", "ModuleSmoke"];
+        // 1.22（REQ-UI-120）删除只有一条占位用例的 Smoke 工程，授权随之收回。
+        string[] allowed = ["Contracts", "ModuleSmoke"];
 
         var granted = Aurora.GetCustomAttributes<InternalsVisibleToAttribute>()
             .Select(attribute => attribute.AssemblyName.Split(',')[0].Trim())

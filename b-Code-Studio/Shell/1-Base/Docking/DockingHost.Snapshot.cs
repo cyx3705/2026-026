@@ -24,11 +24,6 @@ internal sealed partial class DockingHost : ISceneDocking
         return new DockLayoutSnapshot
         {
             Root = CaptureNode(root.RootPanel),
-            FloatingWindows = root.FloatingWindows
-                .Select(CaptureFloatingWindow)
-                .Where(item => item != null)
-                .Cast<DockFloatingWindowSnapshot>()
-                .ToList(),
             AutoHideGroups = CaptureAutoHideGroups(root),
             Placements = CapturePlacements(),
             ActiveContentId = root.ActiveContent?.ContentId,
@@ -98,31 +93,7 @@ internal sealed partial class DockingHost : ISceneDocking
     private static DockContentSnapshot? CaptureContent(LayoutContent content)
         => string.IsNullOrWhiteSpace(content.ContentId)
             ? null
-            : new DockContentSnapshot
-            {
-                Id = content.ContentId,
-                FloatingLeft = FiniteOrZero(content.FloatingLeft),
-                FloatingTop = FiniteOrZero(content.FloatingTop),
-                FloatingWidth = FiniteOrZero(content.FloatingWidth),
-                FloatingHeight = FiniteOrZero(content.FloatingHeight),
-                IsMaximized = content.IsMaximized,
-            };
-
-    private DockFloatingWindowSnapshot? CaptureFloatingWindow(LayoutFloatingWindow window)
-        => window switch
-        {
-            LayoutAnchorableFloatingWindow anchorable => new DockFloatingWindowSnapshot
-            {
-                Kind = "anchorable",
-                Root = CaptureNode(anchorable.RootPanel),
-            },
-            LayoutDocumentFloatingWindow document => new DockFloatingWindowSnapshot
-            {
-                Kind = "document",
-                Root = CaptureNode(document.RootPanel),
-            },
-            _ => null,
-        };
+            : new DockContentSnapshot { Id = content.ContentId };
 
     private static List<DockAutoHideGroupSnapshot> CaptureAutoHideGroups(LayoutRoot root)
     {
@@ -164,7 +135,6 @@ internal sealed partial class DockingHost : ISceneDocking
                            ?? throw new InvalidDataException("布局快照根节点必须是 Panel");
         var root = new LayoutRoot { RootPanel = restoredRoot };
         RestoreAutoHideGroups(root, snapshot.AutoHideGroups, seen);
-        RestoreFloatingWindows(root, snapshot.FloatingWindows, seen);
         _manager.Layout = root;
         root.CollectGarbage();
 
@@ -277,51 +247,7 @@ internal sealed partial class DockingHost : ISceneDocking
         if (!seen.Add(snapshot.Id))
             throw new InvalidDataException($"布局快照包含重复窗口: {snapshot.Id}");
 
-        LayoutContent content = CreateAnchorable(descriptor);
-        ApplyFloatingGeometry(content, snapshot);
-        return content;
-    }
-
-    private void RestoreFloatingWindows(
-        LayoutRoot root,
-        IEnumerable<DockFloatingWindowSnapshot> windows,
-        HashSet<string> seen)
-    {
-        foreach (var window in windows)
-        {
-            var restored = RestoreNode(window.Root, seen);
-            switch (window.Kind)
-            {
-                case "anchorable" when restored is LayoutAnchorablePaneGroup anchorableGroup &&
-                                         anchorableGroup.ChildrenCount > 0:
-                    root.FloatingWindows.Add(new LayoutAnchorableFloatingWindow
-                    {
-                        RootPanel = anchorableGroup,
-                    });
-                    break;
-                case "document" when restored is LayoutDocumentPaneGroup documentGroup &&
-                                       documentGroup.ChildrenCount > 0:
-                    root.FloatingWindows.Add(new LayoutDocumentFloatingWindow
-                    {
-                        RootPanel = documentGroup,
-                    });
-                    break;
-            }
-        }
-    }
-
-    private void RestoreFloatingWindowsAfterMaximize(LayoutRoot root, string payload)
-    {
-        var snapshot = DockLayoutSnapshotCodec.Deserialize(payload);
-        var seen = root.RootPanel.Descendents()
-            .OfType<LayoutContent>()
-            .Select(item => item.ContentId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Cast<string>()
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        root.FloatingWindows.Clear();
-        RestoreFloatingWindows(root, snapshot.FloatingWindows, seen);
+        return CreateAnchorable(descriptor);
     }
 
     private void RestoreAutoHideGroups(
@@ -405,47 +331,6 @@ internal sealed partial class DockingHost : ISceneDocking
         var property = element.GetType().GetProperty(name);
         if (property is { CanWrite: true })
             property.SetValue(element, value);
-    }
-
-    private static void ApplyFloatingGeometry(
-        LayoutContent content,
-        DockContentSnapshot snapshot)
-    {
-        var workArea = SystemParameters.WorkArea;
-        var width = NormalizeFloatingSize(snapshot.FloatingWidth, 640, workArea.Width);
-        var height = NormalizeFloatingSize(snapshot.FloatingHeight, 480, workArea.Height);
-        var left = double.IsFinite(snapshot.FloatingLeft) ? snapshot.FloatingLeft : workArea.Left;
-        var top = double.IsFinite(snapshot.FloatingTop) ? snapshot.FloatingTop : workArea.Top;
-
-        var virtualArea = new Rect(
-            SystemParameters.VirtualScreenLeft,
-            SystemParameters.VirtualScreenTop,
-            SystemParameters.VirtualScreenWidth,
-            SystemParameters.VirtualScreenHeight);
-        var proposed = new Rect(left, top, width, height);
-        if (!virtualArea.IntersectsWith(proposed))
-        {
-            left = workArea.Left + Math.Min(32, Math.Max(0, workArea.Width - width));
-            top = workArea.Top + Math.Min(32, Math.Max(0, workArea.Height - height));
-        }
-        else
-        {
-            left = Math.Clamp(left, virtualArea.Left, Math.Max(virtualArea.Left, virtualArea.Right - width));
-            top = Math.Clamp(top, virtualArea.Top, Math.Max(virtualArea.Top, virtualArea.Bottom - height));
-        }
-
-        content.FloatingLeft = left;
-        content.FloatingTop = top;
-        content.FloatingWidth = width;
-        content.FloatingHeight = height;
-        content.IsMaximized = snapshot.IsMaximized;
-    }
-
-    private static double NormalizeFloatingSize(double value, double fallback, double maximum)
-    {
-        var safeMaximum = double.IsFinite(maximum) && maximum > 0 ? maximum : fallback;
-        var safe = double.IsFinite(value) && value > 0 ? value : fallback;
-        return Math.Clamp(safe, Math.Min(160, safeMaximum), safeMaximum);
     }
 
     private static void Select(LayoutDocumentPane pane, string? id)

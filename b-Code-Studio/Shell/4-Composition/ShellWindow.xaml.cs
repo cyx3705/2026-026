@@ -720,9 +720,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private void OnCloseClick(object sender, RoutedEventArgs e)
         => _ = _bus.ExecuteAsync("vulcan.app.hide", "UI");
 
-    internal CommandResult SetFloatingWindowState(string id, string state)
-        => _pageDrag.SetFloatingWindowState(id, state);
-
     /// <summary>窗体最大化图标切换 + WindowChrome 溢出补偿(UI-02.5)。</summary>
     private void ApplyWindowStateChrome()
     {

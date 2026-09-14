@@ -1,13 +1,6 @@
 using System.Windows;
-using System.Windows.Input;
 
 namespace HistoryAurora.Shell.Base.Docking;
-
-internal enum DockingDragKind
-{
-    Tab,
-    Window,
-}
 
 internal enum DockingDragState
 {
@@ -20,32 +13,28 @@ internal enum DockingDragState
     Cancelled,
 }
 
+/// <summary>
+/// 一次页面拖动：按下 → 过阈值 → 浮出载体 → 系统移动循环 → 落进一格或隐藏。
+///
+/// 1.22（REQ-UI-120）起只有页面这一种会话。此前还有「按住一个已经浮着的窗口整窗移动」
+/// （<c>DockingDragKind.Window</c>，带宿主窗口与最大化标记），它只服务独立浮窗，随独立浮窗一起删除。
+/// </summary>
 internal sealed class DockingDragSession(
     long id,
-    DockingDragKind kind,
     FrameworkElement surface,
     Point start,
     Point anchor,
-    string? pageId,
-    Window? hostWindow,
-    bool wasMaximized)
+    string pageId)
 {
     public long Id { get; } = id;
-    public DockingDragKind Kind { get; } = kind;
     public FrameworkElement Surface { get; } = surface;
     public Point Start { get; } = start;
     public Point Anchor { get; } = anchor;
-    public string? PageId { get; } = pageId;
-    public Window? HostWindow { get; } = hostWindow;
-    public bool WasMaximized { get; } = wasMaximized;
+    public string PageId { get; } = pageId;
     public DockingDragState State { get; set; } = DockingDragState.Pressed;
     public bool ButtonReleased { get; set; }
     public Point LastScreenPoint { get; set; }
     public TaskCompletionSource<bool>? Completion { get; set; }
-
-    public bool IsTab => Kind == DockingDragKind.Tab;
-
-    public bool IsFloatingTab { get; init; }
 
     public bool TryTransition(DockingDragState next)
     {
@@ -59,7 +48,6 @@ internal sealed class DockingDragSession(
             (DockingDragState.Pressed, DockingDragState.ThresholdReached) => true,
             (DockingDragState.Pressed, DockingDragState.Cancelled) => true,
             (DockingDragState.ThresholdReached, DockingDragState.FloatRequested) => true,
-            (DockingDragState.ThresholdReached, DockingDragState.WindowMoving) => true,
             (DockingDragState.ThresholdReached, DockingDragState.Cancelled) => true,
             (DockingDragState.FloatRequested, DockingDragState.FloatingReady) => true,
             (DockingDragState.FloatRequested, DockingDragState.Cancelled) => true,

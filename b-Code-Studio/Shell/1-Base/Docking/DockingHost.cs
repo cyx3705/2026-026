@@ -331,7 +331,12 @@ internal sealed partial class DockingHost : IDockingService
         }
     }
 
-    public void Float(string id)
+    /// <summary>
+    /// 把一页浮出，**只给页面拖动当载体**（REQ-UI-120）。浮出之后由系统移动循环带着走，
+    /// 落到停靠点上就进那一格，落空由拖动协调器隐藏——不会留下一个独立浮窗。
+    /// 不在 <see cref="IDockingService"/> 上：没有指令、菜单或模块能单独把页面浮出来。
+    /// </summary>
+    internal void FloatForDrag(string id)
     {
         RestoreLayoutFromMaximized();
         EnsureRegistered(id);
@@ -651,10 +656,8 @@ internal sealed partial class DockingHost : IDockingService
 
         using (Suppress())
         {
-            // 聚焦只替换 LayoutRoot；还原时仍装回原树。AvalonDock 在卸下旧根时会让
-            // 浮窗模型失效，因此只从纯数据快照重建浮窗节点，不重建主布局树。
-            if (_snapshotBeforeMaximize != null)
-                RestoreFloatingWindowsAfterMaximize(_rootBeforeMaximize, _snapshotBeforeMaximize);
+            // 聚焦只替换 LayoutRoot；还原时装回原树。1.22（REQ-UI-120）起没有独立浮窗，
+            // 不再需要从快照里把浮窗节点重建一遍。
             _manager.Layout = _rootBeforeMaximize;
 
             if (!LayoutHasMainDocumentPane())
@@ -730,12 +733,8 @@ internal sealed partial class DockingHost : IDockingService
             if (!cur.Visible)
                 continue;
 
-            if (!was.Floating && cur.Floating)
-            {
-                Emit($"aurora.ui.float name={d.Id}");
-                continue;
-            }
-
+            // 浮着只是拖动途中的载体（REQ-UI-120）：不回放成指令——aurora.ui.float 已删除，
+            // 落进一格后由下面的停靠差分回放，落空隐藏由上面的 hide 回放。
             if (cur.Floating || cur.Side == null)
                 continue;
 

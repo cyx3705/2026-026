@@ -78,39 +78,6 @@ public sealed class MaximizeContractTests
     }
 
     [Fact]
-    public void MaximizeStillWorksWhileSomeWindowIsFloating()
-    {
-        // 真机上「只能拖出、叠不回去」，所以布局里几乎总有浮窗；
-        // 双击聚焦的报错正是在那个状态下发生的。
-        UiTestHost.RunSta(() =>
-        {
-            using var shell = Shell();
-            var window = shell.Window;
-
-            window.Docking.Float(StandardWindowIds.Modules);
-            UiTestHost.Pump();
-
-            var failures = new List<string>();
-            foreach (var info in window.Docking.ListWindows().ToList())
-            {
-                try
-                {
-                    window.Docking.MaximizeWindow(info.Id);
-                    UiTestHost.Pump();
-                    window.Docking.RestoreLayoutFromMaximized();
-                    UiTestHost.Pump();
-                }
-                catch (Exception ex)
-                {
-                    failures.Add($"{info.Id}: {ex.GetType().Name}: {ex.Message}");
-                }
-            }
-
-            Assert.Empty(failures);
-        });
-    }
-
-    [Fact]
     public void MaximizeWorksWithAModulePageInTheCentralArea()
     {
         // 真机上中央区里还有模块页（Mercury 的「扩展坞管理」）：它以**工具窗口**身份
@@ -155,41 +122,6 @@ public sealed class MaximizeContractTests
     }
 
     [Fact]
-    public void FloatingWindowsStayAttachedToTheLayoutThatIsCurrentlyMounted()
-    {
-        // 「只能拖出、叠不回去」的候选成因：整块替换 DockingManager.Layout
-        // （最大化、恢复、按 XML 还原都会替换）之后，已经存在的浮窗的 Model.Root
-        // 仍指向**旧的** LayoutRoot。拖回去时命中的是一棵已经不在界面上的树，
-        // 于是看起来"拖回去没反应"。
-        UiTestHost.RunSta(() =>
-        {
-            using var shell = Shell();
-            var window = shell.Window;
-
-            window.Docking.Float(StandardWindowIds.Modules);
-            UiTestHost.Pump();
-
-            var manager = RequireManager(window);
-            var floating = manager.FloatingWindows.ToList();
-            Assert.NotEmpty(floating);
-            Assert.All(floating, item => Assert.Same(manager.Layout, item.Model.Root));
-
-            window.Docking.MaximizeWindow(StandardWindowIds.Console);
-            UiTestHost.Pump();
-            window.Docking.RestoreLayoutFromMaximized();
-            UiTestHost.Pump();
-
-            var after = manager.FloatingWindows.ToList();
-            // 空集合会让下面的 Assert.All 空转通过——浮窗"消失了"和"还在但接错树"
-            // 是两个不同的缺陷，必须先分开。
-            Assert.NotEmpty(after);
-            Assert.All(
-                after,
-                item => Assert.Same(manager.Layout, item.Model.Root));
-        });
-    }
-
-    [Fact]
     public void RestoreReturnsTheVerySameLayoutTreeInsteadOfRebuildingItFromXml()
     {
         // 聚焦与还原**不许经过 XML**。AvalonDock 随模块包装进可回收 AssemblyLoadContext
@@ -208,7 +140,7 @@ public sealed class MaximizeContractTests
             UiTestHost.Pump();
             Assert.NotSame(before, manager.Layout);
 
-            // 门禁进程里序列化是可用的，因此走的仍是 XML 快照那条路（浮窗能一起回来）。
+            // 门禁进程里序列化是可用的，因此走的仍是 XML 快照那条路。
             // 这里要钉住的是**那棵旧树被留住了**：宿主里 XML 不可用时靠它还原。
             Assert.NotNull(BeforeMaximizeRoot(shell.Window.Docking));
 
