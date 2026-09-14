@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.Neutral.Logging;
@@ -108,5 +109,84 @@ public sealed class ConsoleLogSnapshotContractTests
     public void NewLogInstanceGetsANewIdentity()
     {
         Assert.NotEqual(new MemoryShellLog().InstanceId, new MemoryShellLog().InstanceId);
+    }
+
+    /// <summary>
+    /// DEC-042：控制台显示的是宿主那一份日志。补读的旧记录、界面写的、宿主总线写的各出现一次；
+    /// 界面写的转进宿主且已脱敏；解除订阅后不再收到。
+    /// </summary>
+    [Fact]
+    public void HostBackedLogWritesThroughAndShowsEveryHostEntryOnce()
+    {
+        var host = new FakeHostLog();
+        host.Log(ShellLogLevel.Info, "cmd:UI", "minerva.conversion.run");
+        using var log = new MemoryShellLog(host);
+        var raised = new List<ShellLogEntry>();
+        log.EntryAdded += (_, entry) => raised.Add(entry);
+
+        log.Log(ShellLogLevel.Info, "aurora", "token=plain-secret window line");
+        host.Log(ShellLogLevel.Info, "cmd:progress:apollo:chat", "#1 第 1 轮 要求搜索：「CDQ2B20-10D」");
+
+        Assert.Equal(3, host.Entries.Count);
+        Assert.DoesNotContain("plain-secret", host.Entries[1].Message, StringComparison.Ordinal);
+
+        var shown = log.Snapshot();
+        Assert.Equal(["cmd:UI", "aurora", "cmd:progress:apollo:chat"], shown.Select(entry => entry.Category));
+        Assert.Contains("token=[REDACTED]", shown[1].Message, StringComparison.Ordinal);
+        Assert.Equal(2, raised.Count);
+        Assert.Equal(
+            [1L, 2L, 3L],
+            log.ReadSnapshot(new ConsoleLogQuery(ShellLogLevel.Trace, null, null, null, 0, 100))
+                .Entries.Select(item => item.Sequence));
+
+        log.Dispose();
+        host.Log(ShellLogLevel.Info, "cmd:UI", "after dispose");
+        Assert.Equal(3, log.Snapshot().Count);
+    }
+
+    /// <summary>DEC-042：进程内界面的控制台必须挂宿主日志，不得再自建独立日志。</summary>
+    [Fact]
+    public void InProcessConsoleShowsTheHostLogInsteadOfItsOwn()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "b-Code-Studio", "Module", "AuroraShellHost.cs"));
+
+        Assert.Contains("new MemoryShellLog(context.Log)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new MemoryShellLog()", source, StringComparison.Ordinal);
+        Assert.Contains("consoleLog?.Dispose()", source, StringComparison.Ordinal);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "project.manifest.json")))
+            directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("找不到仓库根目录");
+    }
+
+    /// <summary>行为与宿主 ShellLog 一致：先入缓冲，再在锁外派发事件。</summary>
+    private sealed class FakeHostLog : IShellLog
+    {
+        private readonly List<ShellLogEntry> _entries = [];
+
+        public event EventHandler<ShellLogEntry>? EntryAdded;
+
+        public IReadOnlyList<ShellLogEntry> Entries
+        {
+            get
+            {
+                lock (_entries)
+                    return [.. _entries];
+            }
+        }
+
+        public void Log(ShellLogLevel level, string category, string message)
+        {
+            var entry = new ShellLogEntry(DateTime.Now, level, category, message);
+            lock (_entries)
+                _entries.Add(entry);
+            EntryAdded?.Invoke(this, entry);
+        }
+
+        public IReadOnlyList<ShellLogEntry> Snapshot() => Entries;
     }
 }

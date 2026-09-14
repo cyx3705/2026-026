@@ -30,6 +30,9 @@ internal static class AuroraShellHost
 
     private static ShellWindow? _window;
 
+    /// <summary>控制台显示的宿主日志视图；Shutdown 时解除订阅，否则宿主一直握着旧加载上下文里的实例。</summary>
+    private static MemoryShellLog? _consoleLog;
+
     /// <summary>界面就绪信号。宿主在 CreateUi 阶段就要取注册器，那时 STA 线程可能还没建完窗口。</summary>
     private static readonly ManualResetEventSlim Ready = new(false);
 
@@ -159,7 +162,10 @@ internal static class AuroraShellHost
         {
             var paths = AuroraPaths.ForApplication(AppIdentity.Current.Name);
             var config = CreateConfig();
-            var log = new MemoryShellLog();
+            // 控制台只显示宿主那一份日志（DEC-042）：界面自己的记录也写进去，不另建第二份。
+            var log = new MemoryShellLog(context.Log);
+            lock (Gate)
+                _consoleLog = log;
             var settings = new JsonSettingsStore(paths.SettingsFile);
             var window = new ShellWindow(
                 config,
@@ -400,14 +406,20 @@ internal static class AuroraShellHost
     {
         Thread? uiThread;
         ShellWindow? window;
+        MemoryShellLog? consoleLog;
         lock (Gate)
         {
             window = _window;
             uiThread = _uiThread;
+            consoleLog = _consoleLog;
             _window = null;
             _uiThread = null;
+            _consoleLog = null;
             Ready.Reset();
         }
+
+        // 先摘掉对宿主日志的订阅：界面线程即使卡住没退出，宿主也不再往旧实例里送记录。
+        consoleLog?.Dispose();
 
         if (window == null && uiThread == null)
             return;

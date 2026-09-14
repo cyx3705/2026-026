@@ -6,16 +6,60 @@ using System.Text.RegularExpressions;
 namespace HistoryAurora.Shell.Neutral.Logging;
 
 /// <summary>
-/// 界面进程内日志。不写宿主日志文件，避免与宿主 ShellLog 抢同一滚动文件。
-/// 控制台窗口订阅本实例；指令回显由总线 Executed 转发进来。
+/// 控制台日志视图：给日志编单调序号、脱敏并缓冲，供控制台窗口与 <c>aurora.log.snapshot</c> 读取。
 /// </summary>
-public sealed class MemoryShellLog : IShellLog
+/// <remarks>
+/// 1.23.0 起（DEC-042）进程内界面把宿主那唯一一份日志（<c>IModuleContext.Log</c>）交进来：
+/// 写入转给宿主，显示来自宿主，界面不再自建第二份。经宿主总线执行的每条指令——来自界面、CLI、MCP
+/// 还是模块嵌套调用——回显、进度与结果因此都进控制台，也都落宿主日志文件。
+/// 此前界面只看得见自己这份，宿主上跑的指令只剩界面总线拿回的最终回执。
+///
+/// 不传宿主日志时（契约测试、组件画廊）退化为独立的内存日志。
+/// 挂着宿主日志时必须 <see cref="Dispose"/>：否则热重载后宿主仍握着旧实例，旧加载上下文回收不掉。
+/// </remarks>
+public sealed class MemoryShellLog : IShellLog, IDisposable
 {
     private const int BufferLimit = 20_000;
+
+    /// <summary>挂上宿主日志时补读的旧记录上限：宿主缓冲可达五万条，全补进来控制台首屏会卡。</summary>
+    private const int BacklogImportLimit = 2_000;
+
+    /// <summary>补读与订阅交界处要去重的记录数：只有补读那一刻正在派发事件的少数几条会两边都到。</summary>
+    private const int BacklogSeamLimit = 256;
+
     internal const int MaximumSnapshotBytes = 256 * 1024;
     private readonly object _gate = new();
     private readonly Queue<SequencedLogEntry> _buffer = new();
+    private readonly IShellLog? _host;
+    private readonly HashSet<ShellLogEntry> _backlogSeam = new(ReferenceEqualityComparer.Instance);
     private long _sequence;
+
+    /// <summary>独立的内存日志，不连宿主。</summary>
+    public MemoryShellLog()
+    {
+    }
+
+    /// <summary>显示宿主那一份日志，写入也转给它。</summary>
+    /// <param name="host">宿主日志，通常来自 <c>IModuleContext.Log</c>。</param>
+    public MemoryShellLog(IShellLog host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        _host = host;
+        lock (_gate)
+        {
+            // 先订阅再补读，且整段持锁：补读期间到达的事件等在 OnHostEntry 的锁外，不会漏；
+            // 补读快照里已有、事件又晚到的那几条按引用去重，不会重复。
+            host.EntryAdded += OnHostEntry;
+            var backlog = host.Snapshot();
+            var start = Math.Max(0, backlog.Count - BacklogImportLimit);
+            for (var index = start; index < backlog.Count; index++)
+            {
+                Enqueue(backlog[index]);
+                if (index >= backlog.Count - BacklogSeamLimit)
+                    _backlogSeam.Add(backlog[index]);
+            }
+        }
+    }
 
     internal string InstanceId { get; } = Guid.NewGuid().ToString("N");
 
@@ -23,19 +67,48 @@ public sealed class MemoryShellLog : IShellLog
 
     public void Log(ShellLogLevel level, string category, string message)
     {
-        var entry = new ShellLogEntry(
-            DateTime.Now,
-            level,
-            category,
-            ConsoleLogSanitizer.Redact(message));
-        lock (_gate)
+        if (_host is not null)
         {
-            _buffer.Enqueue(new SequencedLogEntry(++_sequence, entry));
-            while (_buffer.Count > BufferLimit)
-                _buffer.Dequeue();
+            // 写进宿主那一份；控制台显示经 OnHostEntry 回来，本地不另记，免得一条出现两次。
+            _host.Log(level, category, ConsoleLogSanitizer.Redact(message));
+            return;
         }
 
+        ShellLogEntry entry;
+        lock (_gate)
+            entry = Enqueue(new ShellLogEntry(DateTime.Now, level, category, message));
+
         EntryAdded?.Invoke(this, entry);
+    }
+
+    /// <summary>解除对宿主日志的订阅；独立日志上是空操作。</summary>
+    public void Dispose()
+    {
+        if (_host is not null)
+            _host.EntryAdded -= OnHostEntry;
+    }
+
+    private void OnHostEntry(object? sender, ShellLogEntry entry)
+    {
+        ShellLogEntry shown;
+        lock (_gate)
+        {
+            if (_backlogSeam.Remove(entry))
+                return;
+            shown = Enqueue(entry);
+        }
+
+        EntryAdded?.Invoke(this, shown);
+    }
+
+    /// <summary>脱敏后入缓冲并编号；调用方持有 <see cref="_gate"/>。</summary>
+    private ShellLogEntry Enqueue(ShellLogEntry entry)
+    {
+        var shown = entry with { Message = ConsoleLogSanitizer.Redact(entry.Message) };
+        _buffer.Enqueue(new SequencedLogEntry(++_sequence, shown));
+        while (_buffer.Count > BufferLimit)
+            _buffer.Dequeue();
+        return shown;
     }
 
     public IReadOnlyList<ShellLogEntry> Snapshot()
