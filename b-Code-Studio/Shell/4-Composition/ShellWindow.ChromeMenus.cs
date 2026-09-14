@@ -159,7 +159,6 @@ internal partial class ShellWindow
             var sub = new MenuItem { Header = d.Title };
             sub.Items.Add(Item("显示", $"aurora.ui.show name={d.Id}"));
             sub.Items.Add(Item("隐藏", $"aurora.ui.hide name={d.Id}"));
-            sub.Items.Add(Item("浮动", $"aurora.ui.float name={d.Id}"));
             sub.Items.Add(Item("复位到默认位置", $"aurora.ui.reset name={d.Id}"));
             view.Items.Add(sub);
         }

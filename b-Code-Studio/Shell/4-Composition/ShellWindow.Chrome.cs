@@ -163,29 +163,11 @@ internal partial class ShellWindow
         // 避免旧 ALC 的 PageLabelMode 附加属性与新实例的属性身份不一致。
         style.Setters.Add(new Setter(FrameworkElement.TagProperty, PageAdjustmentToggle));
 
-        // 窗格样式同时应用到 AvalonDock 的独立内容宿主。Ctrl 标签态的按下与拖动必须随样式下发，
-        // 不能只扫描主 DockingManager 的视觉树，否则浮窗里的页名标签收不到输入。
+        // Ctrl 标签态的按下随样式下发。过阈值与抬起由拖动协调器挂在停靠管理器上统一收；
+        // 1.22（REQ-UI-120）前窗格上还挂着移动 / 抬起 / 丢捕获三条，只为「按住单页浮窗整窗移动」，随独立浮窗删除。
         style.Setters.Add(new EventSetter(
             UIElement.PreviewMouseLeftButtonDownEvent,
             new MouseButtonEventHandler(OnPanePreviewMouseLeftButtonDown))
-        {
-            HandledEventsToo = true,
-        });
-        style.Setters.Add(new EventSetter(
-            UIElement.PreviewMouseMoveEvent,
-            new MouseEventHandler(OnPanePreviewMouseMove))
-        {
-            HandledEventsToo = true,
-        });
-        style.Setters.Add(new EventSetter(
-            UIElement.PreviewMouseLeftButtonUpEvent,
-            new MouseButtonEventHandler(OnPanePreviewMouseLeftButtonUp))
-        {
-            HandledEventsToo = true,
-        });
-        style.Setters.Add(new EventSetter(
-            Mouse.LostMouseCaptureEvent,
-            new MouseEventHandler(OnPaneLostMouseCapture))
         {
             HandledEventsToo = true,
         });
@@ -201,15 +183,6 @@ internal partial class ShellWindow
 
     private void OnPanePreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         => _pageDrag.HandlePaneMouseLeftButtonDown(sender, e);
-
-    private void OnPanePreviewMouseMove(object sender, MouseEventArgs e)
-        => _pageDrag.HandlePaneMouseMove(sender, e);
-
-    private void OnPanePreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => _pageDrag.HandlePaneMouseLeftButtonUp(sender, e);
-
-    private void OnPaneLostMouseCapture(object sender, MouseEventArgs e)
-        => _pageDrag.HandlePaneLostMouseCapture(sender, e);
 
     /// <summary>R4-3:浮动窗口是布局后才建出来的,换完窗格样式后补一次主题最稳妥。</summary>
     private void ScheduleFloatingTheme()

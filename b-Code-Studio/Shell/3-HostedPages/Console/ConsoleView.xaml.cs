@@ -72,6 +72,12 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     {
         InitializeComponent();
 
+        // REQ-UI-119：控制台此前自写 10,8,10,10，其它页经 PageRegistrar.Inset 是 12——
+        // 同一界面里唯独控制台的工具条离卡片边缘近一截。它不能被包进 Inset 的 Border
+        // （停靠层按 IActivatableToolContent 认它），因此取同一个值，并同样裁切。
+        Padding = HistoryAurora.Shell.Components.Pages.PageRegistrar.PageInset;
+        ClipToBounds = true;
+
         _log = log;
         _bus = bus;
         _history = history;

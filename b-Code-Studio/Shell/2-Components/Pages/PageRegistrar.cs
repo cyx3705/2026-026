@@ -53,13 +53,21 @@ internal sealed class PageRegistrar(
     /// **这一层归 Aurora，不归页面作者。** 描述协议里没有任何字段能表达它，
     /// 这是刻意的：内边距是页面与窗格之间的关系，不属于页面里的任何一个组件，
     /// 让模块各自声明只会得到一堆互不相同的值。
+    ///
+    /// 1.22 页面新风格（REQ-UI-119）由 12 收窄到 8（6 实测圆角过小、控件发僵），并与圆角绑定：
+    /// <c>Aurora.Radius.Page = Aurora.Radius.Inner + PagePad</c>，贴角组件与卡片同心。
+    /// 控制台不走 <see cref="Inset"/>（停靠层要按类型认出 <c>ConsoleView</c>），
+    /// 但取的是同一个 <see cref="PageInset"/>，两边不可能再差出 10,8 与 12 那样的值。
     /// </summary>
-    private const double PagePad = 12;
+    internal const double PagePad = 8;
+
+    /// <summary>页面内边距。与令牌 <c>Aurora.Space.PageInset</c> 同值，由合同测试钉住。</summary>
+    internal static Thickness PageInset => new(PagePad);
 
     /// <summary>
-    /// <c>Aurora.Space.Pad</c> 的值，**不走 DynamicResource**。
+    /// 包边**不走 DynamicResource**。
     ///
-    /// 间距令牌在浅色与深色里取值相同（都是 12），不随主题变化；而要让
+    /// 间距令牌在浅色与深色里取值相同，不随主题变化；而要让
     /// <c>SetResourceReference</c> 在这一层解析得到，就得把主题字典并进这个 Border——
     /// 那会把整棵页面钉在被并进来的那一套配色上，主题一切换它不跟。
     /// 一个不随主题变的数字，不值得用一条会破坏主题跟随的机制去取。
@@ -68,7 +76,7 @@ internal sealed class PageRegistrar(
         => new Border
         {
             Child = content,
-            Padding = new Thickness(PagePad),
+            Padding = PageInset,
 
             // 工具页不滚（REQ-UI-050）。装不下时**裁掉**，不是长出去也不是长出滚动条：
             // 页面级滚动一旦存在，鼠标停在控制面板上滚不动、移开一点又能滚，

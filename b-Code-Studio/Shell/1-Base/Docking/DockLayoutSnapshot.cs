@@ -28,8 +28,6 @@ internal sealed class DockLayoutSnapshot
 
     public DockLayoutNodeSnapshot? Root { get; init; }
 
-    public List<DockFloatingWindowSnapshot> FloatingWindows { get; init; } = [];
-
     public List<DockAutoHideGroupSnapshot> AutoHideGroups { get; init; } = [];
 
     public Dictionary<string, DockPlacementSnapshot> Placements { get; init; } =
@@ -61,26 +59,13 @@ internal sealed class DockLayoutNodeSnapshot
     public List<DockContentSnapshot> Contents { get; init; } = [];
 }
 
+/// <summary>
+/// 一格里的一页。1.22（REQ-UI-120）起没有独立浮窗：旧文件里的 <c>floatingWindows</c>、
+/// <c>floatingLeft/Top/Width/Height</c> 与 <c>isMaximized</c> 反序列化时直接忽略，原先浮着的页按「快照里缺的页」处理。
+/// </summary>
 internal sealed class DockContentSnapshot
 {
     public required string Id { get; init; }
-
-    public double FloatingLeft { get; init; }
-
-    public double FloatingTop { get; init; }
-
-    public double FloatingWidth { get; init; }
-
-    public double FloatingHeight { get; init; }
-
-    public bool IsMaximized { get; init; }
-}
-
-internal sealed class DockFloatingWindowSnapshot
-{
-    public required string Kind { get; init; }
-
-    public required DockLayoutNodeSnapshot Root { get; init; }
 }
 
 internal sealed class DockAutoHideGroupSnapshot

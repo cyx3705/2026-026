@@ -95,7 +95,6 @@ Aurora 在界面空闲时扫描注册表、执行该命令，把返回的窗格�
 | --- | --- | --- |
 | `aurora.ui.show` / `.hide` | `name` | 显示（隐藏则唤出、已显示则激活）/ 隐藏，状态保留 |
 | `aurora.ui.dock` | `name`、`pos`、`ratio` | 停靠到某方位；`pos=center` 占中央区 |
-| `aurora.ui.float` / `.floatstate` | `name`(、`state`) | 浮为独立顶层窗口 / 设其最大化状态 |
 | `aurora.ui.max` / `.restore` | `name` | 最大化 / 退出最大化 |
 | `aurora.ui.ratio` | `name`、`value` | 调整占主窗体比例 |
 | `aurora.ui.autohide` | `name` | 切换自动隐藏 |

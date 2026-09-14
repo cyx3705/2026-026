@@ -18,6 +18,7 @@ using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.Neutral.Storage;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.HostedPages.Console;
+using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
@@ -423,37 +424,6 @@ public sealed class ShellChromeContractTests
         });
     }
 
-    [Fact]
-    public void FloatingToolWindowFrameFollowsLightAndDarkThemes()
-    {
-        RunShell(window =>
-        {
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            window.Docking.Float(StandardWindowIds.Console);
-            UiTestHost.PumpFor(900);
-
-            // R4-3:????????????,??????????
-            var floating = Assert.Single(manager.FloatingWindows.ToList());
-            Assert.Equal(
-                Assert.IsType<SolidColorBrush>(window.FindResource("Aurora.Brush.Surface")).Color,
-                Assert.IsType<SolidColorBrush>(floating.Background).Color);
-            Assert.Equal(
-                Assert.IsType<SolidColorBrush>(window.FindResource("Aurora.Brush.Hairline")).Color,
-                Assert.IsType<SolidColorBrush>(floating.BorderBrush).Color);
-            Assert.Equal(new Thickness(1), floating.BorderThickness);
-
-            window.Commands.ExecuteAsync("aurora.app.theme mode=dark", "test").GetAwaiter().GetResult();
-            UiTestHost.Pump();
-
-            Assert.Equal(
-                Assert.IsType<SolidColorBrush>(window.FindResource("Aurora.Brush.Surface")).Color,
-                Assert.IsType<SolidColorBrush>(floating.Background).Color);
-            Assert.Equal(
-                Assert.IsType<SolidColorBrush>(window.FindResource("Aurora.Brush.Hairline")).Color,
-                Assert.IsType<SolidColorBrush>(floating.BorderBrush).Color);
-        });
-    }
-
     /// <summary>
     /// REQ-UI-096：顶栏只留一页，而且**屏幕上**也只剩那一页。
     ///
@@ -651,76 +621,10 @@ public sealed class ShellChromeContractTests
             }));
     }
 
-    [Fact]
-    public void FloatingToolWindowHasNoSecondOuterChromeRow()
-    {
-        RunShell(window =>
-        {
-            var content = Assert.Single(FindVisualDescendants<ConsoleView>(window));
-
-            window.Docking.Float(StandardWindowIds.Console);
-            UiTestHost.PumpFor(900);
-
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            var floating = Assert.Single(manager.FloatingWindows.ToList());
-            var chrome = WindowChrome.GetWindowChrome(floating);
-            Assert.NotNull(chrome);
-            // CaptionHeight 必须是 0。1.7.1/1.7.2 曾把它抬到 35，理由是
-            // 「AvalonDock 要收到 WM_NCLBUTTONDOWN/HTCAPTION 才建 DragService」——
-            // 反编译 FilterMessage 后确认那条理由是错的：它只看 WM_SYSCOMMAND(仅最大化/还原)、
-            // WM_LBUTTONUP、WM_MOVING、WM_EXITSIZEMOVE。
-            // 抬高它反而有害：页头变成非客户区，WPF 收不到鼠标按下，
-            // Aurora 自己那条会去调 DragMove 的拖动手势根本起不来。
-            Assert.Equal(0, chrome.CaptionHeight);
-            var root = Assert.IsType<Border>(floating.Template.LoadContent());
-            var presenter = Assert.Single(FindLogicalDescendants<ContentPresenter>(root));
-            Assert.Null(presenter.DataContext);
-            Assert.DoesNotContain(
-                FindLogicalDescendants<FrameworkElement>(root),
-                item => item.GetType().Name.Contains("FloatingWindowControlChrome", StringComparison.Ordinal));
-            Assert.DoesNotContain(
-                FindVisualDescendants<FrameworkElement>(floating),
-                item => Equals(item.Tag, "FloatingShellPaneHeader"));
-            Assert.Equal("FloatingWindowContentHost", floating.Content.GetType().Name);
-            Assert.True(content.IsVisible);
-            Assert.NotNull(PresentationSource.FromVisual(content));
-            Assert.NotSame(PresentationSource.FromVisual(floating), PresentationSource.FromVisual(content));
-
-            // ???????? PresentationSource???????? Pane Style ???
-            // ????? DockingManager ???????
-            var floatingPane = FindAncestor<LayoutAnchorablePaneControl>(content, _ => true);
-            Assert.NotNull(floatingPane);
-            Assert.Contains(
-                floatingPane!.Style.Setters.OfType<EventSetter>(),
-                setter => setter.Event == UIElement.PreviewMouseLeftButtonDownEvent);
-        });
-    }
-
     /// <summary>
-    /// REQ-UI-101 第 2 条：浮窗页头的最大化按钮随顶栏删除，主窗体与浮窗里都不再有。
-    /// 浮窗的最大化 / 还原只走 <c>aurora.ui.floatstate</c>（见 <c>FloatingDocumentWindowStateIsOwnedByCommandBus</c>）。
-    /// </summary>
-    [Fact]
-    public void NoWindowDrawsAFloatingMaximizeButton()
-    {
-        RunShell(window =>
-        {
-            window.Docking.Float(StandardWindowIds.Console);
-            UiTestHost.PumpFor(900);
-
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            foreach (var host in manager.FloatingWindows.Cast<DependencyObject>().Prepend(window))
-            {
-                Assert.DoesNotContain(
-                    FindVisualDescendants<Button>(host),
-                    button => Equals(button.Tag, "FloatingMaxRestore") || button.Name == "FloatingDocumentMaxRestore");
-            }
-        });
-    }
-
-    /// <summary>
-    /// 两种窗格控件都把按下、移动、抬起、丢捕获交给页面拖动协调器——标签态的标签拖动与单页浮窗的移动都靠这四条。
-    /// 1.20.1 及以前这里还钉着「主文档区页头、专注页页头是拖动主窗口的落点」，随顶栏删除（REQ-UI-101）。
+    /// 两种窗格控件都把按下交给页面拖动协调器——标签态的标签拖动从这一下起手；过阈值与抬起由协调器挂在停靠管理器上收。
+    /// 1.20.1 及以前这里还钉着「主文档区页头、专注页页头是拖动主窗口的落点」，随顶栏删除（REQ-UI-101）；
+    /// 1.22 前还有移动 / 抬起 / 丢捕获三条，只为「按住单页浮窗整窗移动」，随独立浮窗删除（REQ-UI-120），这里钉住不再回来。
     /// </summary>
     [Fact]
     public void EveryPaneRoutesPointerInputToThePageDragCoordinator()
@@ -729,17 +633,11 @@ public sealed class ShellChromeContractTests
             window =>
             {
                 var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-                var toolEvents = manager.AnchorablePaneControlStyle.Setters.OfType<EventSetter>().ToList();
-                Assert.Contains(toolEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonDownEvent);
-                Assert.Contains(toolEvents, setter => setter.Event == UIElement.PreviewMouseMoveEvent);
-                Assert.Contains(toolEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonUpEvent);
-                Assert.Contains(toolEvents, setter => setter.Event == Mouse.LostMouseCaptureEvent);
-
-                var documentEvents = manager.DocumentPaneControlStyle.Setters.OfType<EventSetter>().ToList();
-                Assert.Contains(documentEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonDownEvent);
-                Assert.Contains(documentEvents, setter => setter.Event == UIElement.PreviewMouseMoveEvent);
-                Assert.Contains(documentEvents, setter => setter.Event == UIElement.PreviewMouseLeftButtonUpEvent);
-                Assert.Contains(documentEvents, setter => setter.Event == Mouse.LostMouseCaptureEvent);
+                foreach (var style in new[] { manager.AnchorablePaneControlStyle, manager.DocumentPaneControlStyle })
+                {
+                    var events = style.Setters.OfType<EventSetter>().Select(setter => setter.Event).ToList();
+                    Assert.Equal([UIElement.PreviewMouseLeftButtonDownEvent], events);
+                }
             },
             configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
             {
@@ -749,96 +647,6 @@ public sealed class ShellChromeContractTests
                 DefaultRatio = 0.3,
                 ContentFactory = () => new Border(),
             }));
-    }
-
-    [Fact]
-    public void FloatingDocumentWindowKeepsItsContentHost()
-    {
-        Grid? content = null;
-        RunShell(window =>
-        {
-            window.Docking.Show("center.float");
-            UiTestHost.Pump();
-            Assert.NotNull(content);
-            window.Docking.Float("center.float");
-            UiTestHost.PumpFor(900);
-
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            var floating = Assert.Single(manager.FloatingWindows.ToList());
-            Assert.Equal("FloatingWindowContentHost", floating.Content.GetType().Name);
-            Assert.True(content!.IsVisible);
-            Assert.NotNull(PresentationSource.FromVisual(content));
-            Assert.NotSame(PresentationSource.FromVisual(floating), PresentationSource.FromVisual(content));
-        }, configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
-        {
-            Id = "center.float",
-            Title = "Center Float",
-            DefaultSide = DockSide.Center,
-            DefaultRatio = 1,
-            ContentFactory = () => content = new Grid { Tag = "FloatingDocumentContent" },
-        }));
-    }
-
-    [Fact]
-    public void FloatingCenterToolWindowKeepsItsOwnPaneBinding()
-    {
-        Grid? content = null;
-        RunShell(window =>
-        {
-            window.Docking.Show("center.float.actions");
-            window.Docking.Float("center.float.actions");
-            UiTestHost.PumpFor(900);
-
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            var floating = Assert.Single(manager.FloatingWindows.ToList());
-            Assert.NotNull(content);
-            var pane = FindAncestor<LayoutAnchorablePaneControl>(content!, _ => true);
-            Assert.NotNull(pane);
-            Assert.DoesNotContain(
-                FindVisualDescendants<Button>(pane!),
-                item => item.Name == "FloatingDocumentMaxRestore");
-        }, configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
-        {
-            Id = "center.float.actions",
-            Title = "Center Float Actions",
-            DefaultSide = DockSide.Center,
-            DefaultRatio = 1,
-            ContentFactory = () => content = new Grid(),
-        }));
-    }
-
-    [Fact]
-    public void FloatingDocumentWindowStateIsOwnedByCommandBus()
-    {
-        RunShell(window =>
-        {
-            window.Docking.Show("center.state");
-            window.Docking.Float("center.state");
-            UiTestHost.PumpFor(900);
-
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            var floating = Assert.Single(manager.FloatingWindows.ToList());
-            var maximize = window.Commands.ExecuteAsync(
-                "aurora.ui.floatstate name=center.state state=maximized", "Test").GetAwaiter().GetResult();
-            Assert.True(maximize.Success, maximize.Message);
-            UiTestHost.Pump();
-            floating = Assert.Single(manager.FloatingWindows.ToList());
-            Assert.Equal(WindowState.Maximized, floating.WindowState);
-
-            var restore = window.Commands.ExecuteAsync(
-                "aurora.ui.floatstate name=center.state state=toggle", "Test").GetAwaiter().GetResult();
-            Assert.True(restore.Success, restore.Message);
-            UiTestHost.Pump();
-            floating = Assert.Single(manager.FloatingWindows.ToList());
-            Assert.Equal(WindowState.Normal, floating.WindowState);
-        }, configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
-        {
-            Id = "center.state",
-            Title = "Center State",
-            DefaultSide = DockSide.Center,
-            DefaultRatio = 1,
-            ContentFactory = () => new Grid(),
-        }));
     }
 
     /// <summary>REQ-UI-097\uff1aCtrl \u6807\u7b7e\u6001\u4e0b\u6bcf\u4e00\u683c\u7a97\u683c\u7684\u5185\u5bb9\u6362\u6210\u5199\u7740\u9875\u540d\u7684\u5927\u6807\u7b7e\uff1b\u9000\u51fa\u5373\u6062\u590d\u3002</summary>
@@ -1306,7 +1114,7 @@ public sealed class ShellChromeContractTests
                     "aurora.log.clear", "aurora.log.export", "aurora.log.copy", "aurora.log.focus",
                     "vulcan.app.hide", "vulcan.app.show", "vulcan.app.focusconsole", "vulcan.app.close",
                     "aurora.ui.max", "aurora.log.focus",
-                    "aurora.app.window", "aurora.ui.autohide", "aurora.ui.floatstate", "aurora.command.copyexample",
+                    "aurora.app.window", "aurora.ui.autohide", "aurora.command.copyexample",
                     "aurora.ui.selectfile", "aurora.ui.selectdirectory", "aurora.ui.dialog",
                 },
                 name => Assert.Contains(name, names));
@@ -1374,12 +1182,83 @@ public sealed class ShellChromeContractTests
     {
         RunShell(window =>
         {
-            var radius = (CornerRadius)window.FindResource("Aurora.Radius.Inner");
+            var radius = (CornerRadius)window.FindResource("Aurora.Radius.Page");
             var covers = FindVisualDescendants<Border>(window)
                 .Where(border => Equals(border.Tag, "PageLabelCover"))
                 .ToList();
             Assert.NotEmpty(covers);
             Assert.All(covers, cover => Assert.Equal(radius, cover.CornerRadius));
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-119：页面圆角 = 组件圆角 + 页面内边距，贴角组件与卡片同心；浅色深色各验一遍。
+    /// 令牌里的 <c>Aurora.Space.PageInset</c> 与 <see cref="PageRegistrar.PagePad"/> 必须同值——
+    /// 包边走常量、XAML 走令牌，只查一侧会让另一侧悄悄漂走。
+    /// </summary>
+    [Fact]
+    public void PageCornerIsConcentricWithComponentCorner()
+    {
+        RunShell(window =>
+        {
+            foreach (var mode in new[] { "light", "dark" })
+            {
+                Assert.True(window.Commands.ExecuteAsync($"aurora.app.theme mode={mode}", "test")
+                    .GetAwaiter().GetResult().Success);
+                UiTestHost.Pump();
+
+                var page = (CornerRadius)window.FindResource("Aurora.Radius.Page");
+                var inner = (CornerRadius)window.FindResource("Aurora.Radius.Inner");
+                var inset = (Thickness)window.FindResource("Aurora.Space.PageInset");
+
+                Assert.Equal(PageRegistrar.PageInset, inset);
+                Assert.True(inner.TopLeft < page.TopLeft, $"{mode}：组件圆角 {inner.TopLeft} 应小于页面圆角 {page.TopLeft}");
+                Assert.Equal(new CornerRadius(inner.TopLeft + PageRegistrar.PagePad), page);
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-119：控制台与其它页同一个页面内边距。回归对象是控制台自写的 10,8,10,10。
+    /// </summary>
+    [Fact]
+    public void ConsoleUsesTheSharedPageInset()
+    {
+        RunShell(window =>
+        {
+            var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
+            Assert.Equal(PageRegistrar.PageInset, console.Padding);
+            Assert.True(console.ClipToBounds);
+            var root = Assert.IsType<DockPanel>(console.Content);
+            Assert.Equal(default, root.Margin);
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-120：没有独立浮窗。指令、停靠门面、视图菜单与布局快照里都找不到能把页面单独浮出来的入口；
+    /// 拖动途中的浮出只在 internal 的 <c>DockingHost.FloatForDrag</c> 上，不对外。
+    /// </summary>
+    [Fact]
+    public void FloatingWindowsAreNotAUserSurface()
+    {
+        Assert.Null(typeof(IDockingService).GetMethod("Float"));
+        Assert.Null(typeof(DockLayoutSnapshot).GetProperty("FloatingWindows"));
+        Assert.Equal(["Id"], typeof(DockContentSnapshot).GetProperties().Select(property => property.Name));
+
+        RunShell(window =>
+        {
+            foreach (var command in new[] { "aurora.ui.float", "aurora.ui.floatstate" })
+            {
+                var result = window.Commands.ExecuteAsync($"{command} name={StandardWindowIds.Console}", "test")
+                    .GetAwaiter().GetResult();
+                Assert.False(result.Success, $"{command} 仍然可用");
+            }
+
+            var menu = RequireButton(window, "MenuButton").ContextMenu!;
+            var view = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "视图(_V)"));
+            Assert.DoesNotContain(
+                view.Items.OfType<MenuItem>().SelectMany(page => page.Items.OfType<MenuItem>()),
+                item => Equals(item.Header, "浮动"));
         });
     }
 

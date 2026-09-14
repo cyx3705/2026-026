@@ -11,7 +11,7 @@ namespace HistoryAurora.Verify;
 ///
 /// <list type="table">
 ///   <item><term>0-Neutral</term><description>中立：指令面、日志、纯工具。不认识任何一层界面。</description></item>
-///   <item><term>1-Base</term><description>基础层，页面外壳：停靠、顶栏、浮窗、拖出拖入、页面合并、弹窗。
+///   <item><term>1-Base</term><description>基础层，页面外壳：停靠、拖出拖入、页面合并、弹窗。
 ///         **它不知道页面里画的是什么**——只认 <c>ToolWindowDescriptor</c> 这样的纯数据。</description></item>
 ///   <item><term>2-Components</term><description>组件层，演进层：风格令牌、表格、控制面板、泳道、页面描述与渲染器。
 ///         别的模块注册页面，事实上就是在消费这一层。</description></item>

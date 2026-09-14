@@ -195,8 +195,6 @@ public sealed class ComponentRequestContractTests
 
         public void Hide(string id) { }
 
-        public void Float(string id) { }
-
         public void Dock(string id, DockSide side, double? ratio = null, string? targetId = null) { }
 
         public void SetRatio(string id, double ratio) { }
