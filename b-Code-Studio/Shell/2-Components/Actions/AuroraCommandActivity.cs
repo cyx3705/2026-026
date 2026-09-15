@@ -20,7 +20,11 @@ public sealed class AuroraCommandActivity : DependencyObject
     public static AuroraCommandActivity? GetActivity(DependencyObject target)
         => (AuroraCommandActivity?)target.GetValue(ActivityProperty);
     public static void SetActivity(DependencyObject target, AuroraCommandActivity? value)
-        => target.SetValue(ActivityProperty, value);
+    {
+        target.SetValue(ActivityProperty, value);
+    }
+
+
 
     /// <summary>同步进入运行态、拒绝重复执行；成功、失败及异常都恢复可操作状态。</summary>
     public async Task RunAsync(Func<Task<bool>> execute)
@@ -39,6 +43,9 @@ public sealed class AuroraCommandActivity : DependencyObject
         {
             await Dispatcher.InvokeAsync(() => SetValue(StatusKey, "执行失败：" + ex.Message));
         }
-        finally { await Dispatcher.InvokeAsync(() => SetValue(IsRunningKey, false)); }
+        finally
+        {
+            await Dispatcher.InvokeAsync(() => SetValue(IsRunningKey, false));
+        }
     }
 }
