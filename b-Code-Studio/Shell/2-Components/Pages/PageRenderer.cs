@@ -87,13 +87,25 @@ public sealed class RenderedPage
 public static partial class PageRenderer
 {
     /// <summary>
-    /// 间距不走 DynamicResource：间距令牌在浅色与深色里取值相同（PadTight=8 / Pad=12），
-    /// 不随主题变化；而 Thickness 资源是四边统一值，用作 Margin 会给纵向栈额外撑出左右缩进。
+    /// 页面内组件之间的间距（REQ-UI-122）。**只有一个值，且等于页面内边距**：
+    /// 组件与组件之间、组件与卡片边缘之间看上去是同一道缝。
+    ///
+    /// 1.23.1 之前这里分 tight=8 / normal=12 两档，由页面描述的 <c>gap</c> 选。
+    /// 同一页里外层 stack 写 normal、内层 stack 写 tight，于是一页上出现一宽一窄两种缝，
+    /// 而两者又都与页面内边距 8 不一致。现在 tight 与 normal 都取这一个值，只有 none 仍是 0；
+    /// 两个关键字照收，已有页面描述不必改。
+    ///
+    /// 间距不走 DynamicResource：Thickness 资源是四边统一值，用作 Margin 会给纵向栈额外撑出左右缩进。
     /// 画刷与文字样式仍然走 DynamicResource，主题切换必须跟随。
     /// </summary>
-    private const double GapTight = 8;
+    internal const double ComponentGap = PageRegistrar.PagePad;
 
-    private const double GapNormal = 12;
+    /// <summary>占位块内部的留白。属于组件自身，与组件间距无关。</summary>
+    private const double BoxPad = 8;
+
+    /// <summary>stack / grid 的 <c>gap</c> 档位 → 像素。</summary>
+    private static double GapOf(PageNode node)
+        => string.Equals(node.Gap, "none", StringComparison.OrdinalIgnoreCase) ? 0d : ComponentGap;
 
     /// <summary>
     /// V1 组件集。这是「某个申请是否已交付」的**唯一权威**——台账不另存一份状态，
@@ -268,12 +280,7 @@ public static partial class PageRenderer
         var horizontal = string.Equals(node.Orientation, "horizontal", StringComparison.OrdinalIgnoreCase);
         var grid = new Grid();
 
-        var gap = (node.Gap ?? "").ToLowerInvariant() switch
-        {
-            "none" => 0d,
-            "tight" => GapTight,
-            _ => GapNormal,
-        };
+        var gap = GapOf(node);
 
         var children = node.Children ?? [];
         for (var i = 0; i < children.Count; i++)
@@ -413,7 +420,7 @@ public static partial class PageRenderer
 
         var stack = new StackPanel();
         var notice = Box("表格操作未绑定：" + string.Join("；", broken));
-        notice.Margin = new Thickness(0, 0, 0, GapTight);
+        notice.Margin = new Thickness(0, 0, 0, ComponentGap);
         stack.Children.Add(notice);
         stack.Children.Add(table);
         return stack;
@@ -528,12 +535,7 @@ public static partial class PageRenderer
     {
         var grid = new AuroraGridPanel
         {
-            Gap = (node.Gap ?? "").ToLowerInvariant() switch
-            {
-                "none" => 0d,
-                "tight" => GapTight,
-                _ => GapNormal,
-            },
+            Gap = GapOf(node),
         };
 
         if (node.Min is { } min && min > 0)
@@ -669,7 +671,7 @@ public static partial class PageRenderer
         var text = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap };
         text.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Text.Caption");
 
-        var border = new Border { Child = text, Padding = new Thickness(GapTight) };
+        var border = new Border { Child = text, Padding = new Thickness(BoxPad) };
         border.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Panel.Unbound");
         return border;
     }

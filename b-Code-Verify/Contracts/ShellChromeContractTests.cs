@@ -1219,6 +1219,23 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
+    /// REQ-UI-122：分段竖线与表格同一种实色发丝线，不再带渐隐遮罩。
+    /// 面板排版面的线是 OnRender 画的，同样不再推遮罩，靠真机捕获验。
+    /// </summary>
+    [Fact]
+    public void SegmentDividerIsASolidHairlineLikeTheTable()
+    {
+        RunShell(window =>
+        {
+            var style = (Style)window.FindResource("Aurora.Segment.Divider");
+            var setters = style.Setters.OfType<Setter>().ToList();
+            Assert.DoesNotContain(setters, setter => setter.Property == UIElement.OpacityMaskProperty);
+            Assert.Contains(setters, setter => setter.Property == FrameworkElement.WidthProperty && Equals(setter.Value, 1d));
+            Assert.Contains(setters, setter => setter.Property == UIElement.SnapsToDevicePixelsProperty && Equals(setter.Value, true));
+        });
+    }
+
+    /// <summary>
     /// REQ-UI-119：控制台与其它页同一个页面内边距。回归对象是控制台自写的 10,8,10,10。
     /// </summary>
     [Fact]

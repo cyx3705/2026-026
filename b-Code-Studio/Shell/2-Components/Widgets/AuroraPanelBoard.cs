@@ -45,8 +45,12 @@ internal sealed class BoardRow
 ///
 /// **分隔线是画出来的，不是子元素。** 它们的位置只有排完版才知道：做成子元素就得先
 /// 假设一个位置，于是折行处会冒出一条贴着行首的竖线。这里在 <see cref="OnRender"/> 里
-/// 按最终版面画：同一视觉行里相邻元素之间画竖线，声明行与声明行之间画横线，
-/// 两端渐隐。组件内部的描述文字不再作为额外排版元素参与分隔线计算。
+/// 按最终版面画：同一视觉行里相邻元素之间画竖线，声明行与声明行之间画横线。
+/// 组件内部的描述文字不再作为额外排版元素参与分隔线计算。
+///
+/// **线是实色发丝线，与表格同一种**（1.23.1，REQ-UI-122）：竖线上下各缩一截、
+/// 与表头列分隔一样；横线贯穿整行、与表格行线一样。此前是两端渐隐的遮罩线，
+/// 且矩形坐标带 +0.5，1px 线被抗锯齿摊到两排像素上，发虚、深浅不一，用户判为「渐消线有 bug」。
 /// </summary>
 internal sealed class AuroraPanelBoard : Panel
 {
@@ -71,6 +75,9 @@ internal sealed class AuroraPanelBoard : Panel
     /// <summary>同一声明行折出的视觉行之间的间距。**明显小于 <see cref="RowGap"/>**：
     /// 它们是一行折出来的，看上去必须比「两行」更紧。</summary>
     private const double LineGap = 3;
+
+    /// <summary>竖分隔线上下各缩进多少，与表头列分隔线（<c>Margin="0,6"</c>）同值。</summary>
+    private const double VerticalInset = 6;
 
     private readonly List<RowLayout> _layout = [];
 
@@ -347,16 +354,14 @@ internal sealed class AuroraPanelBoard : Panel
         {
             foreach (var line in row.Lines)
             {
-                var inset = Math.Min(7, line.Height / 4);
+                var inset = Math.Min(VerticalInset, line.Height / 4);
                 var height = Math.Max(0, line.Height - (inset * 2));
                 for (var index = 0; index < line.Items.Count - 1; index++)
                 {
                     var item = line.Items[index];
-                    var x = Math.Round(item.X + item.Width + (ColumnGap / 2)) + 0.5;
-                    drawingContext.PushOpacityMask(VerticalFade);
-                    drawingContext.DrawRectangle(
-                        hairline, null, new Rect(x, row.Top + line.Top + inset, 1, height));
-                    drawingContext.Pop();
+                    var x = Math.Round(item.X + item.Width + (ColumnGap / 2));
+                    var top = Math.Round(row.Top + line.Top + inset);
+                    DrawHairline(drawingContext, hairline, new Rect(x, top, 1, Math.Round(height)));
                 }
             }
         }
@@ -366,40 +371,30 @@ internal sealed class AuroraPanelBoard : Panel
         for (var index = 0; index < _layout.Count - 1; index++)
         {
             var row = _layout[index];
-            var y = Math.Round(row.Top + row.Height + (RowGap / 2)) + 0.5;
-            drawingContext.PushOpacityMask(HorizontalFade);
-            drawingContext.DrawRectangle(hairline, null, new Rect(0, y, Math.Max(0, ActualWidth), 1));
-            drawingContext.Pop();
+            var y = Math.Round(row.Top + row.Height + (RowGap / 2));
+            DrawHairline(drawingContext, hairline, new Rect(0, y, Math.Max(0, ActualWidth), 1));
         }
+    }
+
+    /// <summary>
+    /// 画一根 1px 实线。整数坐标 + 参考线让它正好落在一排设备像素上——
+    /// 表格的行线靠 <c>SnapsToDevicePixels</c> 做到这一点，而那个属性管不到 OnRender 里画的东西。
+    /// 不对齐的话，1px 线会被抗锯齿摊成两根半透明的线，看上去发虚、比表格浅。
+    /// </summary>
+    private static void DrawHairline(DrawingContext drawingContext, Brush brush, Rect rect)
+    {
+        var guidelines = new GuidelineSet(
+            [rect.Left, rect.Right],
+            [rect.Top, rect.Bottom]);
+        drawingContext.PushGuidelineSet(guidelines);
+        drawingContext.DrawRectangle(brush, null, rect);
+        drawingContext.Pop();
     }
 
     private static readonly Brush FallbackHairline = Freeze(new SolidColorBrush(Color.FromRgb(0xE4, 0xE7, 0xEB)));
 
     private static Brush Freeze(Brush brush)
     {
-        brush.Freeze();
-        return brush;
-    }
-
-    /// <summary>两端渐隐的遮罩。冻结后可复用，不必每根线新建一把画刷。</summary>
-    private static readonly Brush VerticalFade = CreateFade(new Point(0, 0), new Point(0, 1));
-
-    private static readonly Brush HorizontalFade = CreateFade(new Point(0, 0), new Point(1, 0));
-
-    private static Brush CreateFade(Point start, Point end)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = start,
-            EndPoint = end,
-            GradientStops =
-            [
-                new GradientStop(Colors.Transparent, 0),
-                new GradientStop(Colors.Black, 0.18),
-                new GradientStop(Colors.Black, 0.82),
-                new GradientStop(Colors.Transparent, 1),
-            ],
-        };
         brush.Freeze();
         return brush;
     }

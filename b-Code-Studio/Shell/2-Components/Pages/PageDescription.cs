@@ -78,7 +78,7 @@ public sealed class PageNode
     /// <summary>stack 专用：vertical（缺省）或 horizontal。</summary>
     public string? Orientation { get; init; }
 
-    /// <summary>stack 专用：间距档位 none / tight / normal。</summary>
+    /// <summary>stack / grid 专用：间距档位 none / tight / normal。tight 与 normal 同值（等于页面内边距，REQ-UI-122），只有 none 是 0。</summary>
     public string? Gap { get; init; }
 
     public IReadOnlyList<PageNode>? Children { get; init; }
