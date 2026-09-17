@@ -56,10 +56,12 @@ internal sealed class PageRegistrar(
     ///
     /// 1.22 页面新风格（REQ-UI-119）由 12 收窄到 8（6 实测圆角过小、控件发僵），并与圆角绑定：
     /// <c>Aurora.Radius.Page = Aurora.Radius.Inner + PagePad</c>，贴角组件与卡片同心。
+    /// 1.23.1（REQ-UI-122）页面仍嫌密，组件圆角不动，内边距放回 12、页面圆角随之 20；
+    /// 页面内组件之间的间距也改取这一个值（<see cref="PageRenderer.ComponentGap"/>）。
     /// 控制台不走 <see cref="Inset"/>（停靠层要按类型认出 <c>ConsoleView</c>），
     /// 但取的是同一个 <see cref="PageInset"/>，两边不可能再差出 10,8 与 12 那样的值。
     /// </summary>
-    internal const double PagePad = 8;
+    internal const double PagePad = 12;
 
     /// <summary>页面内边距。与令牌 <c>Aurora.Space.PageInset</c> 同值，由合同测试钉住。</summary>
     internal static Thickness PageInset => new(PagePad);

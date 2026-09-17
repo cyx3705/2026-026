@@ -55,7 +55,7 @@
         贴着页面四角的组件(面板底板、表头、控制台工具条)因此与卡片外缘平行。
         三个数改任何一个都要同步另外两个,合同测试按这条等式判。
     -->
-    <CornerRadius x:Key="Aurora.Radius.Page">16</CornerRadius>
+    <CornerRadius x:Key="Aurora.Radius.Page">20</CornerRadius>
     <!-- 组件圆角:按钮、输入、底板、弹层。4 实测显得僵硬,回到 8 -->
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
     <!--
@@ -69,7 +69,7 @@
     <Thickness x:Key="Aurora.Space.Gap">1</Thickness>
     <Thickness x:Key="Aurora.Space.Pad">12</Thickness>
     <!-- 页面内容相对卡片的内边距(REQ-UI-119),与 PageRegistrar.PagePad 同值 -->
-    <Thickness x:Key="Aurora.Space.PageInset">8</Thickness>
+    <Thickness x:Key="Aurora.Space.PageInset">12</Thickness>
     <Thickness x:Key="Aurora.Space.PadTight">8</Thickness>
     <Thickness x:Key="Aurora.Space.ControlPad">10,4</Thickness>
 

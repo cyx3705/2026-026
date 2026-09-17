@@ -92,7 +92,9 @@
 | `Aurora.Size.WindowButton` | `44` | 主窗口控制按钮宽度 |
 
 圆角分两级且同心（1.22，REQ-UI-119）：卡片 `Aurora.Radius.Page` = 组件 `Aurora.Radius.Inner` + 页面内边距
-`Aurora.Space.PageInset`，即 16 = 8 + 8。贴着页面四角的组件（面板底板、表头、控制台工具条）因此与卡片外缘平行；
+`Aurora.Space.PageInset`，即 20 = 8 + 12（1.23.1，REQ-UI-122；1.22 为 16 = 8 + 8）。
+页面内组件之间的间距与页面内边距相同（12），`gap` 的 tight / normal 同值，只有 none 为 0。
+卡片内的分隔线一律是实色 `Aurora.Brush.Hairline` 1px 线，与表格行线、表头列分隔线同一种，不做渐隐。贴着页面四角的组件（面板底板、表头、控制台工具条）因此与卡片外缘平行；
 改其中任何一个值都必须同步另两个。页面内只有一层组件圆角，不把卡片嵌套进卡片。固定格式控件应明确 `MinHeight`、网格列宽、
 `MinWidth` 或 `MaxWidth`，动态文本必须换行或省略，不能撑动顶栏和工具栏。
 

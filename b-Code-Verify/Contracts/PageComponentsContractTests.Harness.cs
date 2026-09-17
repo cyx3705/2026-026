@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using System.Windows;
+using System.Windows.Controls;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryAurora.Shell.Components.Pages;
@@ -65,6 +66,58 @@ public sealed partial class PageComponentsContractTests
             var grid = Assert.IsType<AuroraGridPanel>(rendered.Root);
             Assert.Equal(180, grid.MinColumnWidth);
             Assert.Equal(2, grid.Children.Count);
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-122：组件之间的缝只有一种，且等于页面内边距。回归对象是 1.23.0 的
+    /// tight=8 / normal=12——同一页外层写 normal、内层写 tight，一页上出现一宽一窄两道缝。
+    /// </summary>
+    [Theory]
+    [InlineData("stack", "tight")]
+    [InlineData("stack", "normal")]
+    [InlineData("stack", null)]
+    [InlineData("grid", "tight")]
+    [InlineData("grid", "normal")]
+    public void ComponentGap_EqualsThePageInsetForEveryGapKeyword(string type, string? gap)
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var gapJson = gap is null ? "" : $$""", "gap": "{{gap}}" """;
+            var rendered = Render($$"""
+                {
+                  "type": "{{type}}"{{gapJson}},
+                  "children": [ { "type": "text", "text": "a" }, { "type": "text", "text": "b" } ]
+                }
+                """);
+
+            Assert.Equal(PageRegistrar.PagePad, PageRenderer.ComponentGap);
+            if (rendered.Root is AuroraGridPanel grid)
+            {
+                Assert.Equal(PageRegistrar.PagePad, grid.Gap);
+                return;
+            }
+
+            var stack = Assert.IsType<Grid>(rendered.Root);
+            var first = (FrameworkElement)stack.Children[0];
+            Assert.Equal(new Thickness(0, 0, 0, PageRegistrar.PagePad), first.Margin);
+        });
+    }
+
+    [Fact]
+    public void ComponentGap_NoneStaysZero()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var rendered = Render("""
+                {
+                  "type": "stack", "gap": "none",
+                  "children": [ { "type": "text", "text": "a" }, { "type": "text", "text": "b" } ]
+                }
+                """);
+
+            var stack = Assert.IsType<Grid>(rendered.Root);
+            Assert.Equal(default, ((FrameworkElement)stack.Children[0]).Margin);
         });
     }
 
