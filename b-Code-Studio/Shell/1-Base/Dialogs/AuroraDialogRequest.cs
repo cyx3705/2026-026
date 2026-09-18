@@ -9,7 +9,8 @@ namespace HistoryAurora.Shell.Base.Dialogs;
 ///   <item><see cref="Confirm"/>：确认/取消，可倒计时、可标危险</item>
 ///   <item><see cref="Prompt"/>：带输入的确认（如填写恢复提交说明）</item>
 ///   <item><see cref="Choice"/>：从一组 label/value 候选中选择一项</item>
-///   <item><see cref="Content"/>：大段只读等宽正文（如历史预览）</item>
+///   <item><see cref="Content"/>：大段只读等宽正文（如历史预览）；带
+///         <see cref="AuroraDialogRequest.Choices"/> 时正文下方再给一组动作候选</item>
 /// </list>
 /// 模块本轮不要自己 <c>new Window</c>；下一轮把现有对话框改走
 /// <c>aurora.ui.dialog</c> 或本类型。
@@ -95,8 +96,18 @@ public sealed class AuroraDialogRequest
     /// <summary>prompt 种类的输入初值；其它种类忽略。</summary>
     public string? Value { get; init; }
 
-    /// <summary>choice 种类的候选项；其它种类忽略。</summary>
+    /// <summary>
+    /// 候选项。<see cref="AuroraDialogKind.Choice"/> 必填；
+    /// <see cref="AuroraDialogKind.Content"/> 选填——给了就在正文下方多一组动作候选，
+    /// 于是「先看清正文再决定做什么」可以在同一个窗里完成（Janus 提交差异预览）。
+    /// 其它种类忽略。
+    /// </summary>
     public IReadOnlyList<AuroraDialogChoice> Choices { get; init; } = [];
+
+    /// <summary>本次弹窗是否要在正文之外再选一个动作。</summary>
+    public bool PicksChoice
+        => Kind == AuroraDialogKind.Choice
+           || (Kind == AuroraDialogKind.Content && Choices.Count > 0);
 
     public string PrimaryText { get; init; } = "确定";
 

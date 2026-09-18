@@ -107,7 +107,7 @@ public sealed class AuroraDialogWindow : Window
     {
         var window = new AuroraDialogWindow(request, owner, dark);
         window.ShowDialog();
-        var value = request.Kind == AuroraDialogKind.Choice
+        var value = request.PicksChoice
             ? window.SelectedChoiceValue
             : window.PromptBox?.Text;
         return new AuroraDialogResult(window._accepted, window._timedOut, value);
@@ -204,16 +204,18 @@ public sealed class AuroraDialogWindow : Window
             inner.Children.Add(PromptBox);
         }
 
-        if (_request.Kind == AuroraDialogKind.Choice)
+        if (_request.Kind == AuroraDialogKind.Choice && !string.IsNullOrWhiteSpace(_request.Body))
         {
-            if (!string.IsNullOrWhiteSpace(_request.Body))
-            {
-                BodyText = new TextBlock { Text = _request.Body, MaxWidth = 460 };
-                BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Body");
-                DockPanel.SetDock(BodyText, Dock.Top);
-                inner.Children.Add(BodyText);
-            }
+            BodyText = new TextBlock { Text = _request.Body, MaxWidth = 460 };
+            BodyText.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Body");
+            DockPanel.SetDock(BodyText, Dock.Top);
+            inner.Children.Add(BodyText);
+        }
 
+        // 候选表在 choice 里是本体，在 content 里是正文下面那一截：两处同一个控件，
+        // 差别只是 content 的正文要先占住余量，所以候选表停靠底部、正文填满剩下的。
+        if (_request.PicksChoice)
+        {
             ChoiceBox = new ListBox
             {
                 ItemsSource = _request.Choices,
@@ -229,6 +231,12 @@ public sealed class AuroraDialogWindow : Window
                 _accepted = true;
                 DialogResult = true;
             };
+            if (_request.Kind == AuroraDialogKind.Content)
+            {
+                // 动作只有两三条，让它按内容高度停在底部；正文才是要滚的那一块。
+                ChoiceBox.MaxHeight = 160;
+                DockPanel.SetDock(ChoiceBox, Dock.Bottom);
+            }
             inner.Children.Add(ChoiceBox);
             PrimaryButton.IsEnabled = _request.Choices.Count > 0;
         }
@@ -307,7 +315,10 @@ public sealed class AuroraDialogWindow : Window
         var footer = new StackPanel();
         footer.SetResourceReference(FrameworkElement.StyleProperty, "Aurora.Dialog.Footer");
 
-        var closeOnly = _request.Kind is AuroraDialogKind.Message or AuroraDialogKind.Content;
+        // 只有一个关闭键的前提是「没有要做的决定」。content 带上动作候选之后就有了，
+        // 于是它和 confirm 一样要一对按钮——否则人没法在看完正文后说「不做」。
+        var closeOnly = _request.Kind == AuroraDialogKind.Message
+                        || (_request.Kind == AuroraDialogKind.Content && !_request.PicksChoice);
         if (!closeOnly)
         {
             CancelButton = new Button

@@ -42,6 +42,7 @@ public sealed partial class PageComponentsContractTests
         Assert.Contains("table.rowactions", PageRenderer.SupportedCapabilities);
         Assert.Contains("table.cellaction", PageRenderer.SupportedCapabilities);
         Assert.Contains("dialog.choice", PageRenderer.SupportedCapabilities);
+        Assert.Contains("dialog.contentactions", PageRenderer.SupportedCapabilities);
         Assert.Contains("panel.icon", PageRenderer.SupportedCapabilities);
         Assert.Contains("menu", PageRenderer.SupportedCapabilities);
         Assert.DoesNotContain("table.rowactions", PageRenderer.SupportedComponents);

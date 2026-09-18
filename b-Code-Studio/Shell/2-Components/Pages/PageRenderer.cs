@@ -149,6 +149,8 @@ public static partial class PageRenderer
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "table.rowactions", "table.cellaction", "dialog.choice", "menu",
+            // REQ-UI-123：content 弹窗的正文下方可以再挂一组动作候选。
+            "dialog.contentactions",
             // REQ-UI-041：表格发布选中行、面板跟随取值与按选中启停。
             // 「表格选中行 → 按钮变可用」这条链路 1.8.14 随页面按钮一起没了，这三条把它接回来，
             // 落点从页内节点 id 换成界面级通道，因此顺带能跨页。
