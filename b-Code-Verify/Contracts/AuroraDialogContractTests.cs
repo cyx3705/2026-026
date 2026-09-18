@@ -155,6 +155,61 @@ public sealed class AuroraDialogContractTests
         });
     }
 
+    // 1.24.0（REQ-UI-123）：content 带 options 时是「看清正文再决定」的同一个窗，
+    // 因此正文、候选表和一对按钮必须同时在。少了取消键，人看完就只剩「做」这一条路。
+    [Fact]
+    public void ContentWithOptionsShowsBothTheBodyAndTheActionList()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            {
+                Kind = AuroraDialogKind.Content,
+                Title = "提交",
+                Body = "3 个文件变更",
+                Content = "diff --git a/file",
+                Choices =
+                [
+                    new AuroraDialogChoice { Label = "提交", Value = "commit" },
+                    new AuroraDialogChoice { Label = "删除本次脏工作树", Value = "discard" },
+                ],
+                PrimaryText = "执行",
+            });
+
+            Assert.Equal("diff --git a/file", dialog.ContentBox?.Text);
+            Assert.Equal("3 个文件变更", dialog.BodyText?.Text);
+            Assert.NotNull(dialog.ChoiceBox);
+            Assert.Equal(2, dialog.ChoiceBox!.Items.Count);
+            Assert.Equal("commit", dialog.SelectedChoiceValue);
+            dialog.ChoiceBox.SelectedIndex = 1;
+            Assert.Equal("discard", dialog.SelectedChoiceValue);
+            Assert.NotNull(dialog.CancelButton);
+            Assert.Equal("执行", dialog.PrimaryButton.Content);
+            Assert.True(dialog.PrimaryButton.IsEnabled);
+            dialog.Close();
+        });
+    }
+
+    // 不给 options 的 content 一个字都不能变：它仍是只读预览，只有一个关闭键。
+    [Fact]
+    public void ContentWithoutOptionsStaysACloseOnlyPreview()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            {
+                Kind = AuroraDialogKind.Content,
+                Title = "预览",
+                Content = "diff --git a/file",
+            });
+
+            Assert.Null(dialog.ChoiceBox);
+            Assert.Null(dialog.CancelButton);
+            Assert.Equal("关闭", dialog.PrimaryButton.Content);
+            dialog.Close();
+        });
+    }
+
     [Fact]
     public void ChoiceReaderRejectsMalformedEmptyAndIncompleteOptions()
     {

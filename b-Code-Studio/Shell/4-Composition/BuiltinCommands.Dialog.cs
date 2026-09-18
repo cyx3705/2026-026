@@ -16,7 +16,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.ui.dialog",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "显示 Aurora 主题化弹窗（message / confirm / prompt / choice / content）",
+            Summary = "显示 Aurora 主题化弹窗（message / confirm / prompt / choice / content；content 可带动作候选）",
             Example = "aurora.ui.dialog kind=confirm title=确认 body=\"覆盖现有文件？\" danger=true",
             RequiresUiThread = true,
             Parameters =
@@ -33,7 +33,7 @@ internal static partial class BuiltinCommands
                 new ParameterSpec { Name = "body", Description = "说明或摘要" },
                 new ParameterSpec { Name = "content", Description = "content 种类的大段正文" },
                 new ParameterSpec { Name = "value", Description = "prompt 种类的输入初值" },
-                new ParameterSpec { Name = "options", Description = "choice 种类的 {label,value} JSON 列表" },
+                new ParameterSpec { Name = "options", Description = "{label,value} JSON 列表：choice 必填，content 选填（正文下方的动作候选）" },
                 new ParameterSpec { Name = "primary", Description = "主按钮文案" },
                 new ParameterSpec { Name = "cancel", Description = "取消按钮文案" },
                 new ParameterSpec { Name = "danger", Description = "主按钮用危险档", Type = ParamType.Bool, Default = "false" },
@@ -46,9 +46,14 @@ internal static partial class BuiltinCommands
                 if (!TryParseKind(kindText, out var kind))
                     return CommandResult.Fail($"不支持的 kind: {kindText}（message / confirm / prompt / choice / content）");
 
+                // choice 必须给 options；content 的 options 是可选的——给了就在正文下面
+                // 多一组动作，不给仍是旧的「只读正文 + 关闭」。给了但写坏了照样拒绝，
+                // 静默丢掉会让调用方看见一个没有动作的预览窗，而它看上去完全正常。
                 IReadOnlyList<AuroraDialogChoice> choices = [];
-                if (kind == AuroraDialogKind.Choice
-                    && !AuroraDialogChoiceReader.TryRead(context.GetString("options"), out choices, out var choiceError))
+                var options = context.GetString("options");
+                if ((kind == AuroraDialogKind.Choice
+                     || (kind == AuroraDialogKind.Content && !string.IsNullOrWhiteSpace(options)))
+                    && !AuroraDialogChoiceReader.TryRead(options, out choices, out var choiceError))
                     return CommandResult.Fail(choiceError);
 
                 var request = new AuroraDialogRequest
@@ -71,7 +76,7 @@ internal static partial class BuiltinCommands
                     return CommandResult.Fail("已超时，按拒绝处理");
                 if (!result.Accepted)
                     return CommandResult.Fail("已取消");
-                return kind is AuroraDialogKind.Prompt or AuroraDialogKind.Choice
+                return kind == AuroraDialogKind.Prompt || request.PicksChoice
                     ? CommandResult.Ok(result.Input ?? "", result.Input)
                     : CommandResult.Ok("已确认");
             }),
