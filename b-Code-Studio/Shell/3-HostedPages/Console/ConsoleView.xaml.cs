@@ -41,7 +41,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     private string _domain = "全部";
     private string _commandClass = "全部";
     private IReadOnlyList<string> _domains = ["全部"];
-    private IReadOnlyList<string> _classes = ["全部"];
     private IReadOnlySet<string> _registeredDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "core",
@@ -88,9 +87,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         LevelFilter.SelectedIndex = 0;
         DomainFilter.ItemsSource = new[] { "全部" };
         DomainFilter.SelectedIndex = 0;
-        ClassFilter.ItemsSource = new[] { "全部" };
-        ClassFilter.SelectedIndex = 0;
-        ClassFilter.IsEnabled = false;
 
         CompletionList.ItemsSource = Array.Empty<ConsoleCompletionCandidate>();
         CompletionPopup.IsOpen = false;
@@ -150,6 +146,16 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     }
 
     internal string SourceFilterValue => _domain;
+
+    /// <summary>
+    /// 命令类过滤的当前值。1.25.0 起**只作用于命令集**：控制台工具条不再有"类"这一段，
+    /// 输出行也不再按类过滤。
+    ///
+    /// 为什么连过滤一起撤：类是与命令集共享的一份状态（<see cref="ICommandCatalogSession"/>）。
+    /// 只拆掉控件、留着过滤，命令集那边挑一个类就会让控制台成片消失，而控制台上
+    /// 没有任何东西说得出为什么——那正是本仓一直在消灭的"静默过滤"。
+    /// <c>aurora.log.class</c> 仍在，仍然是设置与查询这份状态的入口。
+    /// </summary>
     internal string ClassFilterValue => _commandClass;
     internal string KeywordFilterValue => _keyword;
     internal bool MuteLayoutEnabled => _muteLayout;
@@ -202,13 +208,15 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     internal void SetSource(string source)
         => _ = TrySetSource(source, out _);
 
+    /// <summary>
+    /// 设置命令类过滤。落点只剩命令集：控制台自 1.25.0 起不按类过滤，
+    /// 因此这里不再重建可见列表（见 <see cref="ClassFilterValue"/>）。
+    /// </summary>
     internal bool TrySetClass(string commandClass, out IReadOnlyList<string> availableClasses)
     {
-        FlushIncoming();
         if (!_catalogSession.TrySetCommandClass(commandClass, out availableClasses))
             return false;
         ApplyTaxonomySnapshot();
-        RebuildVisible();
         return true;
     }
 
@@ -405,11 +413,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
 
         if (_domain != "全部" && !EffectiveDomainOf(row).Equals(_domain, StringComparison.OrdinalIgnoreCase))
             return false;
-        // DEC-025：筛选项存的是显示标签，「无类」要先翻回空串类键再比较。
-        if (_commandClass != "全部" && !row.CommandClassKey.Equals(
-                CommandClassLabels.ToKey(_commandClass),
-                StringComparison.OrdinalIgnoreCase))
-            return false;
 
         var keyword = _keyword;
         if (keyword.Length > 0
@@ -452,13 +455,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         _ = _bus.ExecuteAsync($"aurora.log.source source={CommandParser.QuoteArg(source)}", "UI");
     }
 
-    private void OnClassChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!IsLoaded || _suppressFilterEvents || ClassFilter.SelectedItem is not string commandClass)
-            return;
-        _ = _bus.ExecuteAsync($"aurora.log.class class={CommandParser.QuoteArg(commandClass)}", "UI");
-    }
-
     private void OnCatalogChanged(object? sender, CommandCatalogChangedEventArgs e)
     {
         if (e.Kind == CommandCatalogChangeKind.Selection)
@@ -494,26 +490,21 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         _domains = ["全部", .. registered];
         var filter = _catalogSession.CurrentFilter;
         var previousDomain = _domain;
-        var previousClass = _commandClass;
         _domain = filter.Domain;
-        _classes = ["全部", .. _catalogSession.Classes];
         _commandClass = filter.CommandClass;
         _suppressFilterEvents = true;
         try
         {
             DomainFilter.ItemsSource = _domains;
             DomainFilter.SelectedItem = _domain;
-            ClassFilter.ItemsSource = _classes;
-            ClassFilter.SelectedItem = _commandClass;
-            ClassFilter.IsEnabled = _domain != "全部";
         }
         finally
         {
             _suppressFilterEvents = false;
         }
 
-        if (!previousDomain.Equals(_domain, StringComparison.Ordinal)
-            || !previousClass.Equals(_commandClass, StringComparison.Ordinal))
+        // 类不再参与控制台过滤，因此它变了也不必重建可见列表。
+        if (!previousDomain.Equals(_domain, StringComparison.Ordinal))
             RebuildVisible();
     }
 

@@ -173,7 +173,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.log.class",
             Domain = "aurora",
             CommandClass = "log",
-            Summary = "设置控制台和命令集的命令类过滤",
+            Summary = "设置命令集的命令类过滤（控制台不再按类过滤）",
             Example = "aurora.log.class class=win",
             RequiresUiThread = true,
             Parameters = [new ParameterSpec { Name = "class", Description = "当前域内的命令类；省略时查询当前值", Position = 0 }],

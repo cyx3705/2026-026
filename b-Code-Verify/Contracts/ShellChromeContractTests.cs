@@ -888,17 +888,20 @@ public sealed class ShellChromeContractTests
             log: log);
     }
 
+    /// <summary>
+    /// 1.25.0（REQ-UI-125）：控制台工具条只剩级别与域。"类"那一段连同按类过滤一起撤走——
+    /// 它与命令集共享同一份状态，留着会让命令集那边挑一个类就把控制台筛空，
+    /// 而控制台上没有任何控件说得出为什么。<c>aurora.log.class</c> 仍在，落点只剩命令集。
+    /// </summary>
     [Fact]
-    public void ConsoleToolbarShowsLevelDomainAndDependentClass()
+    public void ConsoleToolbarShowsLevelAndDomainOnlyAndDropsClass()
     {
         RunShell(window =>
         {
             var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
             Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("LevelFilter")).Visibility);
             Assert.Equal(Visibility.Visible, Assert.IsType<AuroraOptionBox>(console.FindName("DomainFilter")).Visibility);
-            var classFilter = Assert.IsType<AuroraOptionBox>(console.FindName("ClassFilter"));
-            Assert.Equal(Visibility.Visible, classFilter.Visibility);
-            Assert.False(classFilter.IsEnabled);
+            Assert.Null(console.FindName("ClassFilter"));
             Assert.Equal(Visibility.Collapsed, Assert.IsType<TextBox>(console.FindName("KeywordFilter")).Visibility);
             Assert.Equal(Visibility.Collapsed, Assert.IsType<CheckBox>(console.FindName("MuteLayout")).Visibility);
             Assert.Equal(Visibility.Collapsed, Assert.IsType<CheckBox>(console.FindName("AutoScroll")).Visibility);
