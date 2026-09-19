@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Pages;
@@ -159,6 +161,91 @@ public sealed class StatefulButtonContractTests
                 }
             }
             finally { window.Close(); }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-124：运行态经**框架自带**的 AutomationProperties.ItemStatus 到达按钮，
+    /// 按钮模板里不得再出现本程序集的类型。
+    ///
+    /// 这条是真机缺陷的回归闸：模板此前用 <c>(actions:AuroraCommandActivity.Activity).IsRunning</c>
+    /// 反向取值，而模板可能由 WPF 跨热重载缓存成旧 ALC 的属性身份——门禁跑在默认 ALC 上，
+    /// 永远复现不出来（与 REQ-UI-025 同一类只在真机成立的缺陷）。能在门禁里钉住的，
+    /// 正是"模板不许依赖本程序集的附加属性"这条结构性约束。
+    /// </summary>
+    [Fact]
+    public void ButtonTemplatesTakeRunningStateFromFrameworkOwnedItemStatusOnly()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var controls = new ResourceDictionary
+            {
+                Source = new Uri("/HistoryAurora;component/Themes/AuroraControls.xaml", UriKind.Relative),
+            };
+
+            foreach (var key in new[] { "Aurora.Button.Base", "Aurora.Panel.Switch" })
+            {
+                var style = Assert.IsType<Style>(controls[key]);
+
+                foreach (var setter in style.Setters.OfType<Setter>())
+                    Assert.NotEqual(AuroraCommandActivity.ActivityProperty, setter.Property);
+
+                var template = Assert.IsType<ControlTemplate>(style.Setters
+                    .OfType<Setter>()
+                    .Single(setter => setter.Property == Control.TemplateProperty)
+                    .Value);
+
+                // 旧形态：DataTrigger 顺着本程序集的附加属性往下走。一条都不许剩。
+                foreach (var trigger in template.Triggers.OfType<DataTrigger>())
+                {
+                    var path = (trigger.Binding as Binding)?.Path?.Path ?? "";
+                    Assert.DoesNotContain(nameof(AuroraCommandActivity), path, StringComparison.Ordinal);
+                }
+
+                var running = Assert.Single(
+                    template.Triggers.OfType<Trigger>(),
+                    trigger => trigger.Property == AutomationProperties.ItemStatusProperty);
+                Assert.Equal(AuroraCommandActivity.RunningStatus, running.Value);
+                Assert.Contains(running.Setters.OfType<Setter>(), setter =>
+                    setter.TargetName == "RunningProgress"
+                    && setter.Property == UIElement.VisibilityProperty
+                    && (Visibility)setter.Value! == Visibility.Visible);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 状态是**推**到按钮身上的：挂上、进入运行态、退出运行态各写一次 ItemStatus，
+    /// 改挂另一份状态时旧那份不得继续写（虚拟化换行后"运行中"留在别人行上的形态）。
+    /// </summary>
+    [Fact]
+    public void ActivityPushesItemStatusOntoEveryAttachedElementAndReleasesReplacedOnes()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var activity = new AuroraCommandActivity();
+            var first = new Button();
+            var second = new Button();
+            AuroraCommandActivity.SetActivity(first, activity);
+            AuroraCommandActivity.SetActivity(second, activity);
+            Assert.Equal("就绪", AutomationProperties.GetItemStatus(first));
+
+            var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var run = activity.RunAsync(() => gate.Task);
+            Assert.Equal(AuroraCommandActivity.RunningStatus, AutomationProperties.GetItemStatus(first));
+            Assert.Equal(AuroraCommandActivity.RunningStatus, AutomationProperties.GetItemStatus(second));
+
+            // 换挂：second 交给另一份状态，旧那份必须当场把它放回空闲。
+            var other = new AuroraCommandActivity();
+            AuroraCommandActivity.SetActivity(second, other);
+            Assert.Equal("就绪", AutomationProperties.GetItemStatus(second));
+
+            gate.SetResult(true);
+            Assert.True(UiTestHost.PumpUntil(() => !activity.IsRunning));
+            Assert.True(UiTestHost.PumpUntil(
+                () => AutomationProperties.GetItemStatus(first) == "已完成"));
+            Assert.Equal("就绪", AutomationProperties.GetItemStatus(second));
+            run.GetAwaiter().GetResult();
         });
     }
 

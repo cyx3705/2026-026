@@ -50,12 +50,6 @@
                 <widgets:AuroraOptionBox x:Name="DomainFilter" Width="112"
                                          Style="{StaticResource Aurora.OptionBox.Flat}"
                                          SelectionChanged="OnSourceChanged" />
-                <Border Style="{StaticResource Aurora.Segment.Divider}" />
-                <TextBlock Text="类" Style="{StaticResource Aurora.Segment.Label}" />
-                <widgets:AuroraOptionBox x:Name="ClassFilter" Width="96"
-                                         Style="{StaticResource Aurora.OptionBox.Flat}"
-                                         SelectionChanged="OnClassChanged" />
-
                 <Border Visibility="Collapsed" Style="{StaticResource Aurora.Segment.Divider}" />
 
                 <TextBlock Text="关键字" Visibility="Collapsed" Style="{StaticResource Aurora.Segment.Label}" />
