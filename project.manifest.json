@@ -65,7 +65,7 @@
     "build": "dotnet build .\\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false",
     "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
-    "run": "dotnet run --project .\\b-Code-Studio\\App\\HistoryAurora.App.csproj",
+    "run": null,
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
   },
   "externalDependencies": [

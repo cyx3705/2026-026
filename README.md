@@ -1,84 +1,102 @@
-# HistoryAurora 1.21.0
+# HistoryAurora
 
-OneHistory 体系的 **宿主前端界面模块**。名字取自罗马黎明女神 Aurora——本模块是宿主对用户
-可见的那一面：窗口、布局、控制台与主题。
+> 宿主前端界面模块：窗口、场景、布局、控制台与主题
 
-本仓库是 HistoryVulcan 的界面模块，不是独立应用。宿主合同以
-`../2026-023-HistoryVulcan/b-Office/package/` 为准。
+![OneHistory Logo](./Logo.png)
 
-## 存在的理由
+## 定位
 
-HistoryVulcan 的目标是「只保留指令总线与 MCP，越轻越好」。3.13.0 实测其 `vulcan` 域
-81 条命令中：
+HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记为宿主唯一前端：主窗口、场景、布局、
+控制台、命令集、弹窗与页面宿主都在这里。名字取自罗马黎明女神——它是体系对用户可见的那一面。
 
-| 注册方 | 条数 | 构成 | 投影为 MCP 工具 |
-|---|---|---|---|
-| `frontend:HistoryVulcan.Frontend` | **39** | ui 21、log 10、app 4、command 4 | **0** |
-| `framework:service` | 42 | mcp 12、prompt 8、app 7、module 7、command 4、svc 4 | 24 |
+- 不是独立应用：启动与显隐走注册指令，发布只有模块包。没装 Aurora 的宿主没有界面。
+- 别的模块不自建控件，而是以描述化页面协议注册页面，由 Aurora 的组件层渲染。
+- 它的由来是把宿主前端进程自持的 39 条界面命令搬出宿主，让宿主只剩指令总线（MCP 工具一个不少）。
 
-那 39 条占着服务进程注册表近一半条目，参与每次 schema 导出与目录快照，却对 MCP 面零贡献。
-HistoryAurora 的任务就是把它们从宿主搬出来——搬走之后 MCP 工具一个不少。
+## 概况
 
-## 现状
+| 项 | 值 |
+| --- | --- |
+| 编号 | `2026-026` |
+| 角色 | 宿主模块（`kind=module`），宿主唯一前端 |
+| 指令域 | `aurora` |
+| 界面 | 本模块即界面 |
+| MCP 投影 | `readonly` |
+| 版本与宿主下限 | [`AuroraVersion.props`](./b-Code-Studio/AuroraVersion.props) |
 
-当前版本 **1.21.0**。命令按钮显示运行进度、阻止重复执行并等待刷新，栅格表格可滚动，图谱隐藏滚动条。
+## 能力
 
-1.20.4：表格统一表头底板、虚拟化回收与增量更新接口，刷新保留原内容并常驻显示状态、数量、更新时间（REQ-UI-108 ～ 110）。
+| 类 | 指令 | 用途 |
+| --- | --- | --- |
+| `ui` | `show` / `dock` / `max` / `layouts` / `panels` / `dialog` / `selectfile` … | 窗口、布局、面板、弹窗与文件选择 |
+| `scene` | `list` / `open` / `go` / `save` / `reset` / `delete` | 场景 |
+| `log` | `source` / `level` / `keyword` / `clear` / `export` … | 控制台筛选与导出 |
+| `command` | `history` / `copyexample` / `runreadonly` | 命令集 |
+| `app` | `about` / `window` | 关于与主窗口 |
+| `host` | `ready` 等 | 宿主装载完成钩子（内部） |
 
-1.17.0：启动期的界面发现不再靠「注册表安静 150ms」这个猜测：
-登记 `aurora.host.ready`，宿主（5.1.3 起）装完全部模块后按命令名通知，界面在钩子里
-做整轮重拉，防抖定时器降为兜底（DEC-030 / REQ-UI-075）。本版不抬宿主下限，
-在 5.1.2 及以前那条命令永远不会被调用，行为与 1.16.0 一致。
+模块在界面里露面的两条路（描述化页面 / 带注解命令交出窗格）见 [模块 API](./b-Office/package/模块API.md)，
+可用组件见 [组件清单与用法](./b-Office/package/HistoryAurora_组件清单与用法.md)。
 
-1.16.0：界面的三层（外加中立层与装配根）从「测试里的一张字典」收回到目录本身：
-`Shell/` 下只有五个层目录，命名空间跟着目录走，没分层的目录不参与编译。收目录的同时
-暴露并修掉了三处此前门禁看不见的反向依赖（DEC-029），界面行为零变化。
+## 入口
 
-Aurora 已承载宿主前端的窗口、布局、控制台与主题能力；1.14.0 起有隐藏只读
-`aurora.log.snapshot`，从控制台实际使用的内存日志缓冲区提供有界结构化快照，供
-HistoryDiana 的 `diana.log.read` 在当前进程命令总线上调用。日志进入缓冲前统一净化
-账号、密码、令牌、密钥和凭据 URI 等敏感文本，控制台与 AI 查询共享同一份净化结果。
+| 入口 | 用途 |
+| --- | --- |
+| [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
+| [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令 |
+| [文档中心](./b-Office/文档中心.md) | 文档索引与读取顺序 |
+| [项目概览](./b-Office/current/项目概览.md) | 目标、范围与状态 |
+| [技术合同](./b-Office/current/技术合同.md) | 现行需求与架构 |
+| [有效决策](./b-Office/current/有效决策.md) | 仍然有效的关键决策 |
+| [验证合同](./b-Office/current/验证合同.md) | 验证层级、命令与证据 |
+| [模块 API](./b-Office/package/模块API.md) | 跨模块消费合同 |
+| [UI 风格与嵌入页面规范](./b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md) | 视觉与嵌入页结构 |
 
 ## 目录
 
-| 路径 | 用途 |
-|---|---|
+| 路径 | 职责 |
+| --- | --- |
 | `b-Code-Studio/Module/` | 模块工程与程序集元数据 |
-| `b-Code-Studio/Shell/` | 界面源码，**按层分目录**，见下 |
+| `b-Code-Studio/Shell/` | 界面源码，按层分目录（见「要点」） |
 | `b-Code-Studio/eng/` | 构建与门禁脚本 |
 | `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟 |
-| `b-Office/current/` | 现行合同：项目概览、技术合同、有效决策、验证合同 |
-| `b-Office/package/` | 对外消费合同编辑源 |
-| `z-Publish/` | 根部为当前候选，`history/` 为不可变发布归档。**纳入 git，排除规则不得触碰** |
+| `b-Office/` | 项目文档：`current/` 现行合同、`package/` 消费合同、`history/` 只读归档 |
+| `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入；纳入 git，排除规则不得触碰 |
 
-## 分层
+## 构建与验证
 
-`Shell/` 下只有五个层目录，编号越大越靠上，**依赖只能向下**。目录名即层，
-命名空间跟着目录走，根部不放任何散文件（REQ-UI-074、DEC-029）。
-
-| 目录 | 命名空间 | 装的是什么 |
-|---|---|---|
-| `0-Neutral/` | `HistoryAurora.Shell.Neutral` | 指令面、日志、纯工具。不认识任何一层界面 |
-| `1-Base/` | `.Base` | 页面外壳：停靠、顶栏、浮窗、拖出拖入、页面合并、弹窗。**不知道页面里画的是什么** |
-| `2-Components/` | `.Components` | 演进层：风格令牌、表格、控制面板、泳道、页面描述与渲染器。别的模块注册页面就是在消费这一层 |
-| `3-HostedPages/` | `.HostedPages` | Aurora 自己托管的那几页。与模块页同一条路，没有特殊待遇 |
-| `4-Composition/` | `.Composition` | 装配根：`ShellWindow` 与内置指令组。没有任何东西可以依赖它 |
-
-门禁有两道：`HistoryAurora.Module.csproj` 一层一组 `Include`——没分层的顶层目录不参与编译；
-`LayerContractTests` 四条守落点、命名空间对齐与依赖方向。
-
-> 改 `csproj` 时注意 `Link="%(RecursiveDir)…"` 必须把层目录吃掉。写回
-> `..\Shell\**\*.xaml` 会让资源名变成 `2-components/themes/…`，而 pack URI 找的是
-> `themes/…`：编译期零征兆，运行期建窗时抛 `IOException`。
-
-## 构建
-
-宿主快照按相对路径解析（假定本仓与 `2026-023-HistoryVulcan` 在同一库根下）。AI 工作树落在
-库根之外时，由 `diana.worktree.create` 生成的 `Directory.Build.user.props` 把
-`HistoryVulcanPackageRoot` 指回来源仓绝对路径；该文件不入库。
-
-```bash
+```powershell
 dotnet restore .\HistoryAurora.sln --locked-mode -p:NuGetAudit=false
+dotnet build .\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false
+dotnet test .\b-Code-Verify\Contracts\Contracts.csproj -c Release -p:NuGetAudit=false
+powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code-Studio\eng\Test-QualityGate.ps1
 ```
 
-其余命令见 `project.manifest.json` 的 `commands` 段。
+宿主快照按相对路径解析（假定本仓与 `2026-023-HistoryVulcan` 在同一库根下）。
+推送时 [`historyaurora-gate.yml`](./.github/workflows/historyaurora-gate.yml) 在 GitHub Actions 上复验。
+
+## 开发与发布
+
+改动只进 `vulcan.dev.start` 创建的工作区，经宿主 Console CLI 走
+`vulcan.dev.start` → `vulcan.dev.submit`（候选构建并热装送审）→ `vulcan.dev.finish`（批准后并回并写入 `z-Publish`）。
+本仓不自行发布。
+
+## 要点
+
+`Shell/` 下只有五个层目录，编号越大越靠上，**依赖只能向下**；目录名即层，命名空间跟着目录走（REQ-UI-074、DEC-029）。
+
+| 目录 | 命名空间 | 内容 |
+| --- | --- | --- |
+| `0-Neutral/` | `HistoryAurora.Shell.Neutral` | 指令面、日志、纯工具 |
+| `1-Base/` | `.Base` | 页面外壳：停靠、顶栏、拖出拖入、页面合并、弹窗 |
+| `2-Components/` | `.Components` | 风格令牌、表格、控制面板、泳道、页面描述与渲染器 |
+| `3-HostedPages/` | `.HostedPages` | Aurora 自己托管的页面，与模块页同一条路 |
+| `4-Composition/` | `.Composition` | 装配根：`ShellWindow` 与内置指令组 |
+
+- 门禁两道：`HistoryAurora.Module.csproj` 按层 `Include`（没分层的目录不参与编译）；`LayerContractTests` 守落点、命名空间与依赖方向。
+- 改 `csproj` 时 `Link="%(RecursiveDir)…"` 必须吃掉层目录，否则资源名变成 `2-components/themes/…`：编译零征兆，运行期建窗抛 `IOException`。
+- 页面 owner 由指令域推出（`History` + 域名首字母大写），与模块名无关。
+
+---
+
+作者：Pinavia
