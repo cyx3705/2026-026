@@ -2,8 +2,6 @@
 
 > 宿主前端界面模块：窗口、场景、布局、控制台与主题
 
-![OneHistory Logo](./Logo.png)
-
 ## 定位
 
 HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记为宿主唯一前端：主窗口、场景、布局、
@@ -97,6 +95,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code-Studio\eng\Test-Qua
 - 改 `csproj` 时 `Link="%(RecursiveDir)…"` 必须吃掉层目录，否则资源名变成 `2-components/themes/…`：编译零征兆，运行期建窗抛 `IOException`。
 - 页面 owner 由指令域推出（`History` + 域名首字母大写），与模块名无关。
 
----
+## 保留内容
+- 本模板项目介绍：此为最初的准备的项目模板
+    每个分支项目都会由他去继承
+- 作者：Pinavia - 2025
 
-作者：Pinavia
+![logo](./Logo.png)
