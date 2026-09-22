@@ -23,20 +23,31 @@ internal static class DockingOverlayResourceRepair
     {
         ArgumentNullException.ThrowIfNull(theme);
 
-        var changed = new List<string>();
-        var dark = (FindResource(theme, "Aurora.Brush.Surface") as SolidColorBrush)?.Color is { } surface &&
-                   (surface.R + surface.G + surface.B) < 288;
+        // 回退色取本字典树里 Aurora 自己的有名令牌（AuroraTokens*.xaml），不在代码里写颜色（1.26.0，REQ-UI-128）。
+        // 按字符串键取不受 ComponentResourceKey 在可回收上下文里解析失败的影响——那正是本修复要绕开的坑。
+        // 按钮底与星形底**必须透明**（缺键时 AvalonDock 会退回 VS 调色板的实色）；透明是结构值，不是配色。
+        var fallbacks = new List<(string Name, object Key, Brush Fallback)>
+        {
+            (nameof(ResourceKeys.DockingButtonBackgroundBrushKey), ResourceKeys.DockingButtonBackgroundBrushKey, Brushes.Transparent),
+            (nameof(ResourceKeys.DockingButtonStarBackgroundBrushKey), ResourceKeys.DockingButtonStarBackgroundBrushKey, Brushes.Transparent),
+        };
+        foreach (var (name, key, token) in Fallbacks())
+        {
+            if (FindResource(theme, token) is Brush brush)
+                fallbacks.Add((name, key, brush));
+        }
 
-        EnsureThemeDictionary(theme, changed, dark);
+        var changed = new List<string>();
+        EnsureThemeDictionary(theme, changed, fallbacks);
         return changed;
     }
 
     private static void EnsureThemeDictionary(
         ResourceDictionary dictionary,
         ICollection<string> changed,
-        bool dark)
+        IReadOnlyList<(string Name, object Key, Brush Fallback)> fallbacks)
     {
-        foreach (var (name, key, fallback) in Fallbacks(dark))
+        foreach (var (name, key, fallback) in fallbacks)
             PutIfTransparent(dictionary, key, fallback, name, changed);
 
         // The preview rectangle is a hit-test-independent outline. Its fill
@@ -50,49 +61,30 @@ internal static class DockingOverlayResourceRepair
             changed);
 
         foreach (var merged in dictionary.MergedDictionaries)
-            EnsureThemeDictionary(merged, changed, dark);
+            EnsureThemeDictionary(merged, changed, fallbacks);
     }
 
-    private static IEnumerable<(string Name, object Key, Brush Fallback)> Fallbacks(bool dark)
+    /// <summary>
+    /// 需要兜底的有色 AvalonDock 键 → 对应的 Aurora 令牌名。预览框填充由 <see cref="PutAlways"/> 固定为透明。
+    /// </summary>
+    private static IEnumerable<(string Name, object Key, string Token)> Fallbacks()
     {
-        yield return (
-            nameof(ResourceKeys.DockingButtonBackgroundBrushKey),
-            ResourceKeys.DockingButtonBackgroundBrushKey,
-            Brushes.Transparent);
         yield return (
             nameof(ResourceKeys.DockingButtonForegroundBrushKey),
             ResourceKeys.DockingButtonForegroundBrushKey,
-            new SolidColorBrush(dark
-                ? Color.FromRgb(0x60, 0xA5, 0xFA)
-                : Color.FromRgb(0x25, 0x63, 0xEB)));
+            "Aurora.Brush.DockTarget");
         yield return (
             nameof(ResourceKeys.DockingButtonForegroundArrowBrushKey),
             ResourceKeys.DockingButtonForegroundArrowBrushKey,
-            new SolidColorBrush(dark
-                ? Color.FromRgb(0x93, 0xC5, 0xFD)
-                : Color.FromRgb(0x1D, 0x4E, 0xD8)));
+            "Aurora.Brush.DockTargetArrow");
         yield return (
             nameof(ResourceKeys.DockingButtonStarBorderBrushKey),
             ResourceKeys.DockingButtonStarBorderBrushKey,
-            new SolidColorBrush(dark
-                ? Color.FromArgb(0xA0, 0x60, 0xA5, 0xFA)
-                : Color.FromArgb(0x80, 0x60, 0xA5, 0xFA)));
-        yield return (
-            nameof(ResourceKeys.DockingButtonStarBackgroundBrushKey),
-            ResourceKeys.DockingButtonStarBackgroundBrushKey,
-            Brushes.Transparent);
+            "Aurora.Brush.DockTargetHalo");
         yield return (
             nameof(ResourceKeys.PreviewBoxBorderBrushKey),
             ResourceKeys.PreviewBoxBorderBrushKey,
-            new SolidColorBrush(dark
-                ? Color.FromRgb(0x60, 0xA5, 0xFA)
-                : Color.FromRgb(0x25, 0x63, 0xEB)));
-        yield return (
-            nameof(ResourceKeys.PreviewBoxBackgroundBrushKey),
-            ResourceKeys.PreviewBoxBackgroundBrushKey,
-            new SolidColorBrush(dark
-                ? Color.FromArgb(0x70, 0x3B, 0x82, 0xF6)
-                : Color.FromArgb(0x60, 0x3B, 0x82, 0xF6)));
+            "Aurora.Brush.DockTarget");
     }
 
     private static void PutIfTransparent(

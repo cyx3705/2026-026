@@ -126,12 +126,21 @@
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBorder}" Color="#2A2D2C" />
 
     <!-- 覆盖层专用画刷；不依赖 VS 调色板在宿主中的可选 DockTargetGlyph* 键。 -->
+    <!-- 停靠方位指示(功能色,不跟品牌色走)。色值只写在 Aurora.Color.* 这一份;画刷与下面 AvalonDock 键、
+         DockingOverlayResourceRepair 的回退都引用它,不再各写一遍蓝色。
+         AvalonDock 键不能写成 StaticResource 元素:x:Static 键 + StaticResource 元素会让 BAML 读键时 NullReference(1.26.0,REQ-UI-128)。 -->
+    <Color x:Key="Aurora.Color.DockTarget">#FF60A5FA</Color>
+    <SolidColorBrush x:Key="Aurora.Brush.DockTarget" Color="{StaticResource Aurora.Color.DockTarget}" />
+    <Color x:Key="Aurora.Color.DockTargetArrow">#FF93C5FD</Color>
+    <SolidColorBrush x:Key="Aurora.Brush.DockTargetArrow" Color="{StaticResource Aurora.Color.DockTargetArrow}" />
+    <Color x:Key="Aurora.Color.DockTargetHalo">#A060A5FA</Color>
+    <SolidColorBrush x:Key="Aurora.Brush.DockTargetHalo" Color="{StaticResource Aurora.Color.DockTargetHalo}" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonBackgroundBrushKey}" Color="Transparent" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundBrushKey}" Color="#FF60A5FA" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundArrowBrushKey}" Color="#FF93C5FD" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBorderBrushKey}" Color="#A060A5FA" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundBrushKey}" Color="{StaticResource Aurora.Color.DockTarget}" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonForegroundArrowBrushKey}" Color="{StaticResource Aurora.Color.DockTargetArrow}" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBorderBrushKey}" Color="{StaticResource Aurora.Color.DockTargetHalo}" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DockingButtonStarBackgroundBrushKey}" Color="Transparent" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBorderBrushKey}" Color="#FF60A5FA" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBorderBrushKey}" Color="{StaticResource Aurora.Color.DockTarget}" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PreviewBoxBackgroundBrushKey}" Color="#003B82F6" />
 
 </ResourceDictionary>

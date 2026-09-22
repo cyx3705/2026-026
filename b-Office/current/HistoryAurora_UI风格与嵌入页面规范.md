@@ -56,7 +56,8 @@ Canvas、SurfaceAlt、ControlBorder 分别等于站点的 `--canvas`、`--surfac
 - `Accent` 只表示选择、焦点和主要动作，不作为大面积页面底色。
 - `Hairline` 只用于表格、分段工具条或弹层内部的必要分隔，不用于包围每个区域。
 - 错误、警告、成功均使用语义令牌；不要用主题色替代状态色。
-- 禁止在业务 XAML 中新增十六进制颜色；确需新增语义时先扩展浅/深两份令牌并补合同测试。
+- 颜色字面量**只**出现在 `AuroraTokens.xaml` / `AuroraTokens.Dark.xaml`：XAML 与 C#（含兜底值、测量用画刷）一律按键引用，
+  唯一放行的是 `Brushes.Transparent`。确需新增语义时先扩展浅/深两份令牌（1.26.0，REQ-UI-128，门禁 `ColorLiteralContractTests`）。
 - 自绘（`OnRender`）用到的主题色必须经挂资源引用、`AffectsRender` 的依赖属性取，不得在绘制时 `TryFindResource`——
   否则切换深浅后不重画，颜色停在旧主题（1.26.0，REQ-UI-126）。
 

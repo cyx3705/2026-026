@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using HistoryAurora.Shell.Components.Panels;
 
@@ -369,9 +370,10 @@ internal sealed class AuroraPanelBoard : Panel
     {
         ArgumentNullException.ThrowIfNull(drawingContext);
 
-        // 令牌取不到时用一个可见的兜底色，而不是一根都不画。
-        // 「线没了」在界面上看不出是"没做"还是"画刷没解析到"，那正是本轮要消灭的形态。
-        var hairline = HairlineBrush ?? FallbackHairline;
+        // 令牌取不到时退到前景色，而不是一根都不画、也不在这里另写一份颜色（REQ-UI-128）。
+        // 「线没了」在界面上看不出是"没做"还是"画刷没解析到"，那正是 REQ-UI-037 要消灭的形态；
+        // 退到前景色时线会明显偏深，一眼就知道令牌没接上。
+        var hairline = HairlineBrush ?? TextElement.GetForeground(this);
 
         foreach (var row in _layout)
         {
@@ -412,14 +414,6 @@ internal sealed class AuroraPanelBoard : Panel
         drawingContext.PushGuidelineSet(guidelines);
         drawingContext.DrawRectangle(brush, null, rect);
         drawingContext.Pop();
-    }
-
-    private static readonly Brush FallbackHairline = Freeze(new SolidColorBrush(Color.FromRgb(0xE4, 0xDF, 0xD4)));
-
-    private static Brush Freeze(Brush brush)
-    {
-        brush.Freeze();
-        return brush;
     }
 
     private sealed class Placed

@@ -606,7 +606,7 @@ public sealed class AuroraTable : UserControl
             cell.FlowDirection,
             new Typeface(cell.FontFamily, cell.FontStyle, cell.FontWeight, cell.FontStretch),
             cell.FontSize,
-            Brushes.Black,
+            cell.Foreground ?? Brushes.Transparent, // 只量宽度，画刷不参与；用单元格自己的前景，免得这里冒出一个写死的颜色
             VisualTreeHelper.GetDpi(cell).PixelsPerDip);
 
         return formatted.Width > cell.ActualWidth + 0.5;

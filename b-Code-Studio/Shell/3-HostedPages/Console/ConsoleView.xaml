@@ -190,8 +190,8 @@
                                Text="{Binding Text}"
                                TextWrapping="Wrap">
                         <!--
-                            ConsoleRow.Foreground 保留为公开兼容属性，但渲染颜色由当前
-                            主题令牌统一决定，避免深色主题继续使用浅色硬编码画刷。
+                            行颜色只在这里按级别取主题令牌；ConsoleRow 不带颜色（1.26.0，REQ-UI-128
+                            删掉了它那套写死的浅色级别画刷）。
                         -->
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
