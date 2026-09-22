@@ -1464,6 +1464,11 @@
             drag and no collectible-context URI lookup is performed by the probe.
             </summary>
         </member>
+        <member name="M:HistoryAurora.Shell.Base.Docking.DockingOverlayResourceRepair.Fallbacks">
+            <summary>
+            需要兜底的有色 AvalonDock 键 → 对应的 Aurora 令牌名。预览框填充由 <see cref="M:HistoryAurora.Shell.Base.Docking.DockingOverlayResourceRepair.PutAlways(System.Windows.ResourceDictionary,System.Object,System.Windows.Media.Brush,System.String,System.Collections.Generic.ICollection{System.String})"/> 固定为透明。
+            </summary>
+        </member>
         <member name="T:HistoryAurora.Shell.Base.Docking.DockContentSnapshot">
             <summary>
             一格里的一页。1.22（REQ-UI-120）起没有独立浮窗：旧文件里的 <c>floatingWindows</c>、
@@ -4418,7 +4423,11 @@
             <summary>候选行：左边是要插入的文本，右边是说明。说明用次级色，不与正文抢注意力。</summary>
         </member>
         <member name="T:HistoryAurora.Shell.HostedPages.Console.ConsoleRow">
-            <summary>控制台一行的显示模型:预先算好文本与颜色,渲染零逻辑。</summary>
+            <summary>
+            控制台一行的显示模型:预先算好文本,渲染零逻辑。
+            **不带颜色**(1.26.0,REQ-UI-128):颜色由 ConsoleView.xaml 按 <see cref="P:HistoryAurora.Shell.HostedPages.Console.ConsoleRow.Level"/> 取主题令牌。
+            此前这里另有一套写死的浅色级别画刷,界面早已不用它,却留着一份与令牌各说各话的第二套色板。
+            </summary>
         </member>
         <member name="P:HistoryAurora.Shell.HostedPages.Console.ConsoleRow.SourceKey">
             <summary>来源键(过滤用):UI / 手动 / 脚本 / layout / result / 或日志类别。</summary>

@@ -1,15 +1,16 @@
-using System.Windows.Media;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 
 namespace HistoryAurora.Shell.HostedPages.Console;
 
-/// <summary>控制台一行的显示模型:预先算好文本与颜色,渲染零逻辑。</summary>
+/// <summary>
+/// 控制台一行的显示模型:预先算好文本,渲染零逻辑。
+/// **不带颜色**(1.26.0,REQ-UI-128):颜色由 ConsoleView.xaml 按 <see cref="Level"/> 取主题令牌。
+/// 此前这里另有一套写死的浅色级别画刷,界面早已不用它,却留着一份与令牌各说各话的第二套色板。
+/// </summary>
 public sealed class ConsoleRow
 {
     public required string Text { get; init; }
-
-    public required Brush Foreground { get; init; }
 
     public required ShellLogLevel Level { get; init; }
 
@@ -30,7 +31,6 @@ public sealed class ConsoleRow
     internal static IReadOnlyList<ConsoleRow> From(ShellLogEntry e, CommandRegistry? registry)
     {
         string text;
-        Brush foreground;
         string sourceKey;
         string domainKey;
         string commandClassKey;
@@ -46,7 +46,6 @@ public sealed class ConsoleRow
                     out var resultClass))
             {
                 text = Indent(e.Message);
-                foreground = e.Level >= ShellLogLevel.Error ? ErrorBrush : ResultBrush;
                 sourceKey = "result";
                 domainKey = resultDomain;
                 commandClassKey = resultClass;
@@ -58,7 +57,6 @@ public sealed class ConsoleRow
                          out var progressClass))
             {
                 text = $"  ... {e.Message}";
-                foreground = ProgressBrush;
                 sourceKey = "result";
                 domainKey = progressDomain;
                 commandClassKey = progressClass;
@@ -66,7 +64,6 @@ public sealed class ConsoleRow
             else
             {
                 text = $"[{e.Time:HH:mm:ss}] [{source}] > {e.Message}";
-                foreground = EchoBrush;
                 sourceKey = SourceKeyOf(source);
                 (domainKey, commandClassKey) = TaxonomyOfCommandText(e.Message, registry);
             }
@@ -75,7 +72,6 @@ public sealed class ConsoleRow
         {
             // 普通日志(C-03 按级别着色)
             text = $"{e.Time:HH:mm:ss.fff} [{e.Level}] [{e.Category}] {e.Message}";
-            foreground = LevelBrush(e.Level);
             sourceKey = e.Category;
             domainKey = DomainOfLogCategory(e.Category);
             commandClassKey = "core";
@@ -86,7 +82,6 @@ public sealed class ConsoleRow
             return [new ConsoleRow
             {
                 Text = text,
-                Foreground = foreground,
                 Level = e.Level,
                 SourceKey = sourceKey,
                 DomainKey = domainKey,
@@ -98,7 +93,6 @@ public sealed class ConsoleRow
             .Select(line => new ConsoleRow
             {
                 Text = line.TrimEnd('\r'),
-                Foreground = foreground,
                 Level = e.Level,
                 SourceKey = sourceKey,
                 DomainKey = domainKey,
@@ -172,31 +166,4 @@ public sealed class ConsoleRow
 
     private static string Indent(string message)
         => "  " + message.Replace("\n", "\n  ");
-
-    private static Brush LevelBrush(ShellLogLevel level) => level switch
-    {
-        ShellLogLevel.Trace => TraceBrush,
-        ShellLogLevel.Debug => DebugBrush,
-        ShellLogLevel.Info => InfoBrush,
-        ShellLogLevel.Warn => WarnBrush,
-        ShellLogLevel.Error => ErrorBrush,
-        _ => FatalBrush,
-    };
-
-    private static Brush Frozen(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
-    }
-
-    private static readonly Brush TraceBrush = Frozen(0xB0, 0xB0, 0xB0);
-    private static readonly Brush DebugBrush = Frozen(0x88, 0x88, 0x88);
-    private static readonly Brush InfoBrush = Frozen(0x30, 0x30, 0x30);
-    private static readonly Brush WarnBrush = Frozen(0xB8, 0x86, 0x0B);
-    private static readonly Brush ErrorBrush = Frozen(0xC4, 0x25, 0x25);
-    private static readonly Brush FatalBrush = Frozen(0x8B, 0x00, 0x00);
-    private static readonly Brush EchoBrush = Frozen(0x00, 0x50, 0xA0);
-    private static readonly Brush ResultBrush = Frozen(0x20, 0x70, 0x20);
-    private static readonly Brush ProgressBrush = Frozen(0x60, 0x60, 0xA0);
 }
