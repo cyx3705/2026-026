@@ -21,16 +21,21 @@
 
 ## 2. 颜色令牌
 
+浅色取 OneHistory 站点（onehistory.exc0.top，源码 `2026-031-OneHistorySite/b-Site/assets/site.css`）的暖纸色系（1.26.0，REQ-UI-127）：
+Canvas、SurfaceAlt、ControlBorder 分别等于站点的 `--canvas`、`--surface-2`、`--hairline-2`，文字与主题色逐值相同；
+悬停、按下、发丝线、禁用字与窗口按钮沿同一暖色相推出。深色与站点深色同源。**改站点色板时同步这张表与两份令牌文件**，
+反过来也一样——两边是同一套品牌色。
+
 | 资源键 | 浅色 | 深色 | 用途 |
 | --- | --- | --- | --- |
-| `Aurora.Brush.Canvas` | `#F5F6F7` | `#1A1D1C` | HistoryAurora 工作区背景 |
+| `Aurora.Brush.Canvas` | `#F7F5EF` | `#1A1D1C` | HistoryAurora 工作区背景 |
 | `Aurora.Brush.Surface` | `#FFFFFF` | `#1D201F` | 页面、窗格和弹层主表面 |
-| `Aurora.Brush.SurfaceAlt` | `#F5F6F8` | `#242625` | 次级区域、禁用控件背景 |
-| `Aurora.Brush.SurfaceHover` | `#ECEEF1` | `#2A2D2C` | 悬停背景 |
-| `Aurora.Brush.SurfacePressed` | `#E0E3E8` | `#343736` | 按下背景 |
+| `Aurora.Brush.SurfaceAlt` | `#F1EEE6` | `#242625` | 次级区域、禁用控件背景 |
+| `Aurora.Brush.SurfaceHover` | `#EBE7DD` | `#2A2D2C` | 悬停背景 |
+| `Aurora.Brush.SurfacePressed` | `#E1DCCF` | `#343736` | 按下背景 |
 | `Aurora.Brush.TextPrimary` | `#1F2328` | `#E2DAC6` | 正文、标题、选中内容 |
 | `Aurora.Brush.TextSecondary` | `#6B7280` | `#ACA593` | 说明、元数据、次级图标 |
-| `Aurora.Brush.TextDisabled` | `#A1A7B0` | `#77746A` | 禁用文本 |
+| `Aurora.Brush.TextDisabled` | `#A7A396` | `#77746A` | 禁用文本 |
 | `Aurora.Brush.TextOnAccent` | `#FFFFFF` | `#171918` | 主题色实心控件上的文本 |
 | `Aurora.Brush.Accent` | `#A87A12` | `#D9A441` | 焦点、选中、主要动作 |
 | `Aurora.Brush.AccentHover` | `#8C650E` | `#E8B65C` | 主要动作悬停 |
@@ -39,10 +44,10 @@
 | `Aurora.Brush.DangerSoft` | `#FBE9E9` | `#3A2320` | 错误提示背景 |
 | `Aurora.Brush.Warning` | `#B26A00` | `#E0A458` | 警告状态 |
 | `Aurora.Brush.Success` | `#1E7F4B` | `#5FBE8B` | 成功状态 |
-| `Aurora.Brush.Hairline` | `#E4E7EB` | `#2A2D2C` | 必要的内部细分隔线 |
-| `Aurora.Brush.ControlBorder` | `#D8DCE2` | `#343736` | 输入控件边框 |
-| `Aurora.Brush.WindowButtonHover` | `#DDE1E6` | `#2A2D2C` | 窗口按钮悬停 |
-| `Aurora.Brush.WindowButtonPressed` | `#CBD1D8` | `#343736` | 窗口按钮按下 |
+| `Aurora.Brush.Hairline` | `#E4DFD4` | `#2A2D2C` | 必要的内部细分隔线 |
+| `Aurora.Brush.ControlBorder` | `#D8D3C6` | `#343736` | 输入控件边框 |
+| `Aurora.Brush.WindowButtonHover` | `#E6E1D5` | `#2A2D2C` | 窗口按钮悬停 |
+| `Aurora.Brush.WindowButtonPressed` | `#D6CFBF` | `#343736` | 窗口按钮按下 |
 | `Aurora.Brush.CloseHover` | `#C42525` | `#C4453D` | 关闭按钮悬停 |
 | `Aurora.Brush.CloseHoverPressed` | `#A81E1E` | `#A83A33` | 关闭按钮按下 |
 
@@ -52,6 +57,8 @@
 - `Hairline` 只用于表格、分段工具条或弹层内部的必要分隔，不用于包围每个区域。
 - 错误、警告、成功均使用语义令牌；不要用主题色替代状态色。
 - 禁止在业务 XAML 中新增十六进制颜色；确需新增语义时先扩展浅/深两份令牌并补合同测试。
+- 自绘（`OnRender`）用到的主题色必须经挂资源引用、`AffectsRender` 的依赖属性取，不得在绘制时 `TryFindResource`——
+  否则切换深浅后不重画，颜色停在旧主题（1.26.0，REQ-UI-126）。
 
 ## 3. 字体与文本层级
 
@@ -121,6 +128,7 @@
 - 图标按钮：优先使用现有 Lucide 图标，稳定为方形命中区，并提供 ToolTip。
 - 输入框、组合框：使用隐式 Aurora 样式；焦点边框使用 `Accent`，禁用状态使用 `TextDisabled`。
 - 表格：表头使用 `Aurora.GridHeader`；行选中使用 `AccentSoft`，不要恢复系统默认浅灰模板。
+  列分隔线即列宽拖拽线；最后一列数据列起（含行操作列）不画右侧线——那条线就是表格右缘，锁死不可拖（1.26.0，REQ-UI-126）。
 - 菜单、Popup、ToolTip：表面使用 `Surface`，边框使用 `Hairline`，圆角 8px，使用 `Aurora.Shadow.Flyout`。
 - 列表、树和 Tab：必须使用 Aurora 模板；深色主题下不得出现系统白底或黑色默认文本。
 

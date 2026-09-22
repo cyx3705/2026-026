@@ -79,6 +79,29 @@ internal sealed class AuroraPanelBoard : Panel
     /// <summary>竖分隔线上下各缩进多少，与表头列分隔线（<c>Margin="0,6"</c>）同值。</summary>
     private const double VerticalInset = 6;
 
+    /// <summary>
+    /// 分隔线画刷（1.26.0，REQ-UI-126）。**必须是挂资源引用的依赖属性，且 AffectsRender**：
+    /// 此前在 <see cref="OnRender"/> 里现取 <c>TryFindResource</c>，主题一换资源确实变了，
+    /// 但版面没变、没有任何东西让面板重画，于是线停在旧主题的颜色上——深浅切换后控制面板的线不跟着变。
+    /// 资源引用落到依赖属性上，令牌字典换掉的那一刻属性值变化，AffectsRender 负责重画。
+    /// </summary>
+    public static readonly DependencyProperty HairlineBrushProperty = DependencyProperty.Register(
+        nameof(HairlineBrush),
+        typeof(Brush),
+        typeof(AuroraPanelBoard),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public AuroraPanelBoard()
+    {
+        SetResourceReference(HairlineBrushProperty, "Aurora.Brush.Hairline");
+    }
+
+    public Brush? HairlineBrush
+    {
+        get => (Brush?)GetValue(HairlineBrushProperty);
+        set => SetValue(HairlineBrushProperty, value);
+    }
+
     private readonly List<RowLayout> _layout = [];
 
     private IReadOnlyList<BoardRow> _rows = [];
@@ -348,7 +371,7 @@ internal sealed class AuroraPanelBoard : Panel
 
         // 令牌取不到时用一个可见的兜底色，而不是一根都不画。
         // 「线没了」在界面上看不出是"没做"还是"画刷没解析到"，那正是本轮要消灭的形态。
-        var hairline = TryFindResource("Aurora.Brush.Hairline") as Brush ?? FallbackHairline;
+        var hairline = HairlineBrush ?? FallbackHairline;
 
         foreach (var row in _layout)
         {
@@ -391,7 +414,7 @@ internal sealed class AuroraPanelBoard : Panel
         drawingContext.Pop();
     }
 
-    private static readonly Brush FallbackHairline = Freeze(new SolidColorBrush(Color.FromRgb(0xE4, 0xE7, 0xEB)));
+    private static readonly Brush FallbackHairline = Freeze(new SolidColorBrush(Color.FromRgb(0xE4, 0xDF, 0xD4)));
 
     private static Brush Freeze(Brush brush)
     {

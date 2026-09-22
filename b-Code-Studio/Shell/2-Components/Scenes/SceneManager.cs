@@ -7,7 +7,7 @@ using HistoryVulcan.Core.Storage;
 
 namespace HistoryAurora.Shell.Components.Scenes;
 
-/// <summary>场景从哪里来（场景与导航方案 §1.1）。</summary>
+/// <summary>场景从哪里来（场景与导航方案 V1.0 §1.1，已归档于 b-Office/history）。</summary>
 internal enum SceneSource
 {
     /// <summary>「全部」：第一次进入时每一页都露面。升级后的默认场景，界面与升级前一致。</summary>

@@ -1020,6 +1020,8 @@ public sealed class AuroraTable : UserControl
             _burstRestarts = 0;
         }
 
+        LockRightEdge();
+
         if (available <= 0)
             return;
 
@@ -1044,4 +1046,111 @@ public sealed class AuroraTable : UserControl
                 column.Width = width;
         }
     }
+
+    /// <summary>
+    /// 表格右缘锁死（1.26.0，REQ-UI-126）。
+    ///
+    /// 列宽是按比例算出来的，最右那条线**永远等于表格右缘**：最后一列数据列吃余数，
+    /// 行操作列宽度固定。于是这两列右侧的拖拽线拖了也没用——拖完下一轮分摊又拨回去，
+    /// 留着只会让表头最右边多出一条竖线，看上去像「右边还多注册了一列空的」。
+    /// 从最后一列数据列起，右侧拖拽线一律收起；其余列的拖拽线照常可用。
+    ///
+    /// 表头容器由 <c>GridViewHeaderRowPresenter</c> 自己生成、列一拖就换位，
+    /// 所以每轮分摊都按当前可视顺序重新判一次，而不是只在建列时设一次。
+    /// </summary>
+    private void LockRightEdge()
+    {
+        var lastData = -1;
+        for (var index = _view.Columns.Count - 1; index >= 0; index--)
+        {
+            if (!_weights.ContainsKey(_view.Columns[index]))
+                continue;
+            lastData = index;
+            break;
+        }
+
+        foreach (var header in Descendants<GridViewColumnHeader>(_list))
+        {
+            if (header.Column is not { } column)
+                continue;
+            if (header.Template?.FindName("PART_HeaderGripper", header) is not System.Windows.Controls.Primitives.Thumb gripper)
+                continue;
+
+            var locked = lastData >= 0 && _view.Columns.IndexOf(column) >= lastData;
+            gripper.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
+
+            // 先摘后挂：同一个拖拽线每轮都会走到这里，不能越挂越多。
+            // 必须 handledEventsToo：GridView 自己的改宽处理器会把 DragDelta 标成已处理，
+            // 普通 += 订阅因此一次都收不到。
+            gripper.RemoveHandler(System.Windows.Controls.Primitives.Thumb.DragDeltaEvent, GripperDragDelta);
+            gripper.AddHandler(System.Windows.Controls.Primitives.Thumb.DragDeltaEvent, GripperDragDelta, handledEventsToo: true);
+        }
+    }
+
+    /// <summary>
+    /// 用户拖了某一列的右侧线（REQ-UI-126）。
+    ///
+    /// GridView 自己的处理器负责把那一列改宽；这里负责「右缘不动」：
+    /// 差额全由最后一列数据列吸收，最后一列挤到下限时反过来收住被拖的那一列。
+    /// 拖完把各列当前宽度记成新的权重——之后窗口缩放按用户拖出来的比例走，
+    /// 不会在下一次分摊时弹回声明比例。宽度不记进台账（REQ-UI-062 只记顺序）。
+    /// </summary>
+    private System.Windows.Controls.Primitives.DragDeltaEventHandler GripperDragDelta
+        => _gripperDragDelta ??= OnGripperDragDelta;
+
+    private System.Windows.Controls.Primitives.DragDeltaEventHandler? _gripperDragDelta;
+
+    private void OnGripperDragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.TemplatedParent is not GridViewColumnHeader { Column: { } dragged })
+            return;
+
+        // 与 GridView 自己的改宽处理器谁先谁后取决于挂接顺序（表头换模板会重挂），
+        // 不能指望它已经跑过：排到 Render 优先级上，那时它一定已经把被拖列改宽了。
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => KeepRightEdge(dragged)));
+    }
+
+    private void KeepRightEdge(GridViewColumn dragged)
+    {
+
+        var ordered = _view.Columns.Where(_weights.ContainsKey).ToList();
+        if (ordered.Count < 2 || ordered[^1] == dragged || !_weights.ContainsKey(dragged))
+            return;
+
+        var scroll = ScrollHost();
+        if (scroll is not { ViewportWidth: > 0 })
+            return;
+
+        var available = scroll.ViewportWidth - ChromeOverhead();
+        if (_actionColumn is { } actions)
+            available -= actions.ActualWidth > 0 ? actions.ActualWidth : actions.Width;
+
+        var floor = Math.Min(MinColumnWidth, available / ordered.Count);
+        var last = ordered[^1];
+
+        _applyingWidths++;
+        try
+        {
+            // ChromeOverhead 量的是上一拍的布局，拖动途中与列宽之和相减会慢一拍；
+            // 这里直接用「视口 － 框架 － 其余列当前宽度」，与分摊那一侧同一个口径。
+            var others = ordered.Where(column => column != last).Sum(WidthOf);
+            var remainder = available - others;
+            if (remainder < floor)
+            {
+                dragged.Width = Math.Max(floor, WidthOf(dragged) - (floor - remainder));
+                remainder = floor;
+            }
+
+            last.Width = Math.Max(floor, remainder);
+            foreach (var column in ordered)
+                _weights[column] = WidthOf(column);
+        }
+        finally
+        {
+            _applyingWidths--;
+        }
+    }
+
+    private static double WidthOf(GridViewColumn column)
+        => double.IsNaN(column.Width) ? column.ActualWidth : column.Width;
 }
