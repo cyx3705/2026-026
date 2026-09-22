@@ -7,7 +7,7 @@ using Xunit;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 场景（REQ-UI-084 ～ 086、094，见 b-Office/current/场景与导航方案.md）。
+/// 场景（REQ-UI-084 ～ 086、094，见 b-Office/history/场景与导航方案V1.0.md）。
 ///
 /// 夹具照着真实的两个极端搭：Janus 三页协同（中央 + 左侧 + 并入控制台的标签组），
 /// Minerva 只有一页。命令集与控制台是常驻页。

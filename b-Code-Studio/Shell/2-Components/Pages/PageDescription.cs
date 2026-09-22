@@ -5,7 +5,7 @@ namespace HistoryAurora.Shell.Components.Pages;
 
 /// <summary>
 /// 模块页面描述（协议 V1）。模块经指令总线返回本结构，Aurora 用自己的组件库渲染，
-/// 模块不再构造任何 WPF 对象——见 b-Office/current/页面注册协议方案.md。
+/// 模块不再构造任何 WPF 对象——见 b-Office/history/页面注册协议方案V1.0.md。
 ///
 /// 本结构是**数据**，不含任何外观信息：模块只能选语义档位（<see cref="PageNode.Style"/>），
 /// 具体长相由 Aurora 决定（DEC-005）。解析失败或版本不支持时整份描述作废，

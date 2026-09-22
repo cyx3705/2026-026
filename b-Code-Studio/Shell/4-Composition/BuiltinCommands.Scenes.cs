@@ -4,7 +4,7 @@ using HistoryVulcan.Core.Commands;
 namespace HistoryAurora.Shell.Composition;
 
 /// <summary>
-/// 场景指令组（REQ-UI-085，见 b-Office/current/场景与导航方案.md）。
+/// 场景指令组（REQ-UI-085，见 b-Office/history/场景与导航方案V1.0.md）。
 ///
 /// **无条件登记**：它们必须在 Attach 那一刻进宿主注册表（晚登记的界面命令宿主永远看不见，
 /// 见 <see cref="Register"/> 的注释）。目录快照那一路 <c>Scenes</c> 为 null，但处理器从不执行。
