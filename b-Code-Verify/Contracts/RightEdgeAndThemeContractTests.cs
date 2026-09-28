@@ -152,8 +152,9 @@ public sealed class RightEdgeAndThemeContractTests
     }
 
     /// <summary>
-    /// 浅色按深色的原则重配(1.27.0,REQ-UI-129):正文与链接色对比度过 AA,文字与底色同一暖色相,
-    /// 三层底色拉开。按比值判而不是按色值判——以后微调色值不必改测试,退回到发浑的旧值才会红。
+    /// 浅色按深色的原则重配(1.27.0,REQ-UI-129):正文与链接色对比度过 AA,文字与底色同一暖色相。
+    /// 三层底色(1.27.1,REQ-UI-130):底部 → 页面 → 控制面板逐层变深,每层差与深色同量级(小台阶)。
+    /// 按比值判而不是按色值判——以后微调色值不必改测试,退回到发浑或乱序的旧值才会红。
     /// </summary>
     [Fact]
     public void LightPaletteReadsAsWellAsDark()
@@ -171,8 +172,12 @@ public sealed class RightEdgeAndThemeContractTests
             Assert.True(Contrast(accent, alt) >= 4.5, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
             Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.TextOnAccent"), accent) >= 4.5, "主按钮白字");
             Assert.True(Contrast(secondary, alt) >= 4.5, $"TextSecondary/SurfaceAlt {Contrast(secondary, alt):F2}");
-            // 卡片要从底色里浮起来(旧值 1.09 分不开)
-            Assert.True(Contrast(surface, canvas) >= 1.15, $"Surface/Canvas {Contrast(surface, canvas):F2}");
+            // 三层台阶:底部最亮、页面次之、控制面板最深,方向单调
+            Assert.True(Luminance(canvas) > Luminance(surface), $"Canvas {canvas} 应比 Surface {surface} 亮");
+            Assert.True(Luminance(surface) > Luminance(alt), $"Surface {surface} 应比 SurfaceAlt {alt} 亮");
+            // 小台阶:每层差不超过 1.10:1(深色两级是 1.03 / 1.08)
+            Assert.True(Contrast(canvas, surface) <= 1.10, $"Canvas/Surface {Contrast(canvas, surface):F3}");
+            Assert.True(Contrast(surface, alt) <= 1.10, $"Surface/SurfaceAlt {Contrast(surface, alt):F3}");
             // 文字不能是冷色:红通道不低于蓝通道(旧值 #1F2328 / #6B7280 都偏蓝)
             foreach (var key in new[] { "Aurora.Brush.TextPrimary", "Aurora.Brush.TextSecondary", "Aurora.Brush.TextDisabled" })
             {
@@ -184,15 +189,18 @@ public sealed class RightEdgeAndThemeContractTests
 
     private static double Contrast(Color a, Color b)
     {
-        static double Channel(byte v)
-        {
-            var c = v / 255.0;
-            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
-        }
-        static double Luminance(Color c) =>
-            0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
         var (x, y) = (Luminance(a), Luminance(b));
         return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05);
+    }
+
+    private static double Luminance(Color c)
+    {
+        static double Channel(byte v)
+        {
+            var x = v / 255.0;
+            return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
     }
 
     private static (AuroraTable Table, Window Host) Build(bool withActions)
