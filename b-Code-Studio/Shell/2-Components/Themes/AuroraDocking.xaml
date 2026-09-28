@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:adc="clr-namespace:AvalonDock.Controls;assembly=AvalonDock"
-                    xmlns:base="clr-namespace:HistoryAurora.Shell.Base">
+                    xmlns:base="clr-namespace:HistoryAurora.Shell.Base"
+                    xmlns:widgets="clr-namespace:HistoryAurora.Shell.Components.Widgets">
 
     <!--
         UI-01 / UI-04 / UI-06:AvalonDock 覆盖层。
@@ -198,6 +199,14 @@
                                    TextTrimming="CharacterEllipsis" />
                     </Border>
                 </Border>
+                <!--
+                    内阴影(REQ-UI-131,1.27.1):浅色卡片比底部深,外投影在底部上只会变成一圈由深到浅的渐变,
+                    看起来像卡片在发光、融进底部。浅色改为阴影向内,深色收起它、沿用外投影(见两份令牌)。
+                    铺满两行、在最上层、不接收输入;圆角由它自己裁。
+                -->
+                <widgets:AuroraInsetShadow Grid.RowSpan="2"
+                                           Panel.ZIndex="4"
+                                           CornerRadius="{DynamicResource Aurora.Radius.Page}" />
             </Grid>
         </Border>
         <ControlTemplate.Triggers>
@@ -268,6 +277,14 @@
                                    TextTrimming="CharacterEllipsis" />
                     </Border>
                 </Border>
+                <!--
+                    内阴影(REQ-UI-131,1.27.1):浅色卡片比底部深,外投影在底部上只会变成一圈由深到浅的渐变,
+                    看起来像卡片在发光、融进底部。浅色改为阴影向内,深色收起它、沿用外投影(见两份令牌)。
+                    铺满两行、在最上层、不接收输入;圆角由它自己裁。
+                -->
+                <widgets:AuroraInsetShadow Grid.RowSpan="2"
+                                           Panel.ZIndex="4"
+                                           CornerRadius="{DynamicResource Aurora.Radius.Page}" />
             </Grid>
         </Border>
         <ControlTemplate.Triggers>

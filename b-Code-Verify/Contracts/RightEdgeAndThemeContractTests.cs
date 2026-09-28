@@ -187,6 +187,68 @@ public sealed class RightEdgeAndThemeContractTests
         });
     }
 
+    /// <summary>
+    /// 浅色卡片内阴影(1.27.1,REQ-UI-131):四个圆角内侧只能比卡片色略暗(内阴影的量),不能露出环。
+    /// 首版把环的圆角算大了半个环宽(Border.CornerRadius 量的是描边中线),四角各露一块死黑。
+    /// 圆角外侧必须透明——环被裁掉,不能在卡片外画出直角。
+    /// </summary>
+    [Fact]
+    public void InsetShadowCornersStayInsideTheCard()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            const double radius = 20;
+            var card = new Grid { Width = 240, Height = 120 };
+            var surface = new Border { CornerRadius = new CornerRadius(radius) };
+            surface.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Surface");
+            card.Children.Add(surface);
+            card.Children.Add(new AuroraInsetShadow { CornerRadius = new CornerRadius(radius) });
+
+            var host = new Window
+            {
+                Content = card,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+            };
+            host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = LightTokensUri });
+
+            try
+            {
+                host.Show();
+                UiTestHost.Pump();
+                card.UpdateLayout();
+                UiTestHost.Pump();
+
+                const int w = 240, h = 120, stride = w * 4;
+                var bitmap = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(card);
+                var pixels = new byte[stride * h];
+                bitmap.CopyPixels(pixels, stride, 0);
+                var expected = Token(LightTokensUri, "Aurora.Brush.Surface");
+
+                // 圆角内侧(离圆心 17px,半径 20)与正外角
+                foreach (var (x, y) in new[] { (8, 8), (w - 9, 8), (8, h - 9), (w - 9, h - 9) })
+                {
+                    var at = (y * stride) + (x * 4);
+                    var (r, g, b) = (pixels[at + 2], pixels[at + 1], pixels[at]);
+                    Assert.True(
+                        r >= expected.R - 25 && g >= expected.G - 25 && b >= expected.B - 25,
+                        $"({x},{y}) 应接近卡片色 {expected},实际 #{r:X2}{g:X2}{b:X2}");
+                }
+
+                foreach (var (x, y) in new[] { (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1) })
+                {
+                    Assert.Equal(0, pixels[(y * stride) + (x * 4) + 3]);
+                }
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+    }
+
     private static double Contrast(Color a, Color b)
     {
         var (x, y) = (Luminance(a), Luminance(b));
