@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using HistoryAurora.Shell.Base;
 using HistoryAurora.Shell.Base.Docking;
@@ -160,10 +161,11 @@ internal partial class ShellWindow
             Margin = new Thickness(0, 1, 0, 1),
             ToolTip = tip,
         };
-        button.SetResourceReference(StyleProperty, "Aurora.Button.Ghost");
+        // 当前场景是墨色块、字反白（REQ-UI-132），与站点选中的筛选片同一个样子
+        button.SetResourceReference(StyleProperty, scene.Active ? "Aurora.Button.Ink" : "Aurora.Button.Ghost");
         if (scene.Active)
         {
-            button.SetResourceReference(BackgroundProperty, "Aurora.Brush.AccentSoft");
+            button.Padding = new Thickness(8, 3, 8, 3);
             button.FontWeight = FontWeights.SemiBold;
         }
 
@@ -332,10 +334,11 @@ internal partial class ShellWindow
                       + (uses > 0 ? $" · 用过 {uses} 次" : "")
                       + "\n按住拖出来，落到蓝色停靠点上嵌入",
         };
-        capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Surface");
-        capsule.SetResourceReference(Border.BorderBrushProperty, "Aurora.Brush.Hairline");
+        // 胶囊是圆角块：无底色、一圈细线（REQ-UI-132，同站点筛选片），悬停才垫底色
+        capsule.Background = Brushes.Transparent;
+        capsule.SetResourceReference(Border.BorderBrushProperty, "Aurora.Brush.ControlBorder");
         capsule.MouseEnter += (_, _) => capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.SurfaceHover");
-        capsule.MouseLeave += (_, _) => capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Surface");
+        capsule.MouseLeave += (_, _) => capsule.Background = Brushes.Transparent;
         capsule.MouseLeftButtonDown += OnCapsuleMouseLeftButtonDown;
         capsule.MouseMove += OnCapsuleMouseMove;
         capsule.MouseLeftButtonUp += OnCapsuleMouseLeftButtonUp;
