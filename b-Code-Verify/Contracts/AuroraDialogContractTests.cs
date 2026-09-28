@@ -41,7 +41,8 @@ public sealed class AuroraDialogContractTests
                 });
 
                 var surface = Assert.IsType<SolidColorBrush>(dialog.TryFindResource("Aurora.Brush.Surface"));
-                Assert.Equal(Colors.White, surface.Color);
+                Assert.True(surface.Color.R > 0xE0 && surface.Color.G > 0xE0 && surface.Color.B > 0xE0,
+                    $"dialog should resolve the light surface, got {surface.Color}");
                 Assert.NotNull(dialog.TryFindResource("Aurora.Button.Accent"));
                 Assert.NotNull(dialog.TryFindResource("Aurora.Dialog.Chrome"));
                 Assert.Equal(WindowStyle.None, dialog.WindowStyle);

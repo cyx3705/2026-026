@@ -22,16 +22,21 @@
         ② 文字取的是站点的冷蓝灰(#1F2328 / #6B7280),摆在暖纸底上色相打架 → 改为同暖色相的墨色与暖灰;
         ③ Canvas / Surface / SurfaceAlt 三层只差 1.09~1.16,卡片浮不起来、条带像污渍
            → 底色加深、卡片近白、条带收回到更中性的浅暖灰,卡片投影略加。
-        从这一版起浅色不再与站点逐值相同(站点侧待同步)。
+        站点 site.css 浅色已同步为同一套值。
+
+        1.27.1(REQ-UI-130):用户定「三层台阶,越往上越深,层差照深色那样小」。
+        底部 Canvas #FBFAF7 → 页面 Surface #F8F6F1 → 控制面板 SurfaceAlt #F0EEE9,层差 1.035 / 1.074
+        (深色 1.034 / 1.078,方向相反)。悬停 = 发丝线 = 再深一级,按下 = 控件边框方向再深一级,与深色的配法一一对应。
+        卡片投影退回 0.05 / 0.08:台阶靠颜色表达,不靠浮起。
     -->
 
     <!-- ================================================================ 颜色 -->
 
-    <SolidColorBrush x:Key="Aurora.Brush.Canvas" Color="#ECE9E2" />
-    <SolidColorBrush x:Key="Aurora.Brush.Surface" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Aurora.Brush.SurfaceAlt" Color="#F4F2ED" />
-    <SolidColorBrush x:Key="Aurora.Brush.SurfaceHover" Color="#EAE6DE" />
-    <SolidColorBrush x:Key="Aurora.Brush.SurfacePressed" Color="#DFDAD0" />
+    <SolidColorBrush x:Key="Aurora.Brush.Canvas" Color="#FBFAF7" />
+    <SolidColorBrush x:Key="Aurora.Brush.Surface" Color="#F8F6F1" />
+    <SolidColorBrush x:Key="Aurora.Brush.SurfaceAlt" Color="#F0EEE9" />
+    <SolidColorBrush x:Key="Aurora.Brush.SurfaceHover" Color="#E9E6E0" />
+    <SolidColorBrush x:Key="Aurora.Brush.SurfacePressed" Color="#DEDAD2" />
 
     <SolidColorBrush x:Key="Aurora.Brush.TextPrimary" Color="#26231E" />
     <SolidColorBrush x:Key="Aurora.Brush.TextSecondary" Color="#6A6458" />
@@ -49,12 +54,12 @@
     <SolidColorBrush x:Key="Aurora.Brush.Success" Color="#1E7F4B" />
 
     <!-- UI-01.3:Hairline 只用于卡片内部必要分隔(含分段工具条的切分线),不用于卡片之间 -->
-    <SolidColorBrush x:Key="Aurora.Brush.Hairline" Color="#E6E2DA" />
-    <SolidColorBrush x:Key="Aurora.Brush.ControlBorder" Color="#D3CEC3" />
+    <SolidColorBrush x:Key="Aurora.Brush.Hairline" Color="#E9E6E0" />
+    <SolidColorBrush x:Key="Aurora.Brush.ControlBorder" Color="#D8D4CB" />
 
     <!-- 顶部控件条与窗口按钮(UI-02) -->
-    <SolidColorBrush x:Key="Aurora.Brush.WindowButtonHover" Color="#E3DFD7" />
-    <SolidColorBrush x:Key="Aurora.Brush.WindowButtonPressed" Color="#D5D0C6" />
+    <SolidColorBrush x:Key="Aurora.Brush.WindowButtonHover" Color="#EFECE6" />
+    <SolidColorBrush x:Key="Aurora.Brush.WindowButtonPressed" Color="#E4E0D8" />
     <SolidColorBrush x:Key="Aurora.Brush.CloseHover" Color="#C42525" />
     <SolidColorBrush x:Key="Aurora.Brush.CloseHoverPressed" Color="#A81E1E" />
 
@@ -110,10 +115,10 @@
     <!-- UI-09.4:投影只挂窗格级 Border,不用于列表项等高频元素 -->
     <DropShadowEffect x:Key="Aurora.Shadow.Card"
                       Color="#000000" BlurRadius="10" ShadowDepth="1"
-                      Direction="270" Opacity="0.07" RenderingBias="Performance" />
+                      Direction="270" Opacity="0.05" RenderingBias="Performance" />
     <DropShadowEffect x:Key="Aurora.Shadow.CardActive"
                       Color="#000000" BlurRadius="14" ShadowDepth="1"
-                      Direction="270" Opacity="0.10" RenderingBias="Performance" />
+                      Direction="270" Opacity="0.08" RenderingBias="Performance" />
     <DropShadowEffect x:Key="Aurora.Shadow.Flyout"
                       Color="#000000" BlurRadius="28" ShadowDepth="4"
                       Direction="270" Opacity="0.18" RenderingBias="Performance" />
@@ -137,26 +142,26 @@
 
     <!-- ================================================================ AvalonDock 主题画刷键 -->
 
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.TabBackground}" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.TabBackground}" Color="#F8F6F1" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.PanelBorderBrush}" Color="Transparent" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabSelectedActiveBackground}" Color="#F4E9CF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabSelectedInactiveBackground}" Color="#F4F2ED" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabSelectedInactiveBackground}" Color="#F0EEE9" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedBackground}" Color="Transparent" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedHoveredBackground}" Color="#EAE6DE" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.DocumentWellTabUnselectedHoveredBackground}" Color="#E9E6E0" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabSelectedActiveBackground}" Color="#F4E9CF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveBackground}" Color="#F4F2ED" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabSelectedInactiveBackground}" Color="#F0EEE9" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedBackground}" Color="Transparent" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedHoveredBackground}" Color="#EAE6DE" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowCaptionActiveBackground}" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowCaptionInactiveBackground}" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.AutoHideTabDefaultBackground}" Color="#E6E2DA" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowTabUnselectedHoveredBackground}" Color="#E9E6E0" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowCaptionActiveBackground}" Color="#F8F6F1" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ToolWindowCaptionInactiveBackground}" Color="#F8F6F1" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.AutoHideTabDefaultBackground}" Color="#F0EEE9" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.AutoHideTabDefaultBorder}" Color="Transparent" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.AutoHideTabHoveredBackground}" Color="#F4E9CF" />
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.AutoHideTabHoveredBorder}" Color="Transparent" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingToolWindowBackground}" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingToolWindowBorder}" Color="#E6E2DA" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBackground}" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBorder}" Color="#E6E2DA" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingToolWindowBackground}" Color="#F8F6F1" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingToolWindowBorder}" Color="#E9E6E0" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBackground}" Color="#F8F6F1" />
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.FloatingDocumentWindowBorder}" Color="#E9E6E0" />
 
     <!--
         停靠覆盖层专用画刷。VS2013 的默认调色板在宿主的可回收模块上下文中

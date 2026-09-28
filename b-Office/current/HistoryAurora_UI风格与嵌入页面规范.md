@@ -23,17 +23,18 @@
 
 浅色是暖纸色系，按深色的原则配（1.27.0，REQ-UI-129；1.26.0 起取自 OneHistory 站点，见 REQ-UI-127）：
 **正文、次要文字与主题色字在卡片和条带上都过 AA 4.5**（主题色要当表格链接字用，不能只按「强调色」挑）；
-**文字与底色同一暖色相**，不用冷蓝灰；**Canvas → Surface 至少拉开 1.15:1**，条带（SurfaceAlt）收在两者之间偏中性，
-不要比底色更黄。合同测试按这几条比值判，不按色值判。深色与站点深色同源。
-两边是同一套品牌色：**改站点色板时同步这张表与两份令牌文件**，反过来也一样。1.27.0 改的浅色站点侧尚未同步。
+**文字与底色同一暖色相**，不用冷蓝灰；**底部（Canvas）→ 页面（Surface）→ 控制面板（SurfaceAlt）是三层小台阶**
+（1.27.1，REQ-UI-130）：浅色逐层变深、深色逐层变浅，每层差都在 1.10:1 以内（两套都约 1.03 / 1.08）。
+悬停 = 发丝线 = 控制面板再深一级，按下 / 控件边框再深一级，两套配法一一对应。合同测试按这几条比值与方向判，不按色值判。
+两边是同一套品牌色：**改站点色板时同步这张表与两份令牌文件**，反过来也一样。
 
 | 资源键 | 浅色 | 深色 | 用途 |
 | --- | --- | --- | --- |
-| `Aurora.Brush.Canvas` | `#ECE9E2` | `#1A1D1C` | HistoryAurora 工作区背景 |
-| `Aurora.Brush.Surface` | `#FFFFFF` | `#1D201F` | 页面、窗格和弹层主表面 |
-| `Aurora.Brush.SurfaceAlt` | `#F4F2ED` | `#242625` | 次级区域、禁用控件背景 |
-| `Aurora.Brush.SurfaceHover` | `#EAE6DE` | `#2A2D2C` | 悬停背景 |
-| `Aurora.Brush.SurfacePressed` | `#DFDAD0` | `#343736` | 按下背景 |
+| `Aurora.Brush.Canvas` | `#FBFAF7` | `#1A1D1C` | HistoryAurora 工作区背景 |
+| `Aurora.Brush.Surface` | `#F8F6F1` | `#1D201F` | 页面、窗格和弹层主表面 |
+| `Aurora.Brush.SurfaceAlt` | `#F0EEE9` | `#242625` | 次级区域、禁用控件背景 |
+| `Aurora.Brush.SurfaceHover` | `#E9E6E0` | `#2A2D2C` | 悬停背景 |
+| `Aurora.Brush.SurfacePressed` | `#DEDAD2` | `#343736` | 按下背景 |
 | `Aurora.Brush.TextPrimary` | `#26231E` | `#E2DAC6` | 正文、标题、选中内容 |
 | `Aurora.Brush.TextSecondary` | `#6A6458` | `#ACA593` | 说明、元数据、次级图标 |
 | `Aurora.Brush.TextDisabled` | `#9E998D` | `#77746A` | 禁用文本 |
@@ -45,10 +46,10 @@
 | `Aurora.Brush.DangerSoft` | `#FBE9E9` | `#3A2320` | 错误提示背景 |
 | `Aurora.Brush.Warning` | `#B26A00` | `#E0A458` | 警告状态 |
 | `Aurora.Brush.Success` | `#1E7F4B` | `#5FBE8B` | 成功状态 |
-| `Aurora.Brush.Hairline` | `#E6E2DA` | `#2A2D2C` | 必要的内部细分隔线 |
-| `Aurora.Brush.ControlBorder` | `#D3CEC3` | `#343736` | 输入控件边框 |
-| `Aurora.Brush.WindowButtonHover` | `#E3DFD7` | `#2A2D2C` | 窗口按钮悬停 |
-| `Aurora.Brush.WindowButtonPressed` | `#D5D0C6` | `#343736` | 窗口按钮按下 |
+| `Aurora.Brush.Hairline` | `#E9E6E0` | `#2A2D2C` | 必要的内部细分隔线 |
+| `Aurora.Brush.ControlBorder` | `#D8D4CB` | `#343736` | 输入控件边框 |
+| `Aurora.Brush.WindowButtonHover` | `#EFECE6` | `#2A2D2C` | 窗口按钮悬停 |
+| `Aurora.Brush.WindowButtonPressed` | `#E4E0D8` | `#343736` | 窗口按钮按下 |
 | `Aurora.Brush.CloseHover` | `#C42525` | `#C4453D` | 关闭按钮悬停 |
 | `Aurora.Brush.CloseHoverPressed` | `#A81E1E` | `#A83A33` | 关闭按钮按下 |
 

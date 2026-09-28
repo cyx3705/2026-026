@@ -742,7 +742,10 @@ public sealed class ShellChromeContractTests
             {
                 // UI-08:?????,???????????
                 var light = (SolidColorBrush)window.FindResource("Aurora.Brush.Canvas");
-                Assert.Equal(Colors.White, ((SolidColorBrush)window.FindResource("Aurora.Brush.Surface")).Color);
+                // 1.27.1 起浅色页面不再是纯白(三层台阶,REQ-UI-130),只判它确实是浅色字典
+                var lightSurface = ((SolidColorBrush)window.FindResource("Aurora.Brush.Surface")).Color;
+                Assert.True(lightSurface.R > 0xE0 && lightSurface.G > 0xE0 && lightSurface.B > 0xE0,
+                    $"light surface should be light, got {lightSurface}");
 
                 window.Commands.ExecuteAsync("aurora.app.theme mode=dark", "test").GetAwaiter().GetResult();
                 UiTestHost.Pump();
