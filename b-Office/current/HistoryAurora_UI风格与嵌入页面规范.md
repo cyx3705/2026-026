@@ -52,10 +52,16 @@
 | `Aurora.Brush.WindowButtonPressed` | `#E8E5DF` | `#343736` | 窗口按钮按下 |
 | `Aurora.Brush.CloseHover` | `#C42525` | `#C4453D` | 关闭按钮悬停 |
 | `Aurora.Brush.CloseHoverPressed` | `#A81E1E` | `#A83A33` | 关闭按钮按下 |
+| `Aurora.Brush.Ink` | `#26231E` | `#E2DAC6` | 墨色条、墨色选中块、粗细墨线（= 本主题 TextPrimary） |
+| `Aurora.Brush.OnInk` | `#FBFAF7` | `#1A1D1C` | 墨色块上的反白字（= 本主题 Canvas） |
+| `Aurora.Brush.AccentOnInk` | `#D9A441` | `#7F5E0F` | 墨色块上的编号、悬停链接（= 另一套主题的 Accent） |
+| `Aurora.Brush.TextSecondaryOnInk` | `#ACA593` | `#6A6458` | 墨色块上的次要文字（= 另一套主题的 TextSecondary） |
 
 颜色规则：
 
-- `Accent` 只表示选择、焦点和主要动作，不作为大面积页面底色。
+- **文艺工业风（1.28.0，REQ-UI-132）**：OneHistory 网站、Office 模板与 Aurora 用同一套高对比模块——墨色条、墨色选中块、
+  粗细两级墨线；规则是**块用圆角，线用直线**。权威在 2026-031 `z-OneHistoryID/网站风格.md` §2.3–2.4，这里只写 Aurora 的落地（见 §5）。
+- `Accent`（金）只做编号、末端圆点、悬停链接与键盘焦点，不做选中底色，也不作为大面积页面底色；选中与主要动作是墨色块。
 - `Hairline` 只用于表格、分段工具条或弹层内部的必要分隔，不用于包围每个区域。
 - 错误、警告、成功均使用语义令牌；不要用主题色替代状态色。
 - 颜色字面量**只**出现在 `AuroraTokens.xaml` / `AuroraTokens.Dark.xaml`：XAML 与 C#（含兜底值、测量用画刷）一律按键引用，
@@ -88,7 +94,8 @@
 | --- | --- | --- |
 | `Aurora.Radius.Window` | `0` | 主窗口外缘（1.22 起没有独立浮窗，REQ-UI-120） |
 | `Aurora.Radius.Page` | `16` | 页面卡片（窗格）与 Ctrl 标签态盖板 |
-| `Aurora.Radius.Inner` | `8` | 页面内部组件：按钮、输入、面板底板、表头、弹层 |
+| `Aurora.Radius.Inner` | `8` | 页面内部组件：按钮、输入、面板底板、弹层 |
+| `Aurora.Radius.Bar` | `5` | 墨色条、表格选中行的墨块、泳道节点（1.28.0） |
 | `Aurora.Space.PageInset` | `8` | 页面内容相对卡片的内边距（= `PageRegistrar.PagePad`） |
 | `Aurora.Radius.TabTop` | `5,5,0,0` | 顶部页签 |
 | `Aurora.Radius.TabInner` | `5` | 页签内部元素 |
@@ -109,6 +116,7 @@
 `MinWidth` 或 `MaxWidth`，动态文本必须换行或省略，不能撑动顶栏和工具栏。
 
 1.20.4：表格表头同样复用 `Aurora.Panel.Surface`，高度为控件高度加底板上下 Padding，不绘制末尾空白列；表格正文仍平铺，状态栏常驻于底部。
+1.28.0 起表头不再用底板，改为 `Aurora.Table.HeaderBar` 的粗细两级墨线（REQ-UI-132）；线没有角，贴着页面圆角也不用跟着弯。
 
 ### 控制面板与控制台顶栏用同一份底板，厚薄必须一致（REQ-UI-061）
 
@@ -127,13 +135,18 @@
 ## 5. 控件与交互状态
 
 - 普通按钮：表面底色 + `ControlBorder`，高度至少 28px，圆角 8px；悬停/按下使用对应 Surface 令牌。
-- 主要按钮：`Accent` 背景、`TextOnAccent` 前景；页面中同一操作组通常只有一个主要按钮。
+- 主要按钮：墨色块（`Aurora.Button.Ink`，`Accent` 键保留为它的别名），`OnInk` 前景；页面中同一操作组通常只有一个主要按钮。
 - 图标按钮：优先使用现有 Lucide 图标，稳定为方形命中区，并提供 ToolTip。
-- 输入框、组合框：使用隐式 Aurora 样式；焦点边框使用 `Accent`，禁用状态使用 `TextDisabled`。
-- 表格：表头使用 `Aurora.GridHeader`；行选中使用 `AccentSoft`，不要恢复系统默认浅灰模板。
+- 输入框、组合框：使用隐式 Aurora 样式；焦点 / 展开边框使用 `Ink`，禁用状态使用 `TextDisabled`。
+- 表格：表头栏顶部 2px、底部 1px `Ink` 墨线，不填底色；表头字墨色半粗（`Aurora.GridHeader`）；行线 `ControlBorder`；
+  链接列墨色字、悬停变金；行选中是行内一块圆角墨块、字反白（REQ-UI-132），不要恢复系统默认浅灰模板。
   列分隔线即列宽拖拽线；最后一列数据列起（含行操作列）不画右侧线——那条线就是表格右缘，锁死不可拖（1.26.0，REQ-UI-126）。
 - 菜单、Popup、ToolTip：表面使用 `Surface`，边框使用 `Hairline`，圆角 8px，使用 `Aurora.Shadow.Flyout`。
 - 列表、树和 Tab：必须使用 Aurora 模板；深色主题下不得出现系统白底或黑色默认文本。
+  列表项、树项、下拉项的选中是墨色块反白；Tab 选中是 2px 墨线；开关打开、复选框勾选是墨色。
+- 段标题：`AuroraSectionHeading`——标题后接一段圆角墨色条伸到右缘，条里反白写一句说明（「标题 · 说明」自动拆开）。
+  泳道图标题、右栏「常用页面」在用。每屏最多一个大墨色块，小的选中态不算。
+- 例外：控制台日志行与补全浮层的选中仍是 `AccentSoft`（日志字是分级彩色，放不上墨块）。
 
 ## 6. 窗口形态：只有工具窗口
 

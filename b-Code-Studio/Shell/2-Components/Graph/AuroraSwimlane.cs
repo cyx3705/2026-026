@@ -260,7 +260,7 @@ public sealed class AuroraSwimlane : UserControl
         };
         line.SetResourceReference(
             Shape.StrokeProperty,
-            edge.Edge.Dashed ? "Aurora.Brush.TextSecondary" : "Aurora.Brush.Accent");
+            edge.Edge.Dashed ? "Aurora.Brush.TextSecondary" : "Aurora.Brush.Ink"); // 线用墨（REQ-UI-132），金色只留给末端圆点
         return line;
     }
 
@@ -274,7 +274,6 @@ public sealed class AuroraSwimlane : UserControl
         {
             Width = SwimlaneLayout.NodeWidth,
             Height = SwimlaneLayout.NodeHeight,
-            CornerRadius = new CornerRadius(3),
             BorderThickness = new Thickness(highlighted ? 2 : 1),
             Padding = new Thickness(6, 3, 6, 3),
             Cursor = Cursors.Hand,
@@ -284,15 +283,17 @@ public sealed class AuroraSwimlane : UserControl
                 ? node.Title + (string.IsNullOrWhiteSpace(node.Subtitle) ? "" : "\n" + node.Subtitle)
                 : node.Tooltip,
         };
+        // 节点是块：圆角同墨色条。强调的节点不再铺金底，而是整圈墨色边（REQ-UI-132，站点「强调圆角块 = 边换成墨色」）
+        border.SetResourceReference(Border.CornerRadiusProperty, "Aurora.Radius.Bar");
         border.SetResourceReference(
             Border.BackgroundProperty,
             tone == "danger" ? "Aurora.Brush.DangerSoft"
-            : highlighted ? "Aurora.Brush.AccentSoft"
+            : highlighted ? "Aurora.Brush.Surface"
             : "Aurora.Brush.SurfaceAlt");
         border.SetResourceReference(
             Border.BorderBrushProperty,
             tone == "danger" ? "Aurora.Brush.Danger"
-            : highlighted ? "Aurora.Brush.Accent"
+            : highlighted ? "Aurora.Brush.Ink"
             : "Aurora.Brush.ControlBorder");
 
         var title = new TextBlock { Text = node.Title };
