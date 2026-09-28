@@ -85,11 +85,6 @@
     <DropShadowEffect x:Key="Aurora.Shadow.Card"
                       Color="#000000" BlurRadius="10" ShadowDepth="1"
                       Direction="270" Opacity="0.18" RenderingBias="Performance" />
-    <!-- 内阴影只给浅色用(REQ-UI-131);深色卡片比底部亮,外投影本身就把边界衬出来,这里收起 -->
-    <DropShadowEffect x:Key="Aurora.Shadow.CardInset"
-                      Color="#000000" BlurRadius="6" ShadowDepth="0"
-                      Opacity="0" RenderingBias="Performance" />
-    <Visibility x:Key="Aurora.Card.InsetVisibility">Collapsed</Visibility>
     <DropShadowEffect x:Key="Aurora.Shadow.CardActive"
                       Color="#000000" BlurRadius="14" ShadowDepth="1"
                       Direction="270" Opacity="0.24" RenderingBias="Performance" />

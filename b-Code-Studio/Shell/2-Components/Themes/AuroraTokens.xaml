@@ -127,17 +127,12 @@
 
     <!-- UI-09.4:投影只挂窗格级 Border,不用于列表项等高频元素 -->
     <!--
-        1.27.1(REQ-UI-131):浅色卡片比底部深,外投影只会在底部上画出一圈由深到浅的渐变(实测 6px 从 #F3F1EC 渐到 #FBFAF7),
-        看起来像卡片发光、这一级台阶融成一片。浅色外投影关掉(Opacity 0),改由 AuroraInsetShadow 画内阴影:
-        四周均匀、6px、7%(用户从样图里选的「内影 1 轻」)。深色两项相反。
+        浅色卡片不加投影(Opacity 0):卡片比底部深,外投影在底部上只会画出一圈发光似的渐变。
+        1.27.1 曾改画内阴影(REQ-UI-131),1.28.0 用户定去掉(REQ-UI-133):台阶只靠颜色表达。
     -->
     <DropShadowEffect x:Key="Aurora.Shadow.Card"
                       Color="#000000" BlurRadius="10" ShadowDepth="1"
                       Direction="270" Opacity="0" RenderingBias="Performance" />
-    <DropShadowEffect x:Key="Aurora.Shadow.CardInset"
-                      Color="#26231E" BlurRadius="6" ShadowDepth="0"
-                      Opacity="0.07" RenderingBias="Performance" />
-    <Visibility x:Key="Aurora.Card.InsetVisibility">Visible</Visibility>
     <DropShadowEffect x:Key="Aurora.Shadow.CardActive"
                       Color="#000000" BlurRadius="14" ShadowDepth="1"
                       Direction="270" Opacity="0.08" RenderingBias="Performance" />

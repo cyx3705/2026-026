@@ -4222,25 +4222,6 @@
         <member name="P:HistoryAurora.Shell.Components.Widgets.AuroraGridPanel.Columns">
             <summary>当前列数，供测试断言"窄了就收列"这条行为。</summary>
         </member>
-        <member name="T:HistoryAurora.Shell.Components.Widgets.AuroraInsetShadow">
-             <summary>
-             卡片内阴影（REQ-UI-131，1.27.1）。WPF 没有内阴影，这里的做法是：
-             在卡片外缘画一圈不透明的环（环本身落在卡片外、被圆角裁掉），
-             环的模糊投影往里渗进卡片边缘一圈。
-            
-             盖在卡片最上层、不接收输入（<see cref="P:System.Windows.UIElement.IsHitTestVisible"/> = false），
-             按 <see cref="P:HistoryAurora.Shell.Components.Widgets.AuroraInsetShadow.CornerRadius"/> 自己裁成圆角——WPF 的 Border.CornerRadius 不裁剪子元素，
-             不自己裁的话四个角会露出环的直角投影。
-            
-             投影参数全在令牌 <c>Aurora.Shadow.CardInset</c>，是否显示看 <c>Aurora.Card.InsetVisibility</c>：
-             浅色显示（卡片比底部深，外投影会变成发光感），深色收起（深色沿用外投影）。
-             环的颜色无所谓——投影色由效果决定，环只提供形状——借卡片底色 Surface：
-             万一环与裁剪对不齐，露出来的也只是卡片色，不会是一块黑（1.27.1 首版借了正文色，四角各露一块死黑）。
-             </summary>
-        </member>
-        <member name="F:HistoryAurora.Shell.Components.Widgets.AuroraInsetShadow.RingThickness">
-            <summary>环的宽度：要比投影的模糊半径宽，否则投影外缘会被环的外沿截断。</summary>
-        </member>
         <member name="T:HistoryAurora.Shell.Components.Widgets.AuroraOptionBox">
             <summary>
             单值轮换选择器。左键/键盘切换下一项，右键打开完整选项菜单；不显示独立下拉按钮。

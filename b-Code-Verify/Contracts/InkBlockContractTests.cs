@@ -47,11 +47,11 @@ public sealed class InkBlockContractTests
     }
 
     /// <summary>
-    /// 表格：表头是 2px 墨线开头、1px 墨线收在表头下，不填底色；链接列是墨色字（金色只做编号）；
+    /// 表格：表头是反色圆角块（墨底、字反白）；链接列是墨色字（金色只做编号）；
     /// 选中行是墨色块，格里的字与链接一起反白。1.27 之前是灰底圆角表头、金字链接列、淡金选中。
     /// </summary>
     [Fact]
-    public void TableUsesInkRulesAndInkSelection()
+    public void TableUsesInkHeaderAndInkSelection()
     {
         UiTestHost.RunSta(() =>
         {
@@ -77,9 +77,11 @@ public sealed class InkBlockContractTests
 
                 var header = Descendants<Border>(table)
                     .Single(border => border.Child is GridViewHeaderRowPresenter);
-                Assert.Equal(new Thickness(0, 2, 0, 1), header.BorderThickness);
-                Assert.Equal(ink, ((SolidColorBrush)header.BorderBrush).Color);
-                Assert.True(header.Background is null || ((SolidColorBrush)header.Background).Color.A == 0, "表头不填底色");
+                Assert.Equal(ink, ((SolidColorBrush)header.Background).Color);
+                Assert.True(header.CornerRadius.TopLeft > 0, "表头是圆角块");
+                var column = Descendants<GridViewColumnHeader>(table)
+                    .First(item => item.Role == GridViewColumnHeaderRole.Normal);
+                Assert.Equal(onInk, ((SolidColorBrush)column.Foreground).Color);
 
                 var rows = Descendants<ListViewItem>(table).ToList();
                 Assert.Equal(2, rows.Count);

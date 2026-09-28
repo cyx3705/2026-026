@@ -52,7 +52,7 @@
 | `Aurora.Brush.WindowButtonPressed` | `#E8E5DF` | `#343736` | 窗口按钮按下 |
 | `Aurora.Brush.CloseHover` | `#C42525` | `#C4453D` | 关闭按钮悬停 |
 | `Aurora.Brush.CloseHoverPressed` | `#A81E1E` | `#A83A33` | 关闭按钮按下 |
-| `Aurora.Brush.Ink` | `#26231E` | `#E2DAC6` | 墨色条、墨色选中块、粗细墨线（= 本主题 TextPrimary） |
+| `Aurora.Brush.Ink` | `#26231E` | `#E2DAC6` | 墨色条、墨色选中块、反色表头（= 本主题 TextPrimary） |
 | `Aurora.Brush.OnInk` | `#FBFAF7` | `#1A1D1C` | 墨色块上的反白字（= 本主题 Canvas） |
 | `Aurora.Brush.AccentOnInk` | `#D9A441` | `#7F5E0F` | 墨色块上的编号、悬停链接（= 另一套主题的 Accent） |
 | `Aurora.Brush.TextSecondaryOnInk` | `#ACA593` | `#6A6458` | 墨色块上的次要文字（= 另一套主题的 TextSecondary） |
@@ -116,7 +116,8 @@
 `MinWidth` 或 `MaxWidth`，动态文本必须换行或省略，不能撑动顶栏和工具栏。
 
 1.20.4：表格表头同样复用 `Aurora.Panel.Surface`，高度为控件高度加底板上下 Padding，不绘制末尾空白列；表格正文仍平铺，状态栏常驻于底部。
-1.28.0 起表头不再用底板，改为 `Aurora.Table.HeaderBar` 的粗细两级墨线（REQ-UI-132）；线没有角，贴着页面圆角也不用跟着弯。
+1.28.0 起表头不再用底板，改为 `Aurora.Table.HeaderBar` 的反色圆角块（REQ-UI-132）：墨底、字反白，圆角同组件，与页面圆角同心。
+站点与 Office 的表格用墨线；程序里用户看过觉得线太突兀，只有 Aurora 用反色块。
 
 ### 控制面板与控制台顶栏用同一份底板，厚薄必须一致（REQ-UI-061）
 
@@ -138,7 +139,7 @@
 - 主要按钮：墨色块（`Aurora.Button.Ink`，`Accent` 键保留为它的别名），`OnInk` 前景；页面中同一操作组通常只有一个主要按钮。
 - 图标按钮：优先使用现有 Lucide 图标，稳定为方形命中区，并提供 ToolTip。
 - 输入框、组合框：使用隐式 Aurora 样式；焦点 / 展开边框使用 `Ink`，禁用状态使用 `TextDisabled`。
-- 表格：表头栏顶部 2px、底部 1px `Ink` 墨线，不填底色；表头字墨色半粗（`Aurora.GridHeader`）；行线 `ControlBorder`；
+- 表格：表头是反色圆角块（`Aurora.Table.HeaderBar` + `Aurora.Table.GridHeader`，墨底反白字）；模块自拼的 GridView 用 `Aurora.GridHeader`（透明底、墨色半粗）；行线 `ControlBorder`；
   链接列墨色字、悬停变金；行选中是行内一块圆角墨块、字反白（REQ-UI-132），不要恢复系统默认浅灰模板。
   列分隔线即列宽拖拽线；最后一列数据列起（含行操作列）不画右侧线——那条线就是表格右缘，锁死不可拖（1.26.0，REQ-UI-126）。
 - 菜单、Popup、ToolTip：表面使用 `Surface`，边框使用 `Hairline`，圆角 8px，使用 `Aurora.Shadow.Flyout`。

@@ -551,6 +551,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="Height" Value="{DynamicResource Aurora.Size.Control}" />
@@ -560,31 +561,25 @@
                 <ControlTemplate TargetType="GridViewColumnHeader">
                     <Grid>
                         <Border x:Name="Bd"
-                                Background="Transparent"
+                                Background="{TemplateBinding Background}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Left" VerticalAlignment="Center"
                                               RecognizesAccessKey="True" />
                         </Border>
-                        <!-- 列分隔:只留一条发丝线,且是拖拽改列宽的命中区 -->
+                        <!-- 列分隔:只留一条细线,且是拖拽改列宽的命中区。颜色取表头的 BorderBrush,反色表头才能换成墨块上的线色 -->
                         <Thumb x:Name="PART_HeaderGripper"
                                HorizontalAlignment="Right" Width="8" Cursor="SizeWE">
                             <Thumb.Template>
                                 <ControlTemplate TargetType="Thumb">
                                     <Border Background="Transparent">
                                         <Border Width="1" HorizontalAlignment="Center" Margin="0,6"
-                                                Background="{DynamicResource Aurora.Brush.Hairline}" />
+                                                Background="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=GridViewColumnHeader}}" />
                                     </Border>
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
                     </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -598,6 +593,9 @@
             这里把它单独换成一块纯背景:表头栏在整行连成一条,不再多出一格。
         -->
         <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
+            </Trigger>
             <Trigger Property="Role" Value="Padding">
                 <Setter Property="Visibility" Value="Collapsed" />
                 <Setter Property="Template">
@@ -608,6 +606,20 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        AuroraTable 的表头(REQ-UI-132):坐在反色圆角块(Aurora.Table.HeaderBar)上,字反白、分隔线用墨块上的次要色,
+        悬停不垫浅底(墨块上会是一块补丁)。模块自己拼的 GridView 仍引用 Aurora.GridHeader,那里没有墨块,不能反白。
+    -->
+    <Style x:Key="Aurora.Table.GridHeader" TargetType="GridViewColumnHeader" BasedOn="{StaticResource Aurora.GridHeader}">
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.TextSecondaryOnInk}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="Transparent" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -1150,14 +1162,14 @@
     </Style>
 
     <!--
-        表头栏(REQ-UI-132):Office 表格的粗细两级墨线 —— 顶部 2px 墨线开头、表头下 1px 墨线,不填底色。
-        线没有角(「块用圆角,线用直线」),贴着页面圆角也不用跟着弯。1.27 之前这里是灰底圆角条(Aurora.Panel.Surface)。
+        表头栏(REQ-UI-132):反色圆角块 —— 整条填墨、字反白,圆角同组件(Inner),与页面圆角同心。
+        1.27 之前是灰底圆角条(Aurora.Panel.Surface);1.28.0 首版试过 Office 的粗细两级墨线,
+        用户看了说程序里线条太突兀,定为反色块。
     -->
     <Style x:Key="Aurora.Table.HeaderBar" TargetType="Border">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Ink}" />
-        <Setter Property="BorderThickness" Value="0,2,0,1" />
-        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Ink}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
@@ -1195,7 +1207,7 @@
                                     <Border Grid.ColumnSpan="2" Style="{DynamicResource Aurora.Table.HeaderBar}">
                                         <GridViewHeaderRowPresenter Margin="-2,0" SnapsToDevicePixels="True"
                                             Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.GridHeader}"
+                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.Table.GridHeader}"
                                             AllowsColumnReorder="True" />
                                     </Border>
                                     <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="1"
