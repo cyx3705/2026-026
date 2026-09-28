@@ -151,21 +151,48 @@ public sealed class RightEdgeAndThemeContractTests
         });
     }
 
-    /// <summary>浅色中性色取自 OneHistory 站点 site.css 的 canvas / surface-2 / hairline-2。</summary>
+    /// <summary>
+    /// 浅色按深色的原则重配(1.27.0,REQ-UI-129):正文与链接色对比度过 AA,文字与底色同一暖色相,
+    /// 三层底色拉开。按比值判而不是按色值判——以后微调色值不必改测试,退回到发浑的旧值才会红。
+    /// </summary>
     [Fact]
-    public void LightPaletteMatchesTheOneHistorySite()
+    public void LightPaletteReadsAsWellAsDark()
     {
         UiTestHost.RunSta(() =>
         {
-            Assert.Equal(Parse("#F7F5EF"), Token(LightTokensUri, "Aurora.Brush.Canvas"));
-            Assert.Equal(Parse("#FFFFFF"), Token(LightTokensUri, "Aurora.Brush.Surface"));
-            Assert.Equal(Parse("#F1EEE6"), Token(LightTokensUri, "Aurora.Brush.SurfaceAlt"));
-            Assert.Equal(Parse("#D8D3C6"), Token(LightTokensUri, "Aurora.Brush.ControlBorder"));
-            Assert.Equal(Parse("#1F2328"), Token(LightTokensUri, "Aurora.Brush.TextPrimary"));
-            Assert.Equal(Parse("#6B7280"), Token(LightTokensUri, "Aurora.Brush.TextSecondary"));
-            Assert.Equal(Parse("#A87A12"), Token(LightTokensUri, "Aurora.Brush.Accent"));
-            Assert.Equal(Parse("#8C650E"), Token(LightTokensUri, "Aurora.Brush.AccentHover"));
+            var surface = Token(LightTokensUri, "Aurora.Brush.Surface");
+            var alt = Token(LightTokensUri, "Aurora.Brush.SurfaceAlt");
+            var canvas = Token(LightTokensUri, "Aurora.Brush.Canvas");
+            var accent = Token(LightTokensUri, "Aurora.Brush.Accent");
+            var secondary = Token(LightTokensUri, "Aurora.Brush.TextSecondary");
+
+            // 表格可点列与链接用 Accent 当字色:卡片与条带上都要过 AA 4.5
+            Assert.True(Contrast(accent, surface) >= 4.5, $"Accent/Surface {Contrast(accent, surface):F2}");
+            Assert.True(Contrast(accent, alt) >= 4.5, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
+            Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.TextOnAccent"), accent) >= 4.5, "主按钮白字");
+            Assert.True(Contrast(secondary, alt) >= 4.5, $"TextSecondary/SurfaceAlt {Contrast(secondary, alt):F2}");
+            // 卡片要从底色里浮起来(旧值 1.09 分不开)
+            Assert.True(Contrast(surface, canvas) >= 1.15, $"Surface/Canvas {Contrast(surface, canvas):F2}");
+            // 文字不能是冷色:红通道不低于蓝通道(旧值 #1F2328 / #6B7280 都偏蓝)
+            foreach (var key in new[] { "Aurora.Brush.TextPrimary", "Aurora.Brush.TextSecondary", "Aurora.Brush.TextDisabled" })
+            {
+                var c = Token(LightTokensUri, key);
+                Assert.True(c.R >= c.B, $"{key} 偏冷:{c}");
+            }
         });
+    }
+
+    private static double Contrast(Color a, Color b)
+    {
+        static double Channel(byte v)
+        {
+            var c = v / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+        static double Luminance(Color c) =>
+            0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+        var (x, y) = (Luminance(a), Luminance(b));
+        return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05);
     }
 
     private static (AuroraTable Table, Window Host) Build(bool withActions)
