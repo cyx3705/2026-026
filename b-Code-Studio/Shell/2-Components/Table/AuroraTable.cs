@@ -897,7 +897,7 @@ public sealed class AuroraTable : UserControl
     {
         if (_headerStyleApplied || !IsLoaded)
             return;
-        if (TryFindResource("Aurora.GridHeader") is not Style header)
+        if (TryFindResource("Aurora.Table.GridHeader") is not Style header)
             return;
         _view.ColumnHeaderContainerStyle = header;
         _headerStyleApplied = true;

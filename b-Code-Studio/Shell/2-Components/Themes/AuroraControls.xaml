@@ -117,12 +117,65 @@
 
     <Style TargetType="Button" BasedOn="{StaticResource Aurora.Button.Base}" />
 
-    <!-- 主按钮(强调色):派生视图按需显式引用 -->
-    <Style x:Key="Aurora.Button.Accent" TargetType="Button" BasedOn="{StaticResource Aurora.Button.Base}">
-        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Accent}" />
-        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Accent}" />
+    <!--
+        墨色块按钮(REQ-UI-132):整块填墨、字反白。主按钮与右栏当前场景都用它 ——
+        文艺工业风里「选中 / 主要」是墨色块,金色只做编号,不做大面积底色。
+        自带模板:Base 的悬停把底换成 SurfaceHover,墨块上的反白字就看不见了;这里悬停只降一点不透明度。
+    -->
+    <Style x:Key="Aurora.Button.Ink" TargetType="ButtonBase" BasedOn="{StaticResource Aurora.Button.Base}">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Ink}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                        <ContentPresenter x:Name="Ct"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True" />
+                        <TextBlock x:Name="ActivityStatus" Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(AutomationProperties.ItemStatus)}" Visibility="Collapsed" Margin="0,0,6,0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}"
+                                     IsIndeterminate="True" Visibility="Collapsed"
+                                     Foreground="{TemplateBinding Foreground}" Background="Transparent"
+                                     IsHitTestVisible="False" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.76" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{DynamicResource Aurora.Brush.SurfaceAlt}" />
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource Aurora.Brush.TextDisabled}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                        <Trigger Property="AutomationProperties.ItemStatus" Value="运行中">
+                            <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="ActivityStatus" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Ct" Property="Opacity" Value="0.5" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Setter Property="Cursor" Value="Wait" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
+
+    <!-- 主按钮:1.28.0 起是墨色块(键名保留,对话框与弹出层按这个键引用) -->
+    <Style x:Key="Aurora.Button.Accent" TargetType="Button" BasedOn="{StaticResource Aurora.Button.Ink}" />
 
     <!-- 危险按钮:文字用 Danger,底仍为 Surface(整块红太吵) -->
     <Style x:Key="Aurora.Button.Danger" TargetType="Button" BasedOn="{StaticResource Aurora.Button.Base}">
@@ -174,7 +227,7 @@
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"
-                                    Value="{DynamicResource Aurora.Brush.Accent}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
                         </Trigger>
                         <Trigger Property="IsReadOnly" Value="True">
                             <Setter TargetName="Bd" Property="Background"
@@ -221,7 +274,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"
-                                    Value="{DynamicResource Aurora.Brush.Accent}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Background"
@@ -319,9 +372,12 @@
                             <Setter TargetName="Bd" Property="Background"
                                     Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
+                        <!-- 选中 = 墨色块、字反白(REQ-UI-132) -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -352,7 +408,7 @@
                             <Path x:Name="Check"
                                   Margin="2,0,0,0"
                                   Data="M 0 4 L 3.5 7.5 L 9 1"
-                                  Stroke="{DynamicResource Aurora.Brush.TextOnAccent}"
+                                  Stroke="{DynamicResource Aurora.Brush.OnInk}"
                                   StrokeThickness="1.8"
                                   StrokeEndLineCap="Round" StrokeStartLineCap="Round"
                                   Visibility="Collapsed"
@@ -364,14 +420,14 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Box" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.Accent}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
                             <Setter TargetName="Box" Property="BorderBrush"
-                                    Value="{DynamicResource Aurora.Brush.Accent}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
                             <Setter TargetName="Check" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush"
-                                    Value="{DynamicResource Aurora.Brush.Accent}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
@@ -469,9 +525,12 @@
                             <Setter TargetName="Bd" Property="Background"
                                     Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
+                        <!-- 选中 = 墨色块、字反白(REQ-UI-132) -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -489,8 +548,10 @@
     <Style x:Key="Aurora.GridHeader" TargetType="GridViewColumnHeader">
         <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
         <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
-        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextSecondary}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="Height" Value="{DynamicResource Aurora.Size.Control}" />
@@ -500,31 +561,25 @@
                 <ControlTemplate TargetType="GridViewColumnHeader">
                     <Grid>
                         <Border x:Name="Bd"
-                                Background="Transparent"
+                                Background="{TemplateBinding Background}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Left" VerticalAlignment="Center"
                                               RecognizesAccessKey="True" />
                         </Border>
-                        <!-- 列分隔:只留一条发丝线,且是拖拽改列宽的命中区 -->
+                        <!-- 列分隔:只留一条细线,且是拖拽改列宽的命中区。颜色取表头的 BorderBrush,反色表头才能换成墨块上的线色 -->
                         <Thumb x:Name="PART_HeaderGripper"
                                HorizontalAlignment="Right" Width="8" Cursor="SizeWE">
                             <Thumb.Template>
                                 <ControlTemplate TargetType="Thumb">
                                     <Border Background="Transparent">
                                         <Border Width="1" HorizontalAlignment="Center" Margin="0,6"
-                                                Background="{DynamicResource Aurora.Brush.Hairline}" />
+                                                Background="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=GridViewColumnHeader}}" />
                                     </Border>
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
                     </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -538,6 +593,9 @@
             这里把它单独换成一块纯背景:表头栏在整行连成一条,不再多出一格。
         -->
         <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
+            </Trigger>
             <Trigger Property="Role" Value="Padding">
                 <Setter Property="Visibility" Value="Collapsed" />
                 <Setter Property="Template">
@@ -548,6 +606,20 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        AuroraTable 的表头(REQ-UI-132):坐在反色圆角块(Aurora.Table.HeaderBar)上,字反白、分隔线用墨块上的次要色,
+        悬停不垫浅底(墨块上会是一块补丁)。模块自己拼的 GridView 仍引用 Aurora.GridHeader,那里没有墨块,不能反白。
+    -->
+    <Style x:Key="Aurora.Table.GridHeader" TargetType="GridViewColumnHeader" BasedOn="{StaticResource Aurora.GridHeader}">
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.TextSecondaryOnInk}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="Transparent" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -664,9 +736,12 @@
                             <Setter TargetName="Bd" Property="Background"
                                     Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
+                        <!-- 选中 = 墨色块(REQ-UI-132)。反白只给本项标题:设在整项上会沿继承染到展开的子项 -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                                    Value="{DynamicResource Aurora.Brush.Ink}" />
+                            <Setter TargetName="PART_Header" Property="TextElement.Foreground"
+                                    Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
@@ -737,7 +812,7 @@
                         </Border>
                         <Border x:Name="Indicator"
                                 Height="2" VerticalAlignment="Bottom"
-                                Background="{DynamicResource Aurora.Brush.Accent}"
+                                Background="{DynamicResource Aurora.Brush.Ink}"
                                 Visibility="Collapsed" />
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -1086,6 +1161,18 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
 
+    <!--
+        表头栏(REQ-UI-132):反色圆角块 —— 整条填墨、字反白,圆角同组件(Inner),与页面圆角同心。
+        1.27 之前是灰底圆角条(Aurora.Panel.Surface);1.28.0 首版试过 Office 的粗细两级墨线,
+        用户看了说程序里线条太突兀,定为反色块。
+    -->
+    <Style x:Key="Aurora.Table.HeaderBar" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Ink}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Inner}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
     <Style x:Key="Aurora.Table.ListView" TargetType="ListView">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -1117,10 +1204,10 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.ColumnSpan="2" Style="{DynamicResource Aurora.Panel.Surface}">
+                                    <Border Grid.ColumnSpan="2" Style="{DynamicResource Aurora.Table.HeaderBar}">
                                         <GridViewHeaderRowPresenter Margin="-2,0" SnapsToDevicePixels="True"
                                             Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.GridHeader}"
+                                            ColumnHeaderContainerStyle="{DynamicResource Aurora.Table.GridHeader}"
                                             AllowsColumnReorder="True" />
                                     </Border>
                                     <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="1"
@@ -1159,6 +1246,12 @@
         -->
         <Setter Property="ToolTipService.InitialShowDelay" Value="400" />
         <Setter Property="ToolTipService.IsEnabled" Value="False" />
+        <!-- 行选中是墨色块(REQ-UI-132),格里的字跟着反白。单元格样式写死了前景,继承不下来,只能在这里跟 -->
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="Aurora.Table.CellActionText" TargetType="TextBlock"
@@ -1167,8 +1260,13 @@
         <Setter Property="ToolTipService.IsEnabled" Value="True" />
     </Style>
 
+    <!--
+        链接列(REQ-UI-132):墨色字,悬停才变金 —— 与站点正文链接同一规则,金色只做编号。
+        1.27 之前整列是金字,表格三列满屏都是金色。
+        自带模板:链接没有底色;Base 的悬停灰块落在墨色选中行上会是一块补丁。
+    -->
     <Style x:Key="Aurora.Table.CellAction" TargetType="Button" BasedOn="{StaticResource Aurora.Button.Base}">
-        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="Padding" Value="0" />
@@ -1177,6 +1275,53 @@
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid Background="Transparent">
+                        <ContentPresenter x:Name="Ct"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True" />
+                        <TextBlock x:Name="ActivityStatus" Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(AutomationProperties.ItemStatus)}" Visibility="Collapsed" Margin="0,0,6,0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <ProgressBar x:Name="RunningProgress" Style="{StaticResource Aurora.Progress.Perimeter}"
+                                     IsIndeterminate="True" Visibility="Collapsed"
+                                     Foreground="{TemplateBinding Foreground}" Background="Transparent"
+                                     IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextDisabled}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                        <Trigger Property="AutomationProperties.ItemStatus" Value="运行中">
+                            <Setter TargetName="ActivityStatus" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="RunningProgress" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Ct" Property="Opacity" Value="0.5" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Setter Property="Cursor" Value="Wait" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.Accent}" />
+            </Trigger>
+            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+            </DataTrigger>
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True" />
+                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                </MultiDataTrigger.Conditions>
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.AccentOnInk}" />
+            </MultiDataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="Aurora.Table.CellActionDanger" TargetType="Button"
@@ -1199,7 +1344,8 @@
     </Style>
 
     <!--
-        行:固定 30px 高、无圆角、底部一条发丝线。
+        行:固定 30px 高、无圆角、底部一条细线(1.28.0 起取 ControlBorder,即站点 hairline-2)。
+        选中(REQ-UI-132)是墨色块:行本身是「线」不带圆角,选中时在行里垫一块上下各让 1px 的圆角墨块。
         不复用 Aurora.Item.Base —— 那条是列表项样式,每行自带 8px 圆角,
         连成表格后每一行都像一张卡片,列也就对不齐了。
     -->
@@ -1213,15 +1359,23 @@
                 <ControlTemplate TargetType="ListViewItem">
                     <Border x:Name="Bd"
                             Background="Transparent"
-                            BorderBrush="{DynamicResource Aurora.Brush.Hairline}"
+                            BorderBrush="{DynamicResource Aurora.Brush.ControlBorder}"
                             BorderThickness="0,0,0,1"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
-                        <GridViewRowPresenter x:Name="Row"
-                                              VerticalAlignment="Center"
-                                              Content="{TemplateBinding Content}"
-                                              Columns="{Binding View.Columns,
-                                                        RelativeSource={RelativeSource AncestorType=ListView}}" />
+                        <Grid>
+                            <Border x:Name="Sel"
+                                    Margin="0,1"
+                                    Background="{DynamicResource Aurora.Brush.Ink}"
+                                    CornerRadius="{DynamicResource Aurora.Radius.Bar}"
+                                    Visibility="Collapsed"
+                                    SnapsToDevicePixels="True" />
+                            <GridViewRowPresenter x:Name="Row"
+                                                  VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  Columns="{Binding View.Columns,
+                                                            RelativeSource={RelativeSource AncestorType=ListView}}" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -1229,8 +1383,9 @@
                                     Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.AccentSoft}" />
+                            <Setter TargetName="Bd" Property="Background" Value="Transparent" />
+                            <Setter TargetName="Sel" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -1312,7 +1467,7 @@
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Accent}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Ink}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.55" />
@@ -1328,6 +1483,41 @@
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+    <!-- ================================================================ 段标题 + 墨色条 -->
+
+    <!--
+        REQ-UI-132:AuroraSectionHeading 的长相。标题墨色半粗;墨色条是「块」,用圆角 Aurora.Radius.Bar,
+        高 20、一直伸到右缘;条里的说明 11px 反白、右对齐。每屏最多一个大墨色块,小的选中态不算。
+    -->
+    <Style x:Key="Aurora.Heading.Title" TargetType="TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+    </Style>
+
+    <Style x:Key="Aurora.Heading.Bar" TargetType="Border">
+        <Setter Property="Height" Value="20" />
+        <Setter Property="MinWidth" Value="24" />
+        <Setter Property="Margin" Value="10,0,0,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Ink}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Bar}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Aurora.Heading.Note" TargetType="TextBlock">
+        <Setter Property="Margin" Value="8,0" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
+        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
     </Style>
 
     <!-- ================================================================ 泳道图组件 -->
@@ -1385,6 +1575,19 @@
         <Setter Property="Margin" Value="0,0,4,0" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Background" Value="Transparent" />
+        <!-- 行选中是墨色块(REQ-UI-132):按钮字跟着反白;悬停时底是浅色,字回到墨色 -->
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
+            </DataTrigger>
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True" />
+                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                </MultiDataTrigger.Conditions>
+                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
+            </MultiDataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="Aurora.Table.RowActionDanger" TargetType="Button" BasedOn="{StaticResource Aurora.Table.RowAction}">
@@ -1530,7 +1733,7 @@
         <Setter Property="Padding" Value="8,4" />
     </Style>
 
-    <!-- 极简布尔开关：开启使用 Aurora accent，关闭保持扁平中性色。 -->
+    <!-- 极简布尔开关：开启是墨色块（REQ-UI-132），关闭保持扁平中性色。 -->
     <Style x:Key="Aurora.Panel.Switch" TargetType="ToggleButton" BasedOn="{StaticResource Aurora.Button.Base}">
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="Padding" Value="8,4" />
@@ -1555,8 +1758,8 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Aurora.Brush.Accent}" />
-                            <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Aurora.Brush.Ink}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.86" />

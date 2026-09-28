@@ -58,6 +58,16 @@
     <SolidColorBrush x:Key="Aurora.Brush.Hairline" Color="#E5E3DE" />
     <SolidColorBrush x:Key="Aurora.Brush.ControlBorder" Color="#D5D1C8" />
 
+    <!--
+        墨色与反白(1.28.0,REQ-UI-132):OneHistory 文艺工业风的高对比模块 —— 墨色条、墨色选中块、粗细两级墨线。
+        权威在 2026-031 z-OneHistoryID/网站风格.md §2.3–2.4;这里只取别名,不引入新颜色:
+        Ink = 本主题 TextPrimary,OnInk = 本主题 Canvas,AccentOnInk / TextSecondaryOnInk 取另一套主题的对应值。
+    -->
+    <SolidColorBrush x:Key="Aurora.Brush.Ink" Color="#26231E" />
+    <SolidColorBrush x:Key="Aurora.Brush.OnInk" Color="#FBFAF7" />
+    <SolidColorBrush x:Key="Aurora.Brush.AccentOnInk" Color="#D9A441" />
+    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#ACA593" />
+
     <!-- 顶部控件条与窗口按钮(UI-02) -->
     <SolidColorBrush x:Key="Aurora.Brush.WindowButtonHover" Color="#F2F0EB" />
     <SolidColorBrush x:Key="Aurora.Brush.WindowButtonPressed" Color="#E8E5DF" />
@@ -77,6 +87,8 @@
     <CornerRadius x:Key="Aurora.Radius.Page">20</CornerRadius>
     <!-- 组件圆角:按钮、输入、底板、弹层。4 实测显得僵硬,回到 8 -->
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
+    <!-- 墨色条圆角(REQ-UI-132):块用圆角,线用直线。条高约 20,取 5(站点 r-bar 7 配 24 高的标题) -->
+    <CornerRadius x:Key="Aurora.Radius.Bar">5</CornerRadius>
     <!--
         停靠页签已随顶栏删除,这两个值现在只服务分段工具条与 Ctrl 标签态的那枚标签。
     -->
@@ -115,17 +127,12 @@
 
     <!-- UI-09.4:投影只挂窗格级 Border,不用于列表项等高频元素 -->
     <!--
-        1.27.1(REQ-UI-131):浅色卡片比底部深,外投影只会在底部上画出一圈由深到浅的渐变(实测 6px 从 #F3F1EC 渐到 #FBFAF7),
-        看起来像卡片发光、这一级台阶融成一片。浅色外投影关掉(Opacity 0),改由 AuroraInsetShadow 画内阴影:
-        四周均匀、6px、7%(用户从样图里选的「内影 1 轻」)。深色两项相反。
+        浅色卡片不加投影(Opacity 0):卡片比底部深,外投影在底部上只会画出一圈发光似的渐变。
+        1.27.1 曾改画内阴影(REQ-UI-131),1.28.0 用户定去掉(REQ-UI-133):台阶只靠颜色表达。
     -->
     <DropShadowEffect x:Key="Aurora.Shadow.Card"
                       Color="#000000" BlurRadius="10" ShadowDepth="1"
                       Direction="270" Opacity="0" RenderingBias="Performance" />
-    <DropShadowEffect x:Key="Aurora.Shadow.CardInset"
-                      Color="#26231E" BlurRadius="6" ShadowDepth="0"
-                      Opacity="0.07" RenderingBias="Performance" />
-    <Visibility x:Key="Aurora.Card.InsetVisibility">Visible</Visibility>
     <DropShadowEffect x:Key="Aurora.Shadow.CardActive"
                       Color="#000000" BlurRadius="14" ShadowDepth="1"
                       Direction="270" Opacity="0.08" RenderingBias="Performance" />
