@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using System.Windows.Shapes;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Themes;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 
@@ -28,7 +29,7 @@ public sealed class AuroraSwimlane : UserControl
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
 
-    private readonly TextBlock _caption;
+    private readonly AuroraSectionHeading _caption;
     private readonly TextBlock _message;
     private readonly ScrollViewer _viewport;
     private readonly Canvas _canvas;
@@ -52,8 +53,8 @@ public sealed class AuroraSwimlane : UserControl
         Background = Brushes.Transparent;
         AuroraComponentResources.Ensure(this);
 
-        _caption = new TextBlock { Margin = new Thickness(10, 8, 10, 6) };
-        _caption.SetResourceReference(StyleProperty, "Aurora.Panel.Label");
+        // 图名是段标题 + 墨色条（REQ-UI-132）：「标题 · 说明」的说明部分反白写进条里
+        _caption = new AuroraSectionHeading { Margin = new Thickness(10, 8, 10, 6) };
 
         _message = new TextBlock
         {
@@ -123,14 +124,14 @@ public sealed class AuroraSwimlane : UserControl
             _selectAction = description?.SelectAction;
             _canvas.Children.Clear();
             _gutter.Children.Clear();
-            _caption.Text = description?.Title ?? "";
+            _caption.SetText(description?.Title);
             ShowMessage("暂无节点");
             return;
         }
 
         _selectAction = description.SelectAction;
         _layout = SwimlaneLayout.Arrange(description);
-        _caption.Text = description.Title;
+        _caption.SetText(description.Title);
         _canvas.Width = Math.Max(1, _layout.Width);
         _canvas.Height = Math.Max(1, _layout.Height);
         _message.Visibility = Visibility.Collapsed;
@@ -259,7 +260,7 @@ public sealed class AuroraSwimlane : UserControl
         };
         line.SetResourceReference(
             Shape.StrokeProperty,
-            edge.Edge.Dashed ? "Aurora.Brush.TextSecondary" : "Aurora.Brush.Accent");
+            edge.Edge.Dashed ? "Aurora.Brush.TextSecondary" : "Aurora.Brush.Ink"); // 线用墨（REQ-UI-132），金色只留给末端圆点
         return line;
     }
 
@@ -273,7 +274,6 @@ public sealed class AuroraSwimlane : UserControl
         {
             Width = SwimlaneLayout.NodeWidth,
             Height = SwimlaneLayout.NodeHeight,
-            CornerRadius = new CornerRadius(3),
             BorderThickness = new Thickness(highlighted ? 2 : 1),
             Padding = new Thickness(6, 3, 6, 3),
             Cursor = Cursors.Hand,
@@ -283,15 +283,17 @@ public sealed class AuroraSwimlane : UserControl
                 ? node.Title + (string.IsNullOrWhiteSpace(node.Subtitle) ? "" : "\n" + node.Subtitle)
                 : node.Tooltip,
         };
+        // 节点是块：圆角同墨色条。强调的节点不再铺金底，而是整圈墨色边（REQ-UI-132，站点「强调圆角块 = 边换成墨色」）
+        border.SetResourceReference(Border.CornerRadiusProperty, "Aurora.Radius.Bar");
         border.SetResourceReference(
             Border.BackgroundProperty,
             tone == "danger" ? "Aurora.Brush.DangerSoft"
-            : highlighted ? "Aurora.Brush.AccentSoft"
+            : highlighted ? "Aurora.Brush.Surface"
             : "Aurora.Brush.SurfaceAlt");
         border.SetResourceReference(
             Border.BorderBrushProperty,
             tone == "danger" ? "Aurora.Brush.Danger"
-            : highlighted ? "Aurora.Brush.Accent"
+            : highlighted ? "Aurora.Brush.Ink"
             : "Aurora.Brush.ControlBorder");
 
         var title = new TextBlock { Text = node.Title };
