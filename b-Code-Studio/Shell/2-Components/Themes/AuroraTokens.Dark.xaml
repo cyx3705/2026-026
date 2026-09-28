@@ -35,6 +35,12 @@
     <SolidColorBrush x:Key="Aurora.Brush.Hairline" Color="#2A2D2C" />
     <SolidColorBrush x:Key="Aurora.Brush.ControlBorder" Color="#343736" />
 
+    <!-- 墨色与反白(REQ-UI-132),见浅色令牌。深色里墨色就是米色正文色,墨色条随之变成米色条 -->
+    <SolidColorBrush x:Key="Aurora.Brush.Ink" Color="#E2DAC6" />
+    <SolidColorBrush x:Key="Aurora.Brush.OnInk" Color="#1A1D1C" />
+    <SolidColorBrush x:Key="Aurora.Brush.AccentOnInk" Color="#7F5E0F" />
+    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#6A6458" />
+
     <SolidColorBrush x:Key="Aurora.Brush.WindowButtonHover" Color="#2A2D2C" />
     <SolidColorBrush x:Key="Aurora.Brush.WindowButtonPressed" Color="#343736" />
     <SolidColorBrush x:Key="Aurora.Brush.CloseHover" Color="#C4453D" />
@@ -46,6 +52,7 @@
     <!-- 同心:Page = Inner + PageInset(REQ-UI-119),见浅色令牌 -->
     <CornerRadius x:Key="Aurora.Radius.Page">20</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.Inner">8</CornerRadius>
+    <CornerRadius x:Key="Aurora.Radius.Bar">5</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabTop">5,5,0,0</CornerRadius>
     <CornerRadius x:Key="Aurora.Radius.TabInner">5</CornerRadius>
 
