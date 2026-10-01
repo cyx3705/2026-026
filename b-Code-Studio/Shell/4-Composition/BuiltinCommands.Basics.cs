@@ -34,7 +34,7 @@ internal static partial class BuiltinCommands
             RequiresUiThread = true,
             Parameters =
             [
-                new ParameterSpec { Name = "name", Description = "命令名", Required = true, Position = 0 },
+                new ParameterSpec { Name = "name", Description = "完整的已注册指令名（三段式），例如 aurora.log.level；该指令必须声明了示例", Required = true, Position = 0 },
             ],
             Handler = CommandDescriptor.Sync(ctx =>
             {
