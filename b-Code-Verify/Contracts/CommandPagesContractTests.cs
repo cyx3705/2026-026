@@ -6,6 +6,8 @@ using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -104,9 +106,9 @@ public sealed class CommandPagesContractTests
             var ids = parsed.Value!.Pages.Select(page => page.Id).ToList();
             Assert.Equal(["mcp", "commanddetail", "modules", "components"], ids);
 
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new NullShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
             ComponentGalleryCommands.Register(registry);
             actions.DeclareLocal(ComponentGalleryCommands.Owner, ComponentGalleryCommands.Actions);
@@ -146,9 +148,9 @@ public sealed class CommandPagesContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new NullShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var catalog = new LocalCommandCatalogSession(bus, log);
             registry.Register(new CommandDescriptor
             {
@@ -230,9 +232,9 @@ public sealed class CommandPagesContractTests
     [Fact]
     public void EveryHostedActionResolvesToARegisteredCommand()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         var log = new NullShellLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         HostedPageData.Register(registry, new HostedPageData.Sources
         {
             Bus = () => bus,
@@ -270,9 +272,9 @@ public sealed class CommandPagesContractTests
     [Fact]
     public async Task Data_FailsLoudlyWhenTheCatalogSessionIsMissing()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         var log = new NullShellLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         HostedPageData.Register(registry, new HostedPageData.Sources
         {
             Bus = () => bus,
@@ -352,7 +354,7 @@ public sealed class CommandPagesContractTests
     [Fact]
     public async Task Data_KeepsEverythingAfterTheDomainAndClassPrefix()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "demo.deep.branch.rename",
@@ -372,7 +374,7 @@ public sealed class CommandPagesContractTests
         });
 
         var log = new NullShellLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         var catalog = new LocalCommandCatalogSession(bus, log);
         HostedPageData.Register(registry, new HostedPageData.Sources
         {
@@ -446,7 +448,7 @@ public sealed class CommandPagesContractTests
     }
 
     private static async Task<IReadOnlyList<Dictionary<string, string>>> RowsAsync(
-        CommandBus bus,
+        ShellBus bus,
         string commandText)
     {
         var result = await bus.ExecuteAsync(commandText, "UI");
@@ -456,9 +458,9 @@ public sealed class CommandPagesContractTests
         return JsonSerializer.Deserialize<List<Dictionary<string, string>>>(payload) ?? [];
     }
 
-    private static CommandBus Host()
+    private static ShellBus Host()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "demo.branch.rename",
@@ -480,7 +482,7 @@ public sealed class CommandPagesContractTests
         });
 
         var log = new NullShellLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         var catalog = new LocalCommandCatalogSession(bus, log);
         HostedPageData.Register(registry, new HostedPageData.Sources
         {

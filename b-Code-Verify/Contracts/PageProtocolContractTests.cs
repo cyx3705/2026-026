@@ -7,6 +7,8 @@ using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -226,7 +228,7 @@ public sealed class PageProtocolContractTests
     {
         var captured = new List<string>();
         var memory = new MemoryLog();
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
 
         registry.Register(new CommandDescriptor
         {
@@ -251,7 +253,7 @@ public sealed class PageProtocolContractTests
                 CommandResult.Ok("暂无数据", JsonDocument.Parse("""[{"name":"alpha"},{"name":"beta"}]""").RootElement.Clone())),
         });
 
-        var bus = new CommandBus(registry, memory);
+        var bus = TestShell.Bus(registry);
         bus.Executed += (text, _, _) => captured.Add(text);
 
         executed = captured;

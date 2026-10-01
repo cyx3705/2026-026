@@ -1,12 +1,13 @@
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Neutral.CommandSurface;
 
 /// <summary>
 /// Console-side proxy created before Mercury CreateUi. Forwards to the real session after Attach.
 /// 未挂接真实会话时（无 Mercury 的宿主）不再整体失效：域/类分类直接回退到本地
-/// <see cref="CommandRegistry"/>，使 <c>aurora.log.source</c> / <c>aurora.log.class</c>
+/// <see cref="ShellCatalog"/>，使 <c>aurora.log.source</c> / <c>aurora.log.class</c>
 /// 这类控制台自有过滤在缺少命令工作台时仍然可用（DEC-023）。
 /// 补全、检索和选择仍需 Mercury，回退实现只覆盖分类。
 /// </summary>
@@ -15,7 +16,7 @@ internal sealed class DeferredCommandCatalogSession : ICommandCatalogSession
     private const string All = "全部";
 
     private readonly object _gate = new();
-    private readonly CommandRegistry? _registry;
+    private readonly ShellCatalog? _registry;
     private ICommandCatalogSession? _inner;
     private string _localDomain = All;
     private string _localClass = All;
@@ -23,7 +24,7 @@ internal sealed class DeferredCommandCatalogSession : ICommandCatalogSession
     /// <param name="registry">
     /// 本地权威注册表；为 null 时退化为 3.3.1 之前的纯代理行为（仅用于不关心分类的测试）。
     /// </param>
-    public DeferredCommandCatalogSession(CommandRegistry? registry = null) => _registry = registry;
+    public DeferredCommandCatalogSession(ShellCatalog? registry = null) => _registry = registry;
 
     private EventHandler<CommandCatalogChangedEventArgs>? _changed;
     private bool _disposed;

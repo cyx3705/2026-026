@@ -6,6 +6,8 @@ using HistoryAurora.Shell.Base.Docking;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Panels;
 
@@ -29,7 +31,7 @@ internal sealed class PanelManager
     };
 
     private readonly string _panelsDir;
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
     private readonly SelectionChannels? _channels;
@@ -49,7 +51,7 @@ internal sealed class PanelManager
     public PanelManager(
         string panelsDir,
         IEnumerable<PanelDefinition>? configured,
-        CommandBus bus,
+        ShellBus bus,
         IShellLog log,
         ActionRegistry actions,
         SelectionChannels? channels = null)

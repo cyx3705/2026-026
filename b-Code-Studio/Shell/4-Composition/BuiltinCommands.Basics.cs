@@ -5,15 +5,16 @@ using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
 internal static partial class BuiltinCommands
 {
-    private static void RegisterBasics(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterBasics(CommandTable r, ShellCommandServices s)
     {
         r.Register(BuiltinCommandDefinitions.Bind(
             "vulcan.command.help",
@@ -57,6 +58,7 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.command.history",
+            RequiresUiThread = true,
             Domain = "aurora",
             CommandClass = "command",
             Summary = "查看指令历史",
@@ -89,7 +91,7 @@ internal static partial class BuiltinCommands
         });
     }
 
-    private static CommandResult HelpList(CommandRegistry registry)
+    private static CommandResult HelpList(ShellCatalog registry)
     {
         var all = registry.All();
         var sb = new StringBuilder($"共 {all.Count} 条指令,vulcan.command.help <指令名> 查看详情:");
@@ -107,7 +109,7 @@ internal static partial class BuiltinCommands
         return CommandResult.Ok(sb.ToString());
     }
 
-    private static CommandResult HelpDetail(CommandRegistry registry, string name)
+    private static CommandResult HelpDetail(ShellCatalog registry, string name)
     {
         if (!registry.TryGet(name, out var d))
         {
@@ -140,7 +142,7 @@ internal static partial class BuiltinCommands
             }
         }
 
-        sb.Append($"\n{CommandBus.FormatUsage(d)}");
+        sb.Append($"\n{ShellBus.FormatUsage(d)}");
         if (d.Example != null)
             sb.Append($"\n示例: {d.Example}");
         if (d.Level == CommandLevel.Ask)

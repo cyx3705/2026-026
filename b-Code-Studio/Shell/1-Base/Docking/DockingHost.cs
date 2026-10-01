@@ -10,7 +10,8 @@ using AvalonDock.Layout;
 using AvalonDock;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Base.Docking;
 
@@ -771,7 +772,7 @@ internal sealed partial class DockingHost : IDockingService
     private void Emit(string commandText)
     {
         // 以指令回显类别落管道(L-03):控制台按 "[layout] > ..." 样式渲染,可一键屏蔽(C-04)
-        _log.Info(HistoryVulcan.Core.Commands.CommandBus.EchoCategoryPrefix + LayoutSource, commandText);
+        _log.Info(HostLogCategories.EchoPrefix + LayoutSource, commandText);
         CommandGenerated?.Invoke(this, new ShellCommandEventArgs
         {
             CommandText = commandText,

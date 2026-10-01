@@ -5,6 +5,7 @@ using HistoryAurora.Shell.Base.Docking;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 

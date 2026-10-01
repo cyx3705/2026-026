@@ -3,8 +3,9 @@ using HistoryAurora.Shell.Composition;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify.Contracts;
 
@@ -83,9 +84,9 @@ public sealed class CommandDomainContractTests
     /// 按注册来源区分，而不是按名字猜。
     /// </summary>
     private static IEnumerable<CommandDescriptor> AuroraRegistered(ShellWindow window)
-        => window.Commands.Registry.All()
+        => window.OwnCommands.All()
             .Where(descriptor => string.Equals(
-                window.Commands.Registry.GetSource(descriptor.Name),
+                window.OwnCommands.GetSource(descriptor.Name),
                 FrontendCommandCatalog.Source,
                 StringComparison.Ordinal));
 
@@ -105,7 +106,7 @@ public sealed class CommandDomainContractTests
                     new MemoryLayoutStore(),
                     new NullLog(),
                     new MemorySettings(),
-                    dataDirectory)
+                    dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands2), shellCommands2)
                 {
                     Width = 800,
                     Height = 600,

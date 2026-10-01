@@ -1,121 +1,65 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Neutral.CommandSurface;
 
 /// <summary>参数表的取用：补全与指令详情页共用同一条路径与同一份缓存。</summary>
 internal sealed partial class LocalCommandCatalogSession
 {
-    /// <summary>参数表：本地注册表优先，缺则问宿主一次并缓存。</summary>
-    private async Task<IReadOnlyList<CommandParameterInfo>> ParametersAsync(
+    /// <summary>参数表：从目录取并缓存（目录里已带参数，不必再逐条 show）。</summary>
+    private Task<IReadOnlyList<CommandParameterInfo>> ParametersAsync(
         string commandName,
         CancellationToken cancellationToken)
     {
-        if (commandName.Length == 0)
-            return [];
+        if (commandName.Length == 0 || cancellationToken.IsCancellationRequested)
+            return Task.FromResult<IReadOnlyList<CommandParameterInfo>>([]);
         if (_parameters.TryGetValue(commandName, out var cached))
-            return cached;
+            return Task.FromResult(cached);
 
-        if (_registry.TryGet(commandName, out var descriptor))
-        {
-            var local = descriptor.Parameters.Select(Convert).ToList();
-            _parameters[commandName] = local;
-            return local;
-        }
-
-        if (_bus.RemoteExecutor == null)
-            return [];
-
-        try
-        {
-            var shown = await _bus
-                .ExecuteAsync(
-                    "vulcan.command.show name=" + CommandParser.QuoteArg(commandName),
-                    "UI",
-                    cancellationToken)
-                .ConfigureAwait(true);
-            if (shown.Success
-                && CommandResultData.TryRead<CommandCatalogDetail>(shown.Data, out var detail))
-            {
-                _parameters[commandName] = detail.Parameters;
-                return detail.Parameters;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return [];
-        }
-        catch (Exception)
-        {
-            // 补全取不到参数表时必须表现为"没有候选"，而不是一条打断输入的报错。
-        }
-
-        _parameters[commandName] = [];
-        return [];
+        IReadOnlyList<CommandParameterInfo> parameters = _registry.TryGet(commandName, out var command)
+            ? command.Parameters.Select(Convert).ToList()
+            : [];
+        _parameters[commandName] = parameters;
+        return Task.FromResult(parameters);
     }
 
     /// <summary>取一条指令的完整详情，供指令详情页显示。</summary>
-    public async Task<CommandCatalogDetail?> DetailAsync(
+    public Task<CommandCatalogDetail?> DetailAsync(
         string commandName,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(commandName))
-            return null;
-
-        if (_registry.TryGet(commandName, out var descriptor))
-            return LocalDetail(descriptor);
-
-        if (_bus.RemoteExecutor == null)
-            return null;
-
-        try
-        {
-            var shown = await _bus
-                .ExecuteAsync(
-                    "vulcan.command.show name=" + CommandParser.QuoteArg(commandName),
-                    "UI",
-                    cancellationToken)
-                .ConfigureAwait(true);
-            if (shown.Success
-                && CommandResultData.TryRead<CommandCatalogDetail>(shown.Data, out var detail))
-                return detail;
-        }
-        catch (OperationCanceledException)
-        {
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _log.Log(ShellLogLevel.Warn, "catalog", "读取指令详情失败: " + ex.Message);
-        }
-
-        return null;
+        if (string.IsNullOrWhiteSpace(commandName) || !_registry.TryGet(commandName, out var command))
+            return Task.FromResult<CommandCatalogDetail?>(null);
+        return Task.FromResult<CommandCatalogDetail?>(Detail(command));
     }
 
-    private CommandCatalogDetail LocalDetail(CommandDescriptor descriptor)
+    private CommandCatalogDetail Detail(CommandInfo command)
     {
-        var entry = Find(descriptor.Name);
+        var entry = Find(command.Name);
+        var module = command.Source.StartsWith("module:", StringComparison.OrdinalIgnoreCase);
         var row = new CommandCatalogRow(
-            descriptor.Name,
-            entry?.Domain ?? _registry.GetDomain(descriptor.Name),
-            descriptor.Summary,
-            descriptor.Example,
-            descriptor.Parameters.Count,
-            _registry.GetSource(descriptor.Name),
-            null,
-            descriptor.Level == CommandLevel.Ask,
-            descriptor.RequiresUiThread,
-            descriptor.Readonly,
-            descriptor.HiddenReason)
+            command.Name,
+            entry?.Domain ?? command.Domain,
+            command.Summary,
+            command.Example,
+            command.Parameters.Count,
+            module ? "module" : command.Source,
+            module ? command.Source["module:".Length..] : null,
+            command.Level == CommandLevel.Ask,
+            command.RequiresUiThread,
+            command.Readonly,
+            command.HiddenReason)
         {
-            CommandClass = entry?.CommandClass ?? _registry.GetCommandClass(descriptor.Name),
-            Method = CommandRegistry.GetMethod(descriptor.Name),
+            CommandClass = entry?.CommandClass ?? command.CommandClass,
+            Method = command.Method,
+            RequiresConfirmation = command.RequiresConfirmation,
+            AllowUnspecifiedParameters = command.AllowUnspecifiedParameters,
         };
 
-        return new CommandCatalogDetail(row, descriptor.Parameters.Select(Convert).ToList())
+        return new CommandCatalogDetail(row, command.Parameters.Select(Convert).ToList())
         {
-            Annotations = descriptor.Annotations,
+            Annotations = command.Annotations,
         };
     }
 

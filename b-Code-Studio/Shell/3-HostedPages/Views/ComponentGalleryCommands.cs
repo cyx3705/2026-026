@@ -1,6 +1,7 @@
 using HistoryAurora.Shell.Components.Actions;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.HostedPages.Views;
 
@@ -23,13 +24,14 @@ internal static class ComponentGalleryCommands
     public const string Owner = "HistoryAurora";
 
     /// <summary>登记取数指令。幂等：已经在注册表里的不再登记第二遍。</summary>
-    public static void Register(CommandRegistry registry)
+    public static void Register(CommandTable registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
 
         Add(registry, new CommandDescriptor
         {
             Name = "aurora.preview.echo",
+            RequiresUiThread = true,
             HiddenReason = "组件测试页内部指令",
             Domain = "aurora",
             CommandClass = "preview",
@@ -43,6 +45,7 @@ internal static class ComponentGalleryCommands
         Add(registry, new CommandDescriptor
         {
             Name = "aurora.preview.rows",
+            RequiresUiThread = true,
             HiddenReason = "组件测试页内部指令",
             Domain = "aurora",
             CommandClass = "preview",
@@ -66,6 +69,7 @@ internal static class ComponentGalleryCommands
         Add(registry, new CommandDescriptor
         {
             Name = "aurora.preview.graph",
+            RequiresUiThread = true,
             HiddenReason = "组件测试页内部指令",
             Domain = "aurora",
             CommandClass = "preview",
@@ -141,7 +145,7 @@ internal static class ComponentGalleryCommands
         },
     ];
 
-    private static void Add(CommandRegistry registry, CommandDescriptor descriptor)
+    private static void Add(CommandTable registry, CommandDescriptor descriptor)
     {
         if (registry.TryGet(descriptor.Name, out _))
             return;

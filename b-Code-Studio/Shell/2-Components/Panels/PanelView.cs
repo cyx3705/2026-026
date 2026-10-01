@@ -10,6 +10,8 @@ using HistoryAurora.Shell.Components.Themes;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Panels;
 
@@ -29,7 +31,7 @@ namespace HistoryAurora.Shell.Components.Panels;
 /// </summary>
 public sealed partial class PanelView : UserControl
 {
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
     private readonly SelectionChannels? _channels;
@@ -72,7 +74,7 @@ public sealed partial class PanelView : UserControl
 
     public PanelView(
         PanelDefinition definition,
-        CommandBus bus,
+        ShellBus bus,
         IShellLog log,
         ActionRegistry actions,
         SelectionChannels? channels = null,

@@ -2,6 +2,7 @@ using System.Text;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -14,7 +15,7 @@ internal static partial class BuiltinCommands
     /// 而不是靠盯着界面猜。通道这一侧的失败形态尤其难认——按钮永远灰着，
     /// 与「还没选中」在界面上完全一样，只有台账能把两者分开。
     /// </summary>
-    private static void RegisterChannels(CommandRegistry r, SelectionChannels channels)
+    private static void RegisterChannels(CommandTable r, SelectionChannels channels)
     {
         RegisterFrontend(r, new CommandDescriptor
         {
@@ -60,7 +61,7 @@ internal static partial class BuiltinCommands
     /// 「数据在界面之外被改了」准备的——规则清单、GitHub 状态这类，
     /// 界面这边没有任何信号知道它变了。
     /// </summary>
-    private static void RegisterDataRefresh(CommandRegistry r, PageDataRefresher refresher)
+    private static void RegisterDataRefresh(CommandTable r, PageDataRefresher refresher)
     {
         RegisterFrontend(r, new CommandDescriptor
         {

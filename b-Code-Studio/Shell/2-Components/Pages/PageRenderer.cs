@@ -13,13 +13,15 @@ using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryAurora.Shell.Neutral;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Pages;
 
 /// <summary>渲染一页所需的外部依赖。</summary>
 public sealed class PageRenderContext
 {
-    public required CommandBus Bus { get; init; }
+    public required ShellBus Bus { get; init; }
 
     public required IShellLog Log { get; init; }
 
@@ -703,7 +705,7 @@ public static partial class PageRenderer
             return true;
         }
 
-        public CommandBus Bus => context.Bus;
+        public ShellBus Bus => context.Bus;
 
         public IShellLog Log => context.Log;
 
@@ -1151,8 +1153,8 @@ public static partial class PageRenderer
         /// 操作者通道每调一次就往控制台写两行（回显 + 结果）。而一次用户动作会连带
         /// 触发本页全部表格重取：Minerva 属性整备改一格材料，控制台就多出五对
         /// 「minerva.ui.data view=parts」「✓ Minerva 零件」，十行里没有一行是用户想看的，
-        /// 真正的结果反倒被顶出屏幕。CommandBus 早就为这类高频内部调用留了安静通道
-        /// （见 <c>CommandBus.InvokeAsync</c> 的注释：「问题不在延迟而在语义」）。
+        /// 真正的结果反倒被顶出屏幕。ShellBus 早就为这类高频内部调用留了安静通道
+        /// （见 <c>ShellBus.InvokeAsync</c> 的注释：「问题不在延迟而在语义」）。
         /// 失败仍然照常写日志——下面那两条 Warn 才是取数该发出的声音。
         /// </summary>
         private async Task<string?> FetchAsync(string text)

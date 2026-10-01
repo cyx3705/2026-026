@@ -53,7 +53,7 @@ public sealed class CommandHistory
     }
 
     /// <summary>
-    /// 追加一条已经过 CommandBus 回显脱敏的文本(与上一条重复时不重复入表)。
+    /// 追加一条已经过 ShellBus 回显脱敏的文本(与上一条重复时不重复入表)。
     /// 原始用户输入不得直接传入；Shell 使用 <c>cmd:手动</c> 回显作为唯一写入源。
     /// </summary>
     public void Add(string command)

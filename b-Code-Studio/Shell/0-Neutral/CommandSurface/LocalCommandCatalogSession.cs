@@ -1,6 +1,7 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Neutral.CommandSurface;
 
@@ -24,19 +25,15 @@ internal sealed record CatalogEntry(
 /// 控制台的 Tab 补全也随之变成死路（<c>aurora.ui.show name=mcp</c> 报窗口不存在）。
 /// 而"这条指令收什么参数"是控制台以外唯一能查的地方——它不能挂在某个模块在不在场上。
 ///
-/// 数据来源是两处的并集：
-/// <list type="bullet">
-///   <item>Aurora 自己的注册表（<c>aurora.*</c>，界面内自持）；</item>
-///   <item>接了远端执行器时，宿主的 <c>vulcan.command.list</c>（模块与宿主的全部指令）。</item>
-/// </list>
-/// 同名以本地为准：本地那条才是真正会被执行到的。
+/// 数据来源是 <see cref="ShellBus.Registry"/>（1.29.0）：进程内装载时就是宿主的 <c>vulcan.command.list</c>，
+/// Aurora 自己的指令也已登记在宿主那里，同一张表，不再有「本地那张」与「宿主那张」的并集与覆盖。
 /// </summary>
 internal sealed partial class LocalCommandCatalogSession : ICommandCatalogSession
 {
     private const string All = "全部";
 
-    private readonly CommandRegistry _registry;
-    private readonly CommandBus _bus;
+    private readonly ShellCatalog _registry;
+    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly Dictionary<string, IReadOnlyList<CommandParameterInfo>> _parameters =
         new(StringComparer.OrdinalIgnoreCase);
@@ -48,7 +45,7 @@ internal sealed partial class LocalCommandCatalogSession : ICommandCatalogSessio
     private bool _disposed;
     private readonly CoalescingAsyncWork<bool> _refresh = new();
 
-    public LocalCommandCatalogSession(CommandBus bus, IShellLog log)
+    public LocalCommandCatalogSession(ShellBus bus, IShellLog log)
     {
         _bus = bus;
         _log = log;

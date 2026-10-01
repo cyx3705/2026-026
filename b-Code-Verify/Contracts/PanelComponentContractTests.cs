@@ -14,6 +14,7 @@ using HistoryAurora.Shell.Neutral.Commands;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -64,7 +65,7 @@ public sealed class PanelComponentContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryLog();
             registry.Register(new CommandDescriptor
             {
@@ -75,7 +76,7 @@ public sealed class PanelComponentContractTests
                 AllowUnspecifiedParameters = true,
                 Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
             });
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new ActionRegistry(bus, log);
             actions.DeclareLocal("HistoryDemo",
             [
@@ -810,9 +811,9 @@ public sealed class PanelComponentContractTests
     private static PanelDefinition Parse(string json)
         => JsonSerializer.Deserialize<PanelDefinition>(json, JsonOptions)!;
 
-    private static (CommandBus Bus, MemoryLog Log, ActionRegistry Actions) Host(bool declare)
+    private static (ShellBus Bus, MemoryLog Log, ActionRegistry Actions) Host(bool declare)
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         var log = new MemoryLog();
 
         registry.Register(new CommandDescriptor
@@ -852,7 +853,7 @@ public sealed class PanelComponentContractTests
             });
         }
 
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         return (bus, log, new ActionRegistry(bus, log));
     }
 

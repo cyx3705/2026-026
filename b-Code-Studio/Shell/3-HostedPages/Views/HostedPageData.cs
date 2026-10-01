@@ -4,6 +4,7 @@ using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.HostedPages.Views;
 
@@ -25,7 +26,7 @@ internal static class HostedPageData
     /// <summary>目录会话与总线在装配根之后才存在，因此这里收访问器而不是实例。</summary>
     internal sealed class Sources
     {
-        public Func<CommandBus?>? Bus { get; init; }
+        public Func<ShellBus?>? Bus { get; init; }
 
         public Func<LocalCommandCatalogSession?>? Catalog { get; init; }
     }
@@ -43,7 +44,7 @@ internal static class HostedPageData
     /// 晚于 Attach 登记的界面命令在宿主那边永远不存在，症状是一条
     /// <c>✗ 未知指令: aurora.ui.data</c>，而本机注册表里它明明在（1.8.10 实测）。
     /// </summary>
-    public static void Register(CommandRegistry registry, Sources sources)
+    public static void Register(CommandTable registry, Sources sources)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(sources);
@@ -51,6 +52,7 @@ internal static class HostedPageData
         Add(registry, new CommandDescriptor
         {
             Name = "aurora.ui.data",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
@@ -328,7 +330,7 @@ internal static class HostedPageData
     /// </summary>
     private const string ShellCommandChannel = "aurora.mcp.command";
 
-    private static async Task RefreshModulesAsync(CommandBus bus)
+    private static async Task RefreshModulesAsync(ShellBus bus)
     {
         // 刷不到也不算失败：模块管理页可能压根没开着，那时「没有匹配的取数节点」
         // 是正常的，不该把一次成功的重载报成失败。
@@ -570,7 +572,7 @@ internal static class HostedPageData
     }
 
     /// <summary>允许值并进说明列：它是「这个参数能填什么」的一部分，不该另占一列。</summary>
-    private static string Describe(HistoryVulcan.Services.Commands.CommandParameterInfo parameter)
+    private static string Describe(CommandParameterInfo parameter)
         => parameter.AllowedValues.Count == 0
             ? parameter.Description
             : parameter.Description + "（可选值：" + string.Join(" / ", parameter.AllowedValues) + "）";
@@ -605,7 +607,7 @@ internal static class HostedPageData
     /// 自持命令仍从界面注册表统计；宿主模块命令不在这张表里时，回退到模块清单在
     /// 注册完成后定稿的 CommandCount，避免把“不可见”误显示成 0。
     /// </summary>
-    internal static int DomainCommandCount(CommandRegistry registry, HistoryVulcan.Services.Modules.ModuleMeta module)
+    internal static int DomainCommandCount(ShellCatalog registry, ModuleMeta module)
     {
         var domain = ModuleDomainNaming.ToDomain(module.ModuleName);
         if (domain.Length == 0)
@@ -621,7 +623,7 @@ internal static class HostedPageData
     }
 
     /// <summary>描述符未声明域时按指令名首段兜底，与注册表的归一化口径一致。</summary>
-    private static string DomainOf(CommandDescriptor descriptor)
+    private static string DomainOf(CommandInfo descriptor)
     {
         if (!string.IsNullOrWhiteSpace(descriptor.Domain))
             return descriptor.Domain;
@@ -645,7 +647,7 @@ internal static class HostedPageData
         return CommandResult.Ok(json, json);
     }
 
-    private static void Add(CommandRegistry registry, CommandDescriptor descriptor)
+    private static void Add(CommandTable registry, CommandDescriptor descriptor)
     {
         if (registry.TryGet(descriptor.Name, out _))
             return;

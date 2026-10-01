@@ -2,6 +2,8 @@ using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryAurora.Shell.Components.Modules;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 
 namespace HistoryAurora.Shell.Components.Pages;
@@ -26,7 +28,7 @@ internal sealed record MissingComponent(string Owner, string PageId, string Comp
 /// 拉取让注册成为派生状态，没有缓存可失效。
 /// </summary>
 internal sealed class ModulePageLoader(
-    CommandBus bus,
+    ShellBus bus,
     IDockingService docking,
     IShellLog log,
     ComponentRequestStore? requests = null,

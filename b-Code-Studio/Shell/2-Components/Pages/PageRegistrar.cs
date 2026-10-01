@@ -3,6 +3,8 @@ using System.Windows.Controls;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Pages;
 
@@ -32,7 +34,7 @@ internal sealed record PageRegistration(bool Registered, IReadOnlyList<string> M
 /// 停靠归 <see cref="IDockingService"/>，而「一页相对窗格长什么样」只归这里。
 /// </summary>
 internal sealed class PageRegistrar(
-    CommandBus bus,
+    ShellBus bus,
     IShellLog log,
     // 停靠层。**自持页那一路传 null**：它在停靠层建出来之前就要把内容备好
     // （命令集是中央主文档，DockingHost.Initialize 时就得在场），而它本来也不调

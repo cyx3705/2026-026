@@ -1,6 +1,7 @@
 using System.Text;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -12,7 +13,7 @@ namespace HistoryAurora.Shell.Composition;
 /// </summary>
 internal static partial class BuiltinCommands
 {
-    private static void RegisterPages(CommandRegistry r, ModulePageLoader loader, ComponentRequestStore requests)
+    private static void RegisterPages(CommandTable r, ModulePageLoader loader, ComponentRequestStore requests)
     {
         RegisterFrontend(r, new CommandDescriptor
         {
@@ -64,6 +65,7 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.missing",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
@@ -93,6 +95,7 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.request",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
@@ -108,11 +111,11 @@ internal static partial class BuiltinCommands
                     || PageRenderer.SupportedCapabilities.Contains(component))
                     return CommandResult.Ok($"{component} 已经支持，无需申请");
 
-                // 模块经宿主中继调用时 context.Source 是 "Service:Relay"，会把提出方记丢，
-                // 因此允许显式声明 by；缺省才回退到来源标签。
+                // 允许显式声明 by；缺省回退到来源标签。宿主 6.0.0 起来源由宿主盖章，
+                // 模块发起的申请显示为模块名（module:HistoryJanus → HistoryJanus）。
                 var by = context.GetString("by")?.Trim();
                 if (string.IsNullOrWhiteSpace(by))
-                    by = context.Source;
+                    by = SourceLabels.Display(context.Source);
 
                 requests.Record(component, by, context.GetString("page"), context.GetString("reason"));
                 return CommandResult.Ok($"已登记组件申请: {component}");
@@ -122,6 +125,7 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.requests",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",

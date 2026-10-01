@@ -1,8 +1,10 @@
+using HistoryAurora.Shell.Neutral.Storage;
 using System.Windows.Controls;
 using AvalonDock;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryAurora.Shell.Components.Scenes;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -241,7 +243,7 @@ public sealed class SceneContractTests
         public IReadOnlyList<string> ListNamed() => _named.Keys.ToList();
     }
 
-    private sealed class MemorySettings : HistoryVulcan.Core.Storage.ISettingsService
+    private sealed class MemorySettings : ISettingsService
     {
         private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
         public string? Get(string key) => _values.GetValueOrDefault(key);
@@ -250,10 +252,10 @@ public sealed class SceneContractTests
         public IReadOnlyList<KeyValuePair<string, string>> All() => _values.ToList();
     }
 
-    private sealed class NullLog : HistoryVulcan.Core.Logging.IShellLog
+    private sealed class NullLog : IShellLog
     {
         public void Log(HistoryVulcan.Core.Logging.ShellLogLevel level, string category, string message) { }
-        public event EventHandler<HistoryVulcan.Core.Logging.ShellLogEntry>? EntryAdded { add { } remove { } }
-        public IReadOnlyList<HistoryVulcan.Core.Logging.ShellLogEntry> Snapshot() => [];
+        public event EventHandler<ShellLogEntry>? EntryAdded { add { } remove { } }
+        public IReadOnlyList<ShellLogEntry> Snapshot() => [];
     }
 }

@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using HistoryAurora.Shell.Components.Modules;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Components.Modules;
 

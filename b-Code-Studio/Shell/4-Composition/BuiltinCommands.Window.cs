@@ -5,15 +5,16 @@ using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
 internal static partial class BuiltinCommands
 {
-    private static void RegisterWin(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterWin(CommandTable r, ShellCommandServices s)
     {
         var nameParam = new ParameterSpec
         {
@@ -222,7 +223,7 @@ internal static partial class BuiltinCommands
     /// 跑一次停靠动作，并**把真实异常先记进本端日志**。
     ///
     /// 指令总线对外只回「执行异常(类型名)」——它刻意不把 Message 与堆栈发出去
-    /// （`CommandBus` 里 `safeError = ex.GetType().Name`）。这条策略对远端是对的，
+    /// （`ShellBus` 里 `safeError = ex.GetType().Name`）。这条策略对远端是对的，
     /// 但本机排查也只剩一个类型名：2026-08-25 真机报
     /// `aurora.ui.max 执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
     /// 而这一条在自动化里复现不出来（浮窗、模块页、逐个窗口最大化都试过，全绿）。
@@ -242,7 +243,7 @@ internal static partial class BuiltinCommands
     }
 
     private static void RegisterWindowVerb(
-        CommandRegistry r,
+        CommandTable r,
         ShellCommandServices s,
         string name,
         string summary,

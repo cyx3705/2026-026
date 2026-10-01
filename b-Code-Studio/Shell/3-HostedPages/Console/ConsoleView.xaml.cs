@@ -11,6 +11,7 @@ using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryAurora.Shell.Neutral.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.HostedPages.Console;
 
@@ -27,7 +28,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     public const string KeyBuffer = "console.buffer";
 
     private readonly IShellLog _log;
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
     private readonly CommandHistory _history;
     private readonly ICommandCatalogSession _catalogSession;
     private readonly int _bufferLimit;
@@ -64,7 +65,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
 
     public ConsoleView(
         IShellLog log,
-        CommandBus bus,
+        ShellBus bus,
         CommandHistory history,
         ICommandCatalogSession catalogSession,
         int bufferLimit = 50_000)
@@ -97,7 +98,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
             EnqueueIncoming(e);
         log.EntryAdded += (_, e) =>
         {
-            if (e.Category.Equals(CommandBus.EchoCategoryPrefix + "手动", StringComparison.OrdinalIgnoreCase))
+            if (IsOwnManualEcho(e.Category))
                 _history.Add(e.Message);
             EnqueueIncoming(e);
         };
@@ -305,15 +306,27 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     }
 
     /// <summary>
-    /// 默认导出落点:<c>%AppData%/&lt;应用名&gt;/exports/console-&lt;时间戳&gt;.txt</c>,
-    /// 与 <c>AppPaths</c> 的数据根目录约定一致。
+    /// 这条回显是不是本控制台手输的那条（历史只记它）。宿主 6.0.0 起来源由宿主盖章：
+    /// 进程内是 <c>cmd:module:HistoryAurora:手动</c>，独立运行时是 <c>cmd:手动</c>；别的模块也写「手动」的不算。
     /// </summary>
-    private static string BuildDefaultExportPath()
+    internal static bool IsOwnManualEcho(string category)
     {
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            AppIdentity.Current.Name,
-            "exports");
+        if (!category.StartsWith(HostLogCategories.EchoPrefix, StringComparison.Ordinal))
+            return false;
+        var source = category[HostLogCategories.EchoPrefix.Length..];
+        return source.Equals("手动", StringComparison.OrdinalIgnoreCase)
+               || source.Equals("module:HistoryAurora:手动", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>导出目录；装配方设成数据根下的 <c>exports</c>（1.29.0）。未设时落在临时目录。</summary>
+    internal string? ExportDirectory { get; set; }
+
+    /// <summary>
+    /// 默认导出落点:<c>&lt;数据根&gt;/exports/console-&lt;时间戳&gt;.txt</c>。
+    /// </summary>
+    private string BuildDefaultExportPath()
+    {
+        var root = ExportDirectory ?? Path.Combine(Path.GetTempPath(), "HistoryAurora", "exports");
         return Path.Combine(
             Directory.CreateDirectory(root).FullName,
             $"console-{DateTime.Now:yyyyMMdd-HHmmss-fff}.txt");

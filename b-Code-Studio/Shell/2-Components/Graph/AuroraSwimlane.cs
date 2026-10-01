@@ -9,6 +9,8 @@ using HistoryAurora.Shell.Components.Themes;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Graph;
 
@@ -25,7 +27,7 @@ public sealed class AuroraSwimlane : UserControl
     /// <summary>视口外多画一圈，滚动时不会露出空白再补画。</summary>
     private const double CullPad = 96;
 
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly ActionRegistry _actions;
 
@@ -45,7 +47,7 @@ public sealed class AuroraSwimlane : UserControl
     private double _panOffsetX;
     private double _panOffsetY;
 
-    public AuroraSwimlane(CommandBus bus, IShellLog log, ActionRegistry actions)
+    public AuroraSwimlane(ShellBus bus, IShellLog log, ActionRegistry actions)
     {
         _bus = bus;
         _log = log;

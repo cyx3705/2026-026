@@ -7,6 +7,8 @@ using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -229,9 +231,9 @@ public sealed class PopupTriggerContractTests
         return parsed.Value!.Pages[0];
     }
 
-    private static (CommandBus Bus, TestLog Log, ActionRegistry Actions) Host()
+    private static (ShellBus Bus, TestLog Log, ActionRegistry Actions) Host()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "demo.item.pin",
@@ -256,7 +258,7 @@ public sealed class PopupTriggerContractTests
         });
 
         var log = new TestLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         var actions = new ActionRegistry(bus, log);
         actions.ReloadAsync().GetAwaiter().GetResult();
         return (bus, log, actions);

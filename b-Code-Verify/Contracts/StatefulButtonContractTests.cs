@@ -11,6 +11,7 @@ using HistoryAurora.Shell.Components.Table;
 using HistoryAurora.Shell.Neutral.Logging;
 using HistoryVulcan.Core.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -22,9 +23,9 @@ public sealed class StatefulButtonContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             using var release = new ManualResetEventSlim(false);
             var fetch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var calls = 0;
@@ -140,7 +141,7 @@ public sealed class StatefulButtonContractTests
                     Children = [new PageNode { Type = "text", Text = "Git 文件规则" },
                         new PageNode { Type = "grid", Min = 320, Children = [new PageNode { Type = "table" }, new PageNode { Type = "table" }] }],
                 },
-            }, new PageRenderContext { Owner = "demo", Bus = new CommandBus(new CommandRegistry(), log), Log = log }).Root;
+            }, new PageRenderContext { Owner = "demo", Bus = TestShell.Bus(new CommandTable()), Log = log }).Root;
             var window = new Window { Content = root, Width = width, Height = 480, ShowInTaskbar = false };
             try
             {

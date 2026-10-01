@@ -7,6 +7,8 @@ using HistoryAurora.Shell.Base.Docking;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Base;
 
@@ -31,7 +33,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
     private readonly Window _window;
     private readonly DockingManager _manager;
     private readonly DockingHost _docking;
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly WindowDragDriver _windowDragDriver = new();
 
@@ -43,7 +45,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
         Window window,
         DockingManager manager,
         DockingHost docking,
-        CommandBus bus,
+        ShellBus bus,
         IShellLog log)
     {
         _window = window;

@@ -1,5 +1,6 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Module;
 
@@ -33,7 +34,7 @@ public sealed class AuroraBusinessComposition : IModuleContextAware, IDisposable
 
     internal IModuleContext? Context => _context;
 
-    internal void RegisterCommands(Action<CommandRegistry> configure)
+    internal void RegisterCommands(Action<ICommandRegistrar> configure)
         => _context?.RegisterCommands(configure);
 
     public void Dispose()

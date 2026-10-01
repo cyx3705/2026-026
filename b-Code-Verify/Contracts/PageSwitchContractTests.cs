@@ -10,6 +10,7 @@ using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -271,7 +272,7 @@ public sealed class PageSwitchContractTests
 
         public Harness()
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             registry.Register(new CommandDescriptor
             {
                 Name = "demo.history",
@@ -288,13 +289,13 @@ public sealed class PageSwitchContractTests
             });
 
             Log = new MemoryShellLog();
-            Bus = new CommandBus(registry, Log);
+            Bus = TestShell.Bus(registry);
             Actions = new ActionRegistry(Bus, Log);
             Channels = new SelectionChannels();
             Refresher = new PageDataRefresher(Channels);
         }
 
-        public CommandBus Bus { get; }
+        public ShellBus Bus { get; }
 
         public MemoryShellLog Log { get; }
 

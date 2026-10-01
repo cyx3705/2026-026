@@ -9,29 +9,31 @@ namespace HistoryAurora.Shell.Neutral.Logging;
 /// 控制台日志视图：给日志编单调序号、脱敏并缓冲，供控制台窗口与 <c>aurora.log.snapshot</c> 读取。
 /// </summary>
 /// <remarks>
-/// 1.23.0 起（DEC-042）进程内界面把宿主那唯一一份日志（<c>IModuleContext.Log</c>）交进来：
-/// 写入转给宿主，显示来自宿主，界面不再自建第二份。经宿主总线执行的每条指令——来自界面、CLI、MCP
-/// 还是模块嵌套调用——回显、进度与结果因此都进控制台，也都落宿主日志文件。
-/// 此前界面只看得见自己这份，宿主上跑的指令只剩界面总线拿回的最终回执。
+/// 1.23.0 起（DEC-042）进程内界面显示宿主那唯一一份日志：写入转给宿主，显示来自宿主，界面不再自建第二份。
+/// 经宿主总线执行的每条指令——来自界面、CLI、MCP 还是模块嵌套调用——回显、进度与结果因此都进控制台。
 ///
-/// 不传宿主日志时（契约测试、组件画廊）退化为独立的内存日志。
-/// 挂着宿主日志时必须 <see cref="Dispose"/>：否则热重载后宿主仍握着旧实例，旧加载上下文回收不掉。
+/// 1.29.0 起（宿主 6.0.0 统一契约）宿主日志对模块只写：新纪录订阅总线主题 <c>vulcan.log.entry</c>，
+/// 挂上时的旧记录执行 <c>vulcan.log.recent</c> 补读。两者都由装配方以委托交进来，本类不认识总线。
+///
+/// 不传宿主时（契约测试、组件画廊）退化为独立的内存日志。
+/// 挂着宿主时必须 <see cref="Dispose"/>：否则热重载后订阅还挂在旧实例上。
 /// </remarks>
 public sealed class MemoryShellLog : IShellLog, IDisposable
 {
     private const int BufferLimit = 20_000;
 
     /// <summary>挂上宿主日志时补读的旧记录上限：宿主缓冲可达五万条，全补进来控制台首屏会卡。</summary>
-    private const int BacklogImportLimit = 2_000;
+    internal const int BacklogImportLimit = 2_000;
 
-    /// <summary>补读与订阅交界处要去重的记录数：只有补读那一刻正在派发事件的少数几条会两边都到。</summary>
+    /// <summary>补读与订阅交界处要去重的记录数：只有补读那一刻正在投递的少数几条会两边都到。</summary>
     private const int BacklogSeamLimit = 256;
 
     internal const int MaximumSnapshotBytes = 256 * 1024;
     private readonly object _gate = new();
     private readonly Queue<SequencedLogEntry> _buffer = new();
-    private readonly IShellLog? _host;
-    private readonly HashSet<ShellLogEntry> _backlogSeam = new(ReferenceEqualityComparer.Instance);
+    private readonly IModuleLog? _host;
+    private readonly IDisposable? _subscription;
+    private readonly HashSet<ShellLogEntry> _backlogSeam = [];
     private long _sequence;
 
     /// <summary>独立的内存日志，不连宿主。</summary>
@@ -40,23 +42,30 @@ public sealed class MemoryShellLog : IShellLog, IDisposable
     }
 
     /// <summary>显示宿主那一份日志，写入也转给它。</summary>
-    /// <param name="host">宿主日志，通常来自 <c>IModuleContext.Log</c>。</param>
-    public MemoryShellLog(IShellLog host)
+    /// <param name="host">宿主日志（<c>IModuleContext.Log</c>，只写）。</param>
+    /// <param name="subscribe">订阅新纪录（<c>vulcan.log.entry</c>）；返回退订句柄。</param>
+    /// <param name="backlog">挂上这一刻宿主缓冲里的旧记录（<c>vulcan.log.recent</c>）。</param>
+    public MemoryShellLog(
+        IModuleLog host,
+        Func<Action<ShellLogEntry>, IDisposable> subscribe,
+        Func<IReadOnlyList<ShellLogEntry>> backlog)
     {
         ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(subscribe);
+        ArgumentNullException.ThrowIfNull(backlog);
         _host = host;
         lock (_gate)
         {
             // 先订阅再补读，且整段持锁：补读期间到达的事件等在 OnHostEntry 的锁外，不会漏；
-            // 补读快照里已有、事件又晚到的那几条按引用去重，不会重复。
-            host.EntryAdded += OnHostEntry;
-            var backlog = host.Snapshot();
-            var start = Math.Max(0, backlog.Count - BacklogImportLimit);
-            for (var index = start; index < backlog.Count; index++)
+            // 补读里已有、事件又晚到的那几条按值去重，不会重复。
+            _subscription = subscribe(OnHostEntry);
+            var old = backlog();
+            var start = Math.Max(0, old.Count - BacklogImportLimit);
+            for (var index = start; index < old.Count; index++)
             {
-                Enqueue(backlog[index]);
-                if (index >= backlog.Count - BacklogSeamLimit)
-                    _backlogSeam.Add(backlog[index]);
+                Enqueue(old[index]);
+                if (index >= old.Count - BacklogSeamLimit)
+                    _backlogSeam.Add(old[index]);
             }
         }
     }
@@ -82,13 +91,9 @@ public sealed class MemoryShellLog : IShellLog, IDisposable
     }
 
     /// <summary>解除对宿主日志的订阅；独立日志上是空操作。</summary>
-    public void Dispose()
-    {
-        if (_host is not null)
-            _host.EntryAdded -= OnHostEntry;
-    }
+    public void Dispose() => _subscription?.Dispose();
 
-    private void OnHostEntry(object? sender, ShellLogEntry entry)
+    private void OnHostEntry(ShellLogEntry entry)
     {
         ShellLogEntry shown;
         lock (_gate)

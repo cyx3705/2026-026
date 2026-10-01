@@ -2,6 +2,7 @@ using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Neutral;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -32,7 +33,7 @@ public static class FrontendCommandCatalog
 
     private static CatalogSnapshot CreateFrameworkSnapshot()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
             Window = null!,

@@ -3,6 +3,8 @@ using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -22,7 +24,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
             // 一条与页面无关的模块命令：不得因为它去问 other.ui.describe。
@@ -42,7 +44,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "broken", asked, "{ not json");
             Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
@@ -63,7 +65,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
 
@@ -82,7 +84,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             // demo 域的模块声称自己是 HistoryMercury：不接受，否则可借描述抢注别人的页面。
             Describe(registry, "demo", asked, OnePage("HistoryMercury", "alpha"));
@@ -100,7 +102,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "demo", asked, """
                 {
@@ -130,7 +132,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
 
@@ -151,7 +153,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var gate = new TaskCompletionSource();
             var calls = 0;
 
@@ -193,7 +195,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var asked = new List<string>();
             Describe(registry, "demo", asked, OnePage("HistoryDemo", "alpha"));
 
@@ -225,7 +227,7 @@ public sealed class ModulePageLoaderContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             Describe(registry, "demo", [], OnePage("HistoryDemo", "alpha"));
 
             var (loader, docking, _) = Loader(registry);
@@ -267,7 +269,7 @@ public sealed class ModulePageLoaderContractTests
         }
         """;
 
-    private static void Describe(CommandRegistry registry, string domain, List<string> asked, string payload)
+    private static void Describe(CommandTable registry, string domain, List<string> asked, string payload)
         => registry.Register(new CommandDescriptor
         {
             Name = domain + ModulePageLoader.DescribeSuffix,
@@ -292,11 +294,11 @@ public sealed class ModulePageLoaderContractTests
         Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
     };
 
-    private static (ModulePageLoader Loader, RecordingDocking Docking, MemoryLog Log) Loader(CommandRegistry registry)
+    private static (ModulePageLoader Loader, RecordingDocking Docking, MemoryLog Log) Loader(CommandTable registry)
     {
         var log = new MemoryLog();
         var docking = new RecordingDocking();
-        return (new ModulePageLoader(new CommandBus(registry, log), docking, log), docking, log);
+        return (new ModulePageLoader(TestShell.Bus(registry), docking, log), docking, log);
     }
 
     private sealed class RecordingDocking : IDockingService

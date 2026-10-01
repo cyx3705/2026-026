@@ -1,10 +1,11 @@
 using System.IO;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.Neutral.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify.Contracts;
 
@@ -36,7 +37,7 @@ public sealed class ConsoleHistoryRedactionTests
             {
                 try
                 {
-                    var registry = new CommandRegistry();
+                    var registry = new CommandTable();
                     registry.Register(SecretDescriptor("vulcan.web.token", "value", position: 0));
                     registry.Register(SecretDescriptor("secure.position", "clientSecret", position: 0));
                     registry.Register(new CommandDescriptor
@@ -79,7 +80,7 @@ public sealed class ConsoleHistoryRedactionTests
                         Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("safe")),
                     });
                     var log = new MemoryLog();
-                    var bus = new CommandBus(registry, log);
+                    var bus = TestShell.Bus(registry, log);
                     _ = new HistoryAurora.Shell.HostedPages.Console.ConsoleView(
                         log,
                         bus,
@@ -98,8 +99,8 @@ public sealed class ConsoleHistoryRedactionTests
                     bus.ExecuteAsync("safe.read visible-value", "手动").GetAwaiter().GetResult();
                     history.Save();
 
-                    var historyRegistry = new CommandRegistry();
-                    var historyBus = new CommandBus(historyRegistry, new MemoryLog());
+                    var historyRegistry = new CommandTable();
+                    var historyBus = TestShell.Bus(historyRegistry);
                     BuiltinCommands.Register(historyRegistry, new ShellCommandServices
                     {
                         Window = null!,

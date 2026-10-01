@@ -8,6 +8,7 @@ using HistoryAurora.Shell.Components.Selection;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -207,9 +208,9 @@ public sealed class PanelOptionsSourceContractTests
     private static List<string> Options(AuroraOptionBox box)
         => box.Items.OfType<string>().ToList();
 
-    private static (CommandBus Bus, MemoryShellLog Log, ActionRegistry Actions, SelectionChannels Channels) Host()
+    private static (ShellBus Bus, MemoryShellLog Log, ActionRegistry Actions, SelectionChannels Channels) Host()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "demo.ui.data",
@@ -242,7 +243,7 @@ public sealed class PanelOptionsSourceContractTests
         });
 
         var log = new MemoryShellLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         return (bus, log, new ActionRegistry(bus, log), new SelectionChannels());
     }
 }

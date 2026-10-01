@@ -9,12 +9,14 @@ using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Composition;
 using AvalonDock;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -547,7 +549,7 @@ public sealed class DockingContractTests
                 new MemoryLayoutStore(),
                 new NullLog(),
                 new MemorySettings(),
-                dataDirectory)
+                dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands3), shellCommands3)
             {
                 Width = 1000,
                 Height = 700,
@@ -1558,8 +1560,8 @@ public sealed class DockingContractTests
                     () => host.Dock("details", DockSide.Right, invalid));
             }
 
-            var registry = new CommandRegistry();
-            var bus = new CommandBus(registry, log);
+            var registry = new CommandTable();
+            var bus = TestShell.Bus(registry);
             BuiltinCommands.Register(registry, new ShellCommandServices
             {
                 Window = null!,

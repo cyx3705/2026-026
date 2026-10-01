@@ -1,4 +1,5 @@
 using HistoryAurora.Shell.Base.Docking;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -29,7 +30,7 @@ internal sealed class ShellConfig
     /// 派生应用注册自定义指令的挂点(§5.3,§9 流程第 3 条):
     /// 在内置指令组注册完成后调用;指令名冲突会在此时抛出。
     /// </summary>
-    public Action<HistoryVulcan.Core.Commands.CommandRegistry>? ConfigureCommands { get; set; }
+    public Action<HistoryAurora.Shell.Neutral.Commands.CommandTable>? ConfigureCommands { get; set; }
 
     /// <summary>
     /// C# 通道声明的控制面板(P-01;与数据目录 panels/*.json 合并,JSON 优先加载在后)。
@@ -71,18 +72,12 @@ internal sealed class ShellConfig
 
     /// <summary>
     /// 客户端模式下只创建命令集、指令详情和模块管理视图，不在本进程创建 MCP 或 ModuleHost。
-    /// 视图经 CommandBus.RemoteExecutor 读取服务端结构化结果。
+    /// 视图经 ShellBus.RemoteExecutor 读取服务端结构化结果。
     /// </summary>
     public bool EnableRemoteManagementViews { get; set; }
 
     /// <summary>Determines whether a user close hides the frontend or exits it.</summary>
     public ShellCloseBehavior CloseBehavior { get; set; } = ShellCloseBehavior.Exit;
-
-    /// <summary>
-    /// 应用身份:null 时取 <c>AppIdentity.Current</c>(入口程序集)。
-    /// 测试宿主等入口程序集不是应用本体的场景应显式提供。
-    /// </summary>
-    public HistoryVulcan.Core.ApplicationIdentity? Identity { get; set; }
 
     /// <summary>
     /// 命令集选中状态(0.4.4):框架的命令集窗口(McpToolsView)写入选中的指令名。

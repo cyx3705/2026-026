@@ -3,8 +3,9 @@ using HistoryAurora.Shell.Base.Docking;
 using HistoryAurora.Shell.Composition;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -48,7 +49,7 @@ public sealed class HostReadyContractTests
     {
         RunShell(window =>
         {
-            window.Commands.Registry.Register(
+            window.OwnCommands.Register(
                 DescribeCommand("zeta"),
                 "module:HistoryZeta");
 
@@ -68,7 +69,7 @@ public sealed class HostReadyContractTests
     {
         RunShell(window =>
         {
-            window.Commands.Registry.Register(
+            window.OwnCommands.Register(
                 new CommandDescriptor
                 {
                     Name = "zeta.ui.describe",
@@ -125,7 +126,7 @@ public sealed class HostReadyContractTests
                     new MemoryLayoutStore(),
                     new NullLog(),
                     new MemorySettings(),
-                    dataDirectory)
+                    dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands4), shellCommands4)
                 {
                     Width = 800,
                     Height = 600,

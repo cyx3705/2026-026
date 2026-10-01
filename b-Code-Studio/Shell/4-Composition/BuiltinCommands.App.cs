@@ -4,16 +4,17 @@ using System.Text;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Panels;
 using HistoryAurora.Shell.Base.Dialogs;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
 internal static partial class BuiltinCommands
 {
-    private static void RegisterApp(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterApp(CommandTable r, ShellCommandServices s)
     {
         RegisterFrontend(r, new CommandDescriptor
         {
@@ -57,6 +58,7 @@ internal static partial class BuiltinCommands
         r.Register(new CommandDescriptor
         {
             Name = "aurora.app.opendata",
+            RequiresUiThread = true,
             Domain = "aurora",
             CommandClass = "app",
             Summary = "在系统资源管理器中打开应用数据目录",
@@ -109,7 +111,7 @@ internal static partial class BuiltinCommands
     /// 因而对 scope=read 的远程设备放行,并在默认 readonly 策略下作为 MCP 工具可见。
     /// 结果对象会原样序列化进 HTTP 响应体与 tools/call 载荷,只脱敏日志挡不住这两条路径。
     ///
-    /// 判定谓词与 <c>CommandBus.IsSensitiveSettingKey</c> 同源。冻结期不为共享它新增
+    /// 判定谓词与 <c>ShellBus.IsSensitiveSettingKey</c> 同源。冻结期不为共享它新增
     /// 公开 API 或 InternalsVisibleTo,故此处保留一份副本;3.1 统一到单一真值(见整改清单 FZR-22)。
     /// </summary>
     private static string DisplaySettingValue(string key, string value)

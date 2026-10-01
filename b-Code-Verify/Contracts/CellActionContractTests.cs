@@ -7,6 +7,8 @@ using HistoryAurora.Shell.Components.Table;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -79,7 +81,7 @@ public sealed class CellActionContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryLog();
             registry.Register(new CommandDescriptor
             {
@@ -101,7 +103,7 @@ public sealed class CellActionContractTests
                     "ok",
                     JsonDocument.Parse("""[{"project":"Janus","folder":"z-docs"}]""").RootElement.Clone())),
             });
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new ActionRegistry(bus, log);
             actions.DeclareLocal("HistoryDemo",
             [
@@ -153,9 +155,9 @@ public sealed class CellActionContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var rendered = PageRenderer.Render(
                 Page("""
                     { "type": "table", "columns": [

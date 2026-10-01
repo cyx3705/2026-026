@@ -1,35 +1,25 @@
 using HistoryAurora.Shell.Neutral.Logging;
 using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Services.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 权威目录查询必须合并（REQ-UI-048）。动作拉取与页面拉取在同一轮发现里
-/// 各问一次 <c>vulcan.command.list</c>，不缓存的话一次发现就是两遍全文。
+/// 「哪些模块声明了某类契约」按总线目录判定（1.29.0：目录即宿主目录，不再另读一次远端补齐）。
 /// </summary>
 public sealed class ModuleCommandProbeContractTests
 {
     [Fact]
-    public async Task OwnersWithSuffix_SharesOneRemoteCatalogWithinTheCacheWindow()
+    public async Task OwnersWithSuffix_ReadsTheBusCatalogAndSkipsAuroraItself()
     {
-        ModuleCommandProbe.ResetRemoteListCache();
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
+        foreach (var name in new[] { "janus.ui.actions", "janus.ui.describe", "aurora.ui.actions", "minerva.ui.describe" })
+            registry.Register(Probe(name));
+        var bus = TestShell.Bus(registry);
         var log = new MemoryShellLog();
-        var bus = new CommandBus(registry, log);
-        var lists = 0;
-        bus.RemoteExecutor = (_, _, _) =>
-        {
-            Interlocked.Increment(ref lists);
-            IReadOnlyList<CommandCatalogRow> rows =
-            [
-                Row("janus.ui.actions"),
-                Row("janus.ui.describe"),
-            ];
-            return Task.FromResult(CommandResult.Ok("ok", rows));
-        };
 
         var actions = await ModuleCommandProbe.OwnersWithSuffixAsync(
             bus, log, "test", ".ui.actions", CancellationToken.None);
@@ -37,23 +27,15 @@ public sealed class ModuleCommandProbeContractTests
             bus, log, "test", ".ui.describe", CancellationToken.None);
 
         Assert.Equal(["janus"], actions);
-        Assert.Equal(["janus"], pages);
-        Assert.Equal(1, lists);
+        Assert.Equal(["janus", "minerva"], pages);
+        Assert.Empty(TestShell.Calls(bus).Calls);
     }
 
-    private static CommandCatalogRow Row(string name) => new(
-        name,
-        "janus",
-        "summary",
-        null,
-        0,
-        "module:HistoryJanus",
-        null,
-        false,
-        false,
-        true,
-        "hidden")
+    private static CommandDescriptor Probe(string name) => new()
     {
-        CommandClass = "ui",
+        Name = name,
+        Summary = name,
+        RequiresUiThread = true,
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok()),
     };
 }

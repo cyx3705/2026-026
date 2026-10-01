@@ -1,5 +1,6 @@
 using HistoryAurora.Shell.Components.Scenes;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -13,7 +14,7 @@ namespace HistoryAurora.Shell.Composition;
 /// </summary>
 internal static partial class BuiltinCommands
 {
-    private static void RegisterScenes(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterScenes(CommandTable r, ShellCommandServices s)
     {
         RegisterFrontend(r, new CommandDescriptor
         {

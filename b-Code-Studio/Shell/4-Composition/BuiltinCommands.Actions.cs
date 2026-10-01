@@ -1,6 +1,7 @@
 using System.Text;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -12,11 +13,12 @@ namespace HistoryAurora.Shell.Composition;
 /// </summary>
 internal static partial class BuiltinCommands
 {
-    private static void RegisterActions(CommandRegistry r, ShellCommandServices s, ActionRegistry actions)
+    private static void RegisterActions(CommandTable r, ShellCommandServices s, ActionRegistry actions)
     {
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.actions",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
@@ -86,6 +88,7 @@ internal static partial class BuiltinCommands
         RegisterFrontend(r, new CommandDescriptor
         {
             Name = "aurora.ui.invoke",
+            RequiresUiThread = true,
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
@@ -108,7 +111,7 @@ internal static partial class BuiltinCommands
                 if (text == null)
                     return CommandResult.Fail(error);
 
-                return await s.Bus.ExecuteAsync(text, context.Source).ConfigureAwait(false);
+                return await s.Bus.ExecuteAsync(text, SourceLabels.Forward(context.Source)).ConfigureAwait(false);
             },
         });
     }

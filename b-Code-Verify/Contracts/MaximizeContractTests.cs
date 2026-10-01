@@ -3,8 +3,9 @@ using System.Windows;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -36,7 +37,7 @@ public sealed class MaximizeContractTests
                 new MemoryLayoutStore(),
                 new NullLog(),
                 new MemorySettings(),
-                dataDirectory)
+                dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands5), shellCommands5)
             {
                 Width = 1000,
                 Height = 700,
@@ -187,7 +188,7 @@ public sealed class MaximizeContractTests
             new MemoryLayoutStore(),
             new NullLog(),
             new MemorySettings(),
-            dataDirectory)
+            dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands6), shellCommands6)
         {
             Width = 1000,
             Height = 700,
