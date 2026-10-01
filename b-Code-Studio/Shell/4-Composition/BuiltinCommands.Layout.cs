@@ -26,7 +26,7 @@ internal static partial class BuiltinCommands
             RequiresUiThread = true,
             Parameters =
             [
-                new ParameterSpec { Name = "name", Description = "方案名", Required = true, Position = 0 },
+                new ParameterSpec { Name = "name", Description = "布局方案名，自取，例如 调试布局；同名覆盖，之后用 aurora.ui.layoutload 载入", Required = true, Position = 0 },
             ],
             Handler = CommandDescriptor.Sync(ctx =>
             {

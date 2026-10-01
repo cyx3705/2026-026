@@ -30,7 +30,7 @@ internal static partial class BuiltinCommands
                     AllowedValues = ["message", "confirm", "prompt", "choice", "content"],
                     Default = "message",
                 },
-                new ParameterSpec { Name = "title", Description = "标题" },
+                new ParameterSpec { Name = "title", Description = "弹窗标题栏文字，一句短语，例如 确认覆盖；省略则标题栏留空" },
                 new ParameterSpec { Name = "body", Description = "说明或摘要" },
                 new ParameterSpec { Name = "content", Description = "content 种类的大段正文" },
                 new ParameterSpec { Name = "value", Description = "prompt 种类的输入初值" },

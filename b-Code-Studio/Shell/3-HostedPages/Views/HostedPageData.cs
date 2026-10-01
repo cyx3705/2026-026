@@ -124,7 +124,7 @@ internal static class HostedPageData
             RequiresUiThread = true,
             Parameters =
             [
-                new ParameterSpec { Name = "name", Description = "指令名", Required = true, Position = 0 },
+                new ParameterSpec { Name = "name", Description = "完整的已注册指令名（不带参数），例如 vulcan.module.list；只读的直接执行，其余只填进控制台", Required = true, Position = 0 },
             ],
             Handler = async context =>
             {

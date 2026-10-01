@@ -16,6 +16,9 @@ namespace HistoryAurora.Verify.Contracts;
 /// </summary>
 public sealed class FrontendMcpOwnershipTests
 {
+    /// <summary>界面只拿宿主版本做显示；任取一个与最低宿主版本无关的值，免得测试跟着宿主升级改。</summary>
+    private const string AnyHostVersion = "0.0.0-test";
+
     /// <summary>
     /// 界面不得能够创建 MCP 网关——不是"默认不创建"，是**没有这个能力**。
     /// </summary>
@@ -37,13 +40,13 @@ public sealed class FrontendMcpOwnershipTests
         Assert.Null(typeof(ShellWindow).GetProperty("Prompts"));
 
         // 远程管理视图仍然要在：命令集页靠它经指令总线取数。
-        Assert.True(AuroraShellHost.CreateConfig("6.0.0").EnableRemoteManagementViews);
+        Assert.True(AuroraShellHost.CreateConfig(AnyHostVersion).EnableRemoteManagementViews);
     }
 
     [Fact]
     public void InProcessShellDoesNotStartASecondModuleHost()
     {
-        var config = AuroraShellHost.CreateConfig("6.0.0");
+        var config = AuroraShellHost.CreateConfig(AnyHostVersion);
 
         // 宿主自己的 ModuleHost 是模块生命周期的唯一所有者。界面若再建一套，
         // 每个模块会被装载两遍——两份实例各自注册命令、各自建页，
@@ -55,7 +58,7 @@ public sealed class FrontendMcpOwnershipTests
     [Fact]
     public void InProcessShellHidesOnCloseSoTheHostKeepsRunning()
     {
-        var config = AuroraShellHost.CreateConfig("6.0.0");
+        var config = AuroraShellHost.CreateConfig(AnyHostVersion);
 
         // 关窗只是隐藏：界面与宿主同进程，真关掉等于把服务一起关了。
         Assert.Equal(ShellCloseBehavior.Hide, config.CloseBehavior);

@@ -108,6 +108,7 @@ internal static partial class BuiltinCommands
             Domain = "aurora",
             CommandClass = "scene",
             Summary = "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）",
+            Example = "aurora.scene.reset scene=HistoryJanus",
             RequiresUiThread = true,
             Parameters = [SceneParameter(position: 0)],
             Handler = CommandDescriptor.Sync(ctx =>

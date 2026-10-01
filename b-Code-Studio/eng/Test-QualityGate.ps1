@@ -25,7 +25,8 @@ if (-not $minMatch.Success) {
     $violations += 'AuroraVersion.props does not declare MinimumHistoryVulcanVersion'
 } else {
     $minVersion = $minMatch.Groups['v'].Value
-    # 除声明处外，源码与脚本不得出现该版本字面量。
+    # 除声明处外，源码与脚本的代码行不得出现该版本字面量。注释行（// 与 #）不算：
+    # 记录「1.29.0 起跟进宿主 6.0.0」这类历史是注释的本职，规则要拦的是会悄悄过期的代码判断。
     # 这里刻意用显式 foreach 而不是管道：Windows PowerShell 5.1 在 StrictMode Latest 下
     # 对跨行管道中的 $_ 解析不稳，门禁脚本自身不能成为第一个失败点。
     foreach ($relative in @('b-Code-Studio', 'b-Code-Verify')) {
@@ -35,9 +36,14 @@ if (-not $minMatch.Success) {
         foreach ($file in $files) {
             if ($file.FullName -match '\\(bin|obj)\\') { continue }
             if ($file.FullName -eq $versionProps) { continue }
-            $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
-            if ($content -and $content.Contains($minVersion)) {
-                $violations += "hardcoded host version '$minVersion' in $($file.FullName)"
+            $lineNumber = 0
+            foreach ($line in [IO.File]::ReadAllLines($file.FullName)) {
+                $lineNumber++
+                $trimmed = $line.TrimStart()
+                if ($trimmed.StartsWith('//') -or $trimmed.StartsWith('#')) { continue }
+                if ($line.Contains($minVersion)) {
+                    $violations += "hardcoded host version '$minVersion' in $($file.FullName):$lineNumber"
+                }
             }
         }
     }

@@ -133,7 +133,7 @@ internal static partial class BuiltinCommands
             [
                 new ParameterSpec { Name = "panel", Description = "面板 id", Required = true, Position = 0 },
                 new ParameterSpec { Name = "control", Description = "控件 id", Required = true, Position = 1 },
-                new ParameterSpec { Name = "value", Description = "新值", Required = true, Position = 2 },
+                new ParameterSpec { Name = "value", Description = "写给该控件的值，按控件类型的文本形式：数值如 800、开关 true/false、下拉为候选 value", Required = true, Position = 2 },
             ],
             Handler = CommandDescriptor.Sync(ctx =>
             {
