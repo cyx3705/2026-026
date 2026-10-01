@@ -3,8 +3,9 @@ using System.Windows;
 using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -17,6 +18,39 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class MaximizeContractTests
 {
+    /// <summary>
+    /// 1.29.0 真机首装回归：进程内装载时窗口先建、自己的指令后登记进宿主。建窗时菜单校验若只认宿主目录，
+    /// 构造函数就抛「菜单引用了无效指令」，界面起不来、一条指令都登记不上（契约测试的替身目录里本就有自己的表，测不出来）。
+    /// </summary>
+    [Fact]
+    public void WindowBuildsBeforeItsOwnCommandsReachTheHostCatalog()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var dataDirectory = Path.Combine(Path.GetTempPath(), $"HistoryAurora-inproc-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(dataDirectory);
+            var hostTable = new HistoryAurora.Shell.Neutral.Commands.CommandTable();
+            var bus = TestShell.InProcessBus(new NullLog(), hostTable, out var own);
+            var window = new ShellWindow(
+                new ShellConfig { AppName = "HistoryAurora InProc Test", AppVersion = "1.29.0" },
+                new MemoryLayoutStore(),
+                new NullLog(),
+                new MemorySettings(),
+                dataDirectory, bus, own);
+            try
+            {
+                Assert.Empty(hostTable.All());
+                Assert.True(own.TryGet("aurora.ui.show", out _));
+                Assert.Null(bus.Validate("aurora.ui.show name=console"));
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(dataDirectory, recursive: true);
+            }
+        });
+    }
+
     [Fact]
     public void EveryRegisteredWindowCanBeMaximizedAndRestored()
     {
@@ -36,7 +70,7 @@ public sealed class MaximizeContractTests
                 new MemoryLayoutStore(),
                 new NullLog(),
                 new MemorySettings(),
-                dataDirectory)
+                dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands5), shellCommands5)
             {
                 Width = 1000,
                 Height = 700,
@@ -187,7 +221,7 @@ public sealed class MaximizeContractTests
             new MemoryLayoutStore(),
             new NullLog(),
             new MemorySettings(),
-            dataDirectory)
+            dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands6), shellCommands6)
         {
             Width = 1000,
             Height = 700,
