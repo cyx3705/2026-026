@@ -140,14 +140,16 @@ internal static class AuroraShellHost
                 _catalogSubscription = catalogSubscription;
 
             var settings = new JsonSettingsStore(paths.SettingsFile);
+            // 自己的指令表要同时交给总线：建窗时菜单按它校验，那时这些指令还没登记进宿主（见 PublishShellCommands）。
+            var ownCommands = new CommandTable();
             var window = new ShellWindow(
                 config,
                 new FileLayoutStore(paths.LayoutDir),
                 log,
                 settings,
                 paths.Root,
-                new ShellBus(context.Bus, catalog),
-                new CommandTable());
+                new ShellBus(context.Bus, catalog, ownCommands),
+                ownCommands);
 
             _window = window;
             window.EnableHostIntegration();

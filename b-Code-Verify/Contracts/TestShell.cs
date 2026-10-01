@@ -36,6 +36,16 @@ internal static class TestShell
         return Bus(table, log);
     }
 
+    /// <summary>
+    /// 照进程内装载的次序：宿主目录（<paramref name="hostTable"/>）里还没有界面自己的指令，
+    /// 它们只在 <paramref name="table"/> 里，等窗口建好才登记进宿主。
+    /// </summary>
+    public static ShellBus InProcessBus(IModuleLog log, CommandTable hostTable, out CommandTable table)
+    {
+        table = new CommandTable();
+        return new(new TableBus(hostTable) { Log = log }, ShellCatalog.FromTable(hostTable), table);
+    }
+
     /// <summary>取回替身总线，看它收到过哪些调用。</summary>
     public static TableBus Calls(ShellBus bus) => (TableBus)bus.Host;
 }

@@ -16,13 +16,19 @@ namespace HistoryAurora.Shell.Neutral.Commands;
 /// 执行时宿主还会按同一规则再校验一遍，这里只负责即时提示。
 /// </para>
 /// </remarks>
-public sealed class ShellBus(ICommandBus host, ShellCatalog catalog)
+public sealed class ShellBus(ICommandBus host, ShellCatalog catalog, CommandTable? pending = null)
 {
     /// <summary>宿主的总线。</summary>
     public ICommandBus Host { get; } = host;
 
     /// <summary>只读目录。沿用旧名 Registry，界面各处的查法不变。</summary>
     public ShellCatalog Registry { get; } = catalog;
+
+    /// <summary>
+    /// 界面自己那张还没登记进宿主的指令表。进程内装载时 Aurora 的指令要等窗口建好才登记进宿主，
+    /// 建窗期间（菜单、动作台账校验）宿主目录里还没有它们，校验按这张表认。登记之后宿主目录优先。
+    /// </summary>
+    public CommandTable? Pending { get; } = pending;
 
     /// <summary>经本对象执行的指令完成后触发（文本、来源、结果），在执行线程上引发。</summary>
     public event Action<string, string, CommandResult>? Executed;
@@ -51,9 +57,11 @@ public sealed class ShellBus(ICommandBus host, ShellCatalog catalog)
             return ex.Message;
         }
 
-        if (!Registry.TryGet(parsed.Name, out var command))
-            return $"未知指令: {parsed.Name}";
-        return Bind(command, parsed);
+        if (Registry.TryGet(parsed.Name, out var command))
+            return Bind(command, parsed);
+        if (Pending != null && Pending.TryGet(parsed.Name, out var own))
+            return Bind(CommandInfo.FromDescriptor(own, Pending.GetSource(own.Name)), parsed);
+        return $"未知指令: {parsed.Name}";
     }
 
     /// <summary>用法行，如 <c>用法: aurora.ui.show name= [pos=left/right]</c>。</summary>

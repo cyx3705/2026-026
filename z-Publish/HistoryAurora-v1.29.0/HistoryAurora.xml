@@ -408,7 +408,7 @@
             </para>
             </remarks>
         </member>
-        <member name="M:HistoryAurora.Shell.Neutral.Commands.ShellBus.#ctor(HistoryVulcan.Core.Commands.ICommandBus,HistoryAurora.Shell.Neutral.Commands.ShellCatalog)">
+        <member name="M:HistoryAurora.Shell.Neutral.Commands.ShellBus.#ctor(HistoryVulcan.Core.Commands.ICommandBus,HistoryAurora.Shell.Neutral.Commands.ShellCatalog,HistoryAurora.Shell.Neutral.Commands.CommandTable)">
             <summary>
             界面各处用的总线（1.29.0，宿主 6.0.0 统一契约）：宿主那条窄总线加一份只读目录。
             </summary>
@@ -428,6 +428,12 @@
         </member>
         <member name="P:HistoryAurora.Shell.Neutral.Commands.ShellBus.Registry">
             <summary>只读目录。沿用旧名 Registry，界面各处的查法不变。</summary>
+        </member>
+        <member name="P:HistoryAurora.Shell.Neutral.Commands.ShellBus.Pending">
+            <summary>
+            界面自己那张还没登记进宿主的指令表。进程内装载时 Aurora 的指令要等窗口建好才登记进宿主，
+            建窗期间（菜单、动作台账校验）宿主目录里还没有它们，校验按这张表认。登记之后宿主目录优先。
+            </summary>
         </member>
         <member name="E:HistoryAurora.Shell.Neutral.Commands.ShellBus.Executed">
             <summary>经本对象执行的指令完成后触发（文本、来源、结果），在执行线程上引发。</summary>
