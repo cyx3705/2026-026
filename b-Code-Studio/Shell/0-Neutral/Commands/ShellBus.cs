@@ -77,7 +77,7 @@ public sealed class ShellBus(ICommandBus host, ShellCatalog catalog, CommandTabl
         return $"用法: {command.Name} {string.Join(" ", parts)}".TrimEnd();
     }
 
-    /// <summary>参数绑定的界面侧检查（规则见宿主模块API「参数」一节）。</summary>
+    /// <summary>参数绑定的界面侧检查（规则见宿主模块开发手册「怎么写」一节）。</summary>
     private static string? Bind(CommandInfo command, ParsedCommand parsed)
     {
         if (command.AllowUnspecifiedParameters)

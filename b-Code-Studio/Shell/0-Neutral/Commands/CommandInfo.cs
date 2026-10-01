@@ -4,7 +4,7 @@ using HistoryVulcan.Core.Commands;
 namespace HistoryAurora.Shell.Neutral.Commands;
 
 /// <summary>
-/// 目录里的一条指令（1.29.0）：按宿主模块API写明的 <c>vulcan.command.list</c> 行形状读出。
+/// 目录里的一条指令（1.29.0）：按宿主模块开发手册写明的 <c>vulcan.command.list</c> 行形状读出。
 /// </summary>
 /// <remarks>
 /// 成员名与 <see cref="CommandDescriptor"/> 的只读面对齐（Parameters / Level / Readonly / Annotation …），
@@ -117,7 +117,7 @@ public sealed class CommandInfo
     }
 
     /// <summary>
-    /// 从本仓自己登记的描述符投影（宿主不在时的独立运行与测试用）。域与类的推导与宿主模块API写明的规则一致。
+    /// 从本仓自己登记的描述符投影（宿主不在时的独立运行与测试用）。域与类的推导与宿主模块开发手册写明的规则一致。
     /// </summary>
     public static CommandInfo FromDescriptor(CommandDescriptor descriptor, string source)
     {
@@ -156,7 +156,7 @@ public sealed class CommandInfo
         => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 }
 
-/// <summary>指令名的结构推导（宿主模块API「指令命名」一节的规则，纯函数）。</summary>
+/// <summary>指令名的结构推导（宿主模块开发手册「怎么写」一节的三段式规则，纯函数）。</summary>
 public static class CommandNames
 {
     /// <summary>首段；无点则 <c>core</c>。</summary>
