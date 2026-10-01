@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <HistoryAuroraVersion>1.28.0</HistoryAuroraVersion>
+    <HistoryAuroraVersion>1.29.0</HistoryAuroraVersion>
     <!-- Aurora 消费的 HistoryVulcan 正式宿主版本。这是宿主契约的唯一真源：
          发布脚本与质量门禁都从此读取，不再各自硬编码字面量。
          5.0.0 拆除宿主模块领域 SDK，冻结面只留注册器、总线和开发总线。
@@ -17,7 +17,7 @@
          与指令详情两页、把停靠系统收成 internal。宿主契约一个字没碰。
 
          1.23.0 抬到 5.5：控制台改挂宿主唯一日志 IModuleContext.Log（DEC-042），旧宿主上读它会抛。 -->
-    <MinimumHistoryVulcanVersion>5.5.0</MinimumHistoryVulcanVersion>
+    <MinimumHistoryVulcanVersion>6.0.0</MinimumHistoryVulcanVersion>
     <VersionPrefix>$(HistoryAuroraVersion)</VersionPrefix>
     <Version>$(HistoryAuroraVersion)</Version>
     <AssemblyVersion>$(HistoryAuroraVersion).0</AssemblyVersion>

@@ -3,7 +3,8 @@ using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Components.Modules;
 
@@ -30,7 +31,7 @@ internal interface IActivatableToolContent
 /// <summary>命令工作台挂载点。5.0 宿主不再转发，由 Aurora 窗口自持。</summary>
 internal interface IShellCommandWorkbenchHost
 {
-    CommandBus Bus { get; }
+    ShellBus Bus { get; }
 
     CommandSelectionState CommandSelection { get; }
 

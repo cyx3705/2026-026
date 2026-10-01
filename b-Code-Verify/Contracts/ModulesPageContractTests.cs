@@ -2,8 +2,9 @@ using System.IO;
 using System.Text.Json;
 using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Services.Modules;
 using Xunit;
+using HistoryAurora.Shell.Neutral.CommandSurface;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -88,11 +89,11 @@ public sealed class ModulesPageContractTests
         // The embedded Aurora UI has a separate registry. A module's commands are
         // therefore invisible locally, but the host module snapshot still carries
         // the finalized count from the registration pass.
-        var local = new CommandRegistry();
+        var local = new CommandTable();
         var module = new ModuleMeta(
             "HistoryJanus", "", "", "5.4.8", false, "HistoryJanus.dll", 41);
 
-        Assert.Equal(41, HostedPageData.DomainCommandCount(local, module));
+        Assert.Equal(41, HostedPageData.DomainCommandCount(ShellCatalog.FromTable(local), module));
     }
 
     [Fact]
@@ -106,18 +107,23 @@ public sealed class ModulesPageContractTests
         Assert.Contains("Environment.CurrentDirectory = cwd", source, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 1.29.0：界面指令原样登记进宿主，由宿主经前端的界面上下文编组（异步 Post，已在界面线程上就地执行），
+    /// 界面不再逐字段抄代理描述符、也不再自己同步等 Dispatcher。
+    /// </summary>
     [Fact]
-    public void HostMarshalledUiCommandsDoNotSyncWaitOnTheUiDispatcher()
+    public void ShellCommandsAreRegisteredAsIsAndMarshalledByTheHost()
     {
-        var source = File.ReadAllText(Path.Combine(
+        var host = File.ReadAllText(Path.Combine(
             RepositoryRoot(), "b-Code-Studio", "Module", "AuroraShellHost.cs"));
+        var frontend = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "b-Code-Studio", "Module", "AuroraFrontend.cs"));
 
-        Assert.Contains("window.Dispatcher.CheckAccess()", source, StringComparison.Ordinal);
-        Assert.Contains("window.Dispatcher.InvokeAsync(() => source.Handler(context))", source, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "Handler = context => window.Dispatcher.Invoke(() => source.Handler(context))",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("registrar.Register(descriptor)", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("Marshalled(", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("source.Handler(context)", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("RemoteExecutor", host, StringComparison.Ordinal);
+        Assert.Contains("new DispatcherSynchronizationContext(window.Dispatcher)", frontend, StringComparison.Ordinal);
     }
 
     /// <summary>向上找到含 project.manifest.json 的目录，即仓库根。</summary>

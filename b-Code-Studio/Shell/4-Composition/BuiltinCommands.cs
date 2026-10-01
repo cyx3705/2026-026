@@ -5,12 +5,13 @@ using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -29,7 +30,7 @@ internal sealed class ShellCommandServices
 
     public required IShellLog Log { get; init; }
 
-    public required CommandBus Bus { get; init; }
+    public required ShellBus Bus { get; init; }
 
     public required string DataDirectory { get; init; }
 
@@ -69,7 +70,7 @@ internal sealed class ShellCommandServices
 /// </summary>
 internal static partial class BuiltinCommands
 {
-    public static void Register(CommandRegistry r, ShellCommandServices s)
+    public static void Register(CommandTable r, ShellCommandServices s)
     {
         RegisterBasics(r, s);
         RegisterApp(r, s);

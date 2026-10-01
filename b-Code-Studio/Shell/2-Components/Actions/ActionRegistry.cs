@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Actions;
 
@@ -26,7 +28,7 @@ public readonly record struct ActionBinding(ActionDeclaration? Action, string? E
 /// 与页面描述同为"拉取"模型：Aurora 主动问 <c>&lt;域&gt;.ui.actions</c>，
 /// 宿主不持有声明。声明是派生状态，模块卸载后台账跟着空，不会留下幽灵动作。
 /// </summary>
-public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
+public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
 {
     private const string Source = "action";
 
@@ -95,7 +97,7 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
 
         foreach (var action in _actions.Values)
         {
-            if (!bus.Registry.TryGet(action.Command, out _) && bus.RemoteExecutor == null)
+            if (!bus.Registry.TryGet(action.Command, out _))
                 _broken.Add($"{action.Id} → {action.Command}（注册表里没有这条指令）");
         }
 
@@ -115,14 +117,14 @@ public sealed partial class ActionRegistry(CommandBus bus, IShellLog log)
                      .Select(a => a.Id).ToList())
             _actions.Remove(id);
         // Modules without an actions contract are valid; do not call an unknown command.
-        ModuleCommandProbe.ResetRemoteListCache();
+        bus.Registry.Expire();
         var owners = await ModuleCommandProbe.OwnersWithSuffixAsync(
             bus, log, Source, ActionsSuffix, cancellation).ConfigureAwait(true);
         if (bus.Registry.TryGet(domain + ActionsSuffix, out _) || owners.Contains(domain, StringComparer.OrdinalIgnoreCase))
             await LoadOwnerAsync(domain, [], cancellation).ConfigureAwait(true);
         _broken.Clear();
         foreach (var action in _actions.Values)
-            if (!bus.Registry.TryGet(action.Command, out _) && bus.RemoteExecutor == null)
+            if (!bus.Registry.TryGet(action.Command, out _))
                 _broken.Add($"{action.Id} → {action.Command}（注册表里没有这条指令）");
     }
 

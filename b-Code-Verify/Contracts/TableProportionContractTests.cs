@@ -6,6 +6,7 @@ using HistoryAurora.Shell.Components.Graph;
 using HistoryAurora.Shell.Components.Table;
 using HistoryVulcan.Core.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -95,9 +96,9 @@ public sealed class TableProportionContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new HistoryAurora.Shell.Neutral.Logging.MemoryShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var swimlane = new AuroraSwimlane(bus, log, new ActionRegistry(bus, log));
 
             var host = new Window

@@ -1,8 +1,9 @@
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -75,33 +76,19 @@ public sealed class CommandCatalogContractTests
         Assert.Contains(result.Candidates, candidate => candidate.InsertText == "demo.branch.rename");
     }
 
+    // 1.29.0：目录会话只读总线目录（进程内即宿主目录，Aurora 的指令也在其中），不再另拉 vulcan.command.list 合并。
     [Fact]
-    public async Task Refresh_CoalescesOverlappingRemoteCatalogFetches()
+    public async Task Refresh_PicksUpCommandsRegisteredAfterTheSessionWasCreated()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(Command("demo.branch.rename", "branch", "重命名"));
-        var log = new MemoryLog();
-        var bus = new CommandBus(registry, log);
-        var gate = new TaskCompletionSource();
-        var lists = 0;
-        bus.RemoteExecutor = async (_, _, _) =>
-        {
-            Interlocked.Increment(ref lists);
-            await gate.Task.ConfigureAwait(false);
-            return CommandResult.Ok("ok", Array.Empty<CommandCatalogRow>());
-        };
+        var session = new LocalCommandCatalogSession(TestShell.Bus(registry), new MemoryLog());
+        Assert.DoesNotContain(session.Entries, entry => entry.Name == "demo.branch.delete");
 
-        var session = new LocalCommandCatalogSession(bus, log);
-        var first = session.RefreshAsync();
-        var second = session.RefreshAsync();
-        var third = session.RefreshAsync();
+        registry.Register(Command("demo.branch.delete", "branch", "删除"));
+        Assert.True(await session.RefreshAsync());
 
-        Assert.Same(first, second);
-        Assert.Same(first, third);
-
-        gate.SetResult();
-        Assert.True(await first);
-        Assert.Equal(2, lists);
+        Assert.Contains(session.Entries, entry => entry.Name == "demo.branch.delete");
     }
 
     [Fact]
@@ -166,7 +153,7 @@ public sealed class CommandCatalogContractTests
 
     private static LocalCommandCatalogSession Session()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(Command("demo.branch.rename", "branch", "重命名分支",
             new ParameterSpec { Name = "to", Description = "新名字", Required = true, Position = 0 }));
         registry.Register(Command("demo.branch.mode", "branch", "切换模式",
@@ -180,7 +167,7 @@ public sealed class CommandCatalogContractTests
         registry.Register(Command("other.thing.do", "thing", "别的域"));
 
         var log = new MemoryLog();
-        return new LocalCommandCatalogSession(new CommandBus(registry, log), log);
+        return new LocalCommandCatalogSession(TestShell.Bus(registry), log);
     }
 
     private static CommandDescriptor Command(

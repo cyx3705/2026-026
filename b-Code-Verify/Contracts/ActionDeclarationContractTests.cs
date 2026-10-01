@@ -3,6 +3,8 @@ using HistoryAurora.Shell.Components.Actions;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -105,7 +107,7 @@ public sealed class ActionDeclarationContractTests
     [Fact]
     public async Task Reload_CollectsDeclarationsAndFlagsBrokenCommands()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         Declare(registry, "demo", """
             {
               "schemaVersion": 1,
@@ -119,7 +121,7 @@ public sealed class ActionDeclarationContractTests
         registry.Register(Simple("demo.exists"));
 
         var log = new MemoryLog();
-        var actions = new ActionRegistry(new CommandBus(registry, log), log);
+        var actions = new ActionRegistry(TestShell.Bus(registry), log);
         var report = await actions.ReloadAsync();
 
         Assert.Equal(1, report.ModulesAsked);
@@ -132,12 +134,12 @@ public sealed class ActionDeclarationContractTests
     [Fact]
     public async Task Reload_SkipsBadDeclarationWithoutAffectingOthers()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         Declare(registry, "broken", "{ not json");
         Declare(registry, "demo", MinimalActions);
 
         var log = new MemoryLog();
-        var actions = new ActionRegistry(new CommandBus(registry, log), log);
+        var actions = new ActionRegistry(TestShell.Bus(registry), log);
         var report = await actions.ReloadAsync();
 
         Assert.Equal(2, report.ModulesAsked);
@@ -149,7 +151,7 @@ public sealed class ActionDeclarationContractTests
     public void Resolve_ReturnsReasonWhenUndeclared()
     {
         var log = new MemoryLog();
-        var actions = new ActionRegistry(new CommandBus(new CommandRegistry(), log), log);
+        var actions = new ActionRegistry(TestShell.Bus(new CommandTable()), log);
 
         var binding = actions.Resolve("nobody.declared.this");
 
@@ -248,7 +250,7 @@ public sealed class ActionDeclarationContractTests
         // 与协议槽位同名。不排除的话每一轮探测都会去调它自己那条查询命令，
         // 再拿一段人话去做 JSON 解析并失败；模块热重载的窗口期里更会留下一条
         // `✗ 未知指令: aurora.ui.actions`（2026-08-25 真机实测）。
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = HistoryAurora.Shell.Components.Modules.ModuleCommandProbe.SelfDomain
@@ -262,7 +264,7 @@ public sealed class ActionDeclarationContractTests
         Declare(registry, "demo", MinimalActions);
 
         var log = new MemoryLog();
-        var actions = new ActionRegistry(new CommandBus(registry, log), log);
+        var actions = new ActionRegistry(TestShell.Bus(registry), log);
         var report = await actions.ReloadAsync();
 
         Assert.Equal(1, report.ModulesAsked);
@@ -270,7 +272,7 @@ public sealed class ActionDeclarationContractTests
         Assert.Equal("demo.rename", Assert.Single(actions.Actions).Id);
     }
 
-    private static void Declare(CommandRegistry registry, string domain, string payload)
+    private static void Declare(CommandTable registry, string domain, string payload)
         => registry.Register(new CommandDescriptor
         {
             Name = domain + ActionRegistry.ActionsSuffix,

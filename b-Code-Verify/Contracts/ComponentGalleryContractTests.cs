@@ -8,6 +8,7 @@ using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -64,9 +65,9 @@ public sealed class ComponentGalleryContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new ActionRegistry(bus, log);
 
             ComponentGalleryCommands.Register(registry);
@@ -139,40 +140,32 @@ public sealed class ComponentGalleryContractTests
     }
 
     /// <summary>
-    /// 本机有、宿主没有的命令必须就地执行。
+    /// 界面的每条指令都要声明界面线程（1.29.0）。
     ///
-    /// 这是 1.8.9～1.8.12 连查四轮的那条实测故障：`aurora.preview.rows` / `.graph`
-    /// 在界面注册表里明明在，一执行却报 `✗ 未知指令`——因为界面总线默认把命令发给宿主，
-    /// 而它们没能进宿主注册表。为什么没进去是宿主那一侧的事；
-    /// **不管为什么，把一条本机能跑的命令发出去换回「不认识」都是错的。**
+    /// 进程内装载时界面指令原样登记进宿主，由宿主编组到界面线程；没声明的不登记（AuroraShellHost 记一条错误）。
+    /// 1.8.9～1.8.12 那条「本机有、宿主报未知指令」的故障，今天的形态就是某条指令漏了这一声明。
+    /// 共享内置指令（vulcan.*）由宿主定义，界面表里那几条只为独立运行而存在，不在此列。
     /// </summary>
     [Fact]
-    public void CommandsTheHostDoesNotHaveStayLocal()
+    public void EveryShellCommandDeclaresTheUiThread()
     {
-        var local = new CommandRegistry();
-        ComponentGalleryCommands.Register(local);
-        var host = new CommandRegistry();
+        // 刻意在线程池上执行的：界面卡住时 AI 仍要读得到控制台（其实现自己加锁）。
+        string[] threadSafe = ["aurora.log.snapshot"];
+        var missing = HistoryAurora.Shell.Composition.FrontendCommandCatalog.FrameworkSourceDescriptors
+            .Where(descriptor => !descriptor.Name.StartsWith("vulcan.", StringComparison.OrdinalIgnoreCase))
+            .Where(descriptor => !threadSafe.Contains(descriptor.Name))
+            .Where(descriptor => !descriptor.RequiresUiThread)
+            .Select(descriptor => descriptor.Name)
+            .ToList();
 
-        Assert.False(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
-            local, host, "aurora.preview.graph", "UI"));
-        Assert.False(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
-            local, host, "aurora.preview.rows", "UI"));
-
-        // 宿主也有的时候维持原状：仍旧发过去，由宿主作为唯一目录。
-        ComponentGalleryCommands.Register(host);
-        Assert.True(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
-            local, host, "aurora.preview.graph", "UI"));
-
-        // 本机压根没有的仍旧发给宿主，否则模块命令就没人接了。
-        Assert.True(HistoryAurora.Module.AuroraShellHost.ShouldUseRemote(
-            local, host, "janus.branch.list", "UI"));
+        Assert.True(missing.Count == 0, "未声明 RequiresUiThread：" + string.Join(", ", missing));
     }
 
     /// <summary>登记两遍不得抛：页面每次打开都会调一次。</summary>
     [Fact]
     public void RegisteringTheGalleryCommandsTwiceIsANoOp()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         ComponentGalleryCommands.Register(registry);
         ComponentGalleryCommands.Register(registry);
 
@@ -187,9 +180,9 @@ public sealed class ComponentGalleryContractTests
     [Fact]
     public async Task LocalActionsSurviveAModuleReload()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         var log = new MemoryShellLog();
-        var actions = new ActionRegistry(new CommandBus(registry, log), log);
+        var actions = new ActionRegistry(TestShell.Bus(registry), log);
 
         ComponentGalleryCommands.Register(registry);
         actions.DeclareLocal(ComponentGalleryCommands.Owner, ComponentGalleryCommands.Actions);

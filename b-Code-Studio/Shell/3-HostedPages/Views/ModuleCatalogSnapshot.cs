@@ -1,7 +1,7 @@
+using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Services.Modules;
-using HistoryVulcan.Services.Commands;
 using HistoryAurora.Shell.Neutral;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.HostedPages.Views;
 
@@ -122,7 +122,7 @@ public static class ModuleCatalogReader
     /// 因计数短暂不一致而隐藏已经成功装载的模块。
     /// </summary>
     internal static async Task<ModuleCatalogLoadResult> LoadModulesAsync(
-        CommandBus bus,
+        ShellBus bus,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bus);
@@ -144,7 +144,7 @@ public static class ModuleCatalogReader
     }
 
     public static async Task<ModuleCatalogLoadResult> LoadAsync(
-        CommandBus bus,
+        ShellBus bus,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bus);
@@ -155,32 +155,15 @@ public static class ModuleCatalogReader
         if (!CommandResultData.TryRead<IReadOnlyList<ModuleMeta>>(moduleResult.Data, out var modules))
             return new(false, "模块清单返回了无法识别的数据", null);
 
-        IReadOnlyList<ModuleCommandInfo> commands;
-        if (bus.RemoteExecutor == null && !bus.Registry.TryGet("vulcan.command.list", out _))
-        {
-            commands = ReadLocalCommands(bus.Registry);
-        }
-        else
-        {
-            var commandResult = await bus.ExecuteAsync("vulcan.command.list", "UI", cancellationToken);
-            if (!commandResult.Success)
-                return new(false, $"命令目录加载失败: {FirstLine(commandResult.Message)}", null);
-            if (!CommandResultData.TryRead<IReadOnlyList<CommandCatalogRow>>(commandResult.Data, out var rows))
-                return new(false, "命令目录返回了无法识别的数据", null);
-            commands = rows.Select(row => new ModuleCommandInfo(
-                row.CommandName,
-                row.Summary,
-                row.Example ?? "",
-                row.Source,
-                row.SourceDetail)).ToList();
-        }
+        // 1.29.0：指令表就是总线的目录（进程内装载时即宿主的 vulcan.command.list），不再分本地与远端两路。
+        var commands = ReadLocalCommands(bus.Registry);
 
         if (!ModuleCatalogSnapshot.TryCreate(modules, commands, out var snapshot, out var error))
             return new(false, error, null);
         return new(true, moduleResult.Message, snapshot);
     }
 
-    private static IReadOnlyList<ModuleCommandInfo> ReadLocalCommands(CommandRegistry registry)
+    private static IReadOnlyList<ModuleCommandInfo> ReadLocalCommands(ShellCatalog registry)
         => registry.All().Select(descriptor =>
         {
             var rawSource = registry.GetSource(descriptor.Name);

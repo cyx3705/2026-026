@@ -5,15 +5,16 @@ using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
 internal static partial class BuiltinCommands
 {
-    private static void RegisterPanel(CommandRegistry r, ShellCommandServices s, PanelManager panels)
+    private static void RegisterPanel(CommandTable r, ShellCommandServices s, PanelManager panels)
     {
         RegisterFrontend(r, new CommandDescriptor
         {

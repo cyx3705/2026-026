@@ -7,16 +7,17 @@ using System.Windows;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Neutral.Logging;
 using HistoryAurora.Shell.Components.Panels;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
 internal static partial class BuiltinCommands
 {
-    private static void RegisterLog(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterLog(CommandTable r, ShellCommandServices s)
     {
         RegisterFrontend(r, new CommandDescriptor
         {

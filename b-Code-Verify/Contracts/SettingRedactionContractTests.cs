@@ -1,8 +1,10 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Composition;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify.Contracts;
 
@@ -29,8 +31,8 @@ public sealed class SettingRedactionContractTests
         settings.Set("code", "code-setting-secret");
         settings.Set("console.history", "500");
         var log = new MemoryLog();
-        var registry = new CommandRegistry();
-        var bus = new CommandBus(registry, log);
+        var registry = new CommandTable();
+        var bus = TestShell.Bus(registry);
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
             Window = null!,

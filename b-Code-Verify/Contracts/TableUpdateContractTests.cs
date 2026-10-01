@@ -7,6 +7,7 @@ using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Neutral.Logging;
 using HistoryVulcan.Core.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -18,9 +19,9 @@ public sealed class TableUpdateContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var refresher = new PageDataRefresher();
             var calls = 0;
             var seenRevision = "";

@@ -1,5 +1,7 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.HostedPages.Console;
 
@@ -28,7 +30,7 @@ public sealed class ConsoleRow
     public static IReadOnlyList<ConsoleRow> From(ShellLogEntry e)
         => From(e, null);
 
-    internal static IReadOnlyList<ConsoleRow> From(ShellLogEntry e, CommandRegistry? registry)
+    internal static IReadOnlyList<ConsoleRow> From(ShellLogEntry e, ShellCatalog? registry)
     {
         string text;
         string sourceKey;
@@ -36,12 +38,12 @@ public sealed class ConsoleRow
         string commandClassKey;
 
         // 指令回显(cmd:来源):附录 C 样式 "[10:21:03] [手动] > vulcan.command.help vulcan.command.list"
-        if (e.Category.StartsWith(CommandBus.EchoCategoryPrefix, StringComparison.Ordinal))
+        if (e.Category.StartsWith(HostLogCategories.EchoPrefix, StringComparison.Ordinal))
         {
-            var source = e.Category[CommandBus.EchoCategoryPrefix.Length..];
+            var source = e.Category[HostLogCategories.EchoPrefix.Length..];
             if (TryReadCommandOutput(
                     source,
-                    CommandBus.ResultCategory,
+                    HostLogCategories.Result,
                     out var resultDomain,
                     out var resultClass))
             {
@@ -52,7 +54,7 @@ public sealed class ConsoleRow
             }
             else if (TryReadCommandOutput(
                          source,
-                         CommandBus.ProgressCategory,
+                         HostLogCategories.Progress,
                          out var progressDomain,
                          out var progressClass))
             {
@@ -63,8 +65,10 @@ public sealed class ConsoleRow
             }
             else
             {
-                text = $"[{e.Time:HH:mm:ss}] [{source}] > {e.Message}";
-                sourceKey = SourceKeyOf(source);
+                // 宿主 6.0.0 起来源带模块章（module:HistoryAurora:UI），显示与筛选都按最里面那层。
+                var label = SourceLabels.Display(source);
+                text = $"[{e.Time:HH:mm:ss}] [{label}] > {e.Message}";
+                sourceKey = SourceKeyOf(label);
                 (domainKey, commandClassKey) = TaxonomyOfCommandText(e.Message, registry);
             }
         }
@@ -111,7 +115,7 @@ public sealed class ConsoleRow
         out string domain,
         out string commandClass)
     {
-        var prefix = category[CommandBus.EchoCategoryPrefix.Length..];
+        var prefix = category[HostLogCategories.EchoPrefix.Length..];
         if (source.Equals(prefix, StringComparison.Ordinal))
         {
             domain = "core";
@@ -136,7 +140,7 @@ public sealed class ConsoleRow
 
     private static (string Domain, string CommandClass) TaxonomyOfCommandText(
         string text,
-        CommandRegistry? registry)
+        ShellCatalog? registry)
     {
         string name;
         try

@@ -1,7 +1,8 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
 using HistoryAurora.Shell.Neutral;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Modules;
 
@@ -9,10 +10,9 @@ namespace HistoryAurora.Shell.Components.Modules;
 /// "哪些模块声明了某类契约"的唯一判定处：直接看注册表里有没有 <c>&lt;域&gt;.&lt;后缀&gt;</c>。
 ///
 /// 不用"先问 manifest 的 ui 标志再逐个试"——那要求宿主把 manifest 字段透出来，
-/// 而注册表本来就是权威且已经在手边；模块没注册该命令就是没有这项契约，不是错误。
+/// 而目录本来就是权威且已经在手边；模块没注册该命令就是没有这项契约，不是错误。
 ///
-/// 页面描述（<c>.ui.describe</c>）与动作声明（<c>.ui.actions</c>）用的是同一套判定，
-/// 因此收在一处：两份各写一遍的话，远程目录那段回退逻辑迟早只在其中一份里被修。
+/// 页面描述（<c>.ui.describe</c>）与动作声明（<c>.ui.actions</c>）用的是同一套判定，因此收在一处。
 /// </summary>
 public static class ModuleCommandProbe
 {
@@ -29,38 +29,15 @@ public static class ModuleCommandProbe
     /// </summary>
     public const string SelfDomain = "aurora";
 
-    /// <summary>
-    /// 远端目录快照的存活时间。动作拉取与页面拉取在同一轮发现里各问一次
-    /// <c>vulcan.command.list</c>，目录会话刷新往往还要再问——同一份权威源
-    /// 被连打三遍，而 230ms 内的注册风暴会把它放大到上百次。
-    /// </summary>
-    internal static readonly TimeSpan RemoteListCacheDuration = TimeSpan.FromMilliseconds(400);
-
-    private static readonly object RemoteListGate = new();
-    private static CommandBus? _cachedBus;
-    private static IReadOnlyList<string>? _cachedRemoteNames;
-    private static long _cachedAt;
-
     /// <summary>域名反推模块名，用于 owner 校验：mercury → HistoryMercury。</summary>
     public static string ExpectedOwner(string domain) => "History" + Capitalize(domain);
 
-    /// <summary>丢掉远端目录缓存。测试在两次探测之间改注册表时必须调用。</summary>
-    internal static void ResetRemoteListCache()
-    {
-        lock (RemoteListGate)
-        {
-            _cachedBus = null;
-            _cachedRemoteNames = null;
-            _cachedAt = 0;
-        }
-    }
-
     /// <summary>
     /// 列出注册了 <paramref name="suffix"/> 后缀命令的域。
-    /// 挂了远程执行器时额外读一次宿主命令目录——本进程注册表里没有对端的模块命令。
+    /// 1.29.0 起目录就是宿主目录（<see cref="ShellBus.Registry"/>），不再另读一次远端补齐。
     /// </summary>
-    public static async Task<List<string>> OwnersWithSuffixAsync(
-        CommandBus bus,
+    public static Task<List<string>> OwnersWithSuffixAsync(
+        ShellBus bus,
         IShellLog log,
         string source,
         string suffix,
@@ -69,15 +46,8 @@ public static class ModuleCommandProbe
         ArgumentNullException.ThrowIfNull(bus);
         ArgumentNullException.ThrowIfNull(log);
 
-        var names = bus.Registry.All().Select(d => d.Name).ToList();
-        if (bus.RemoteExecutor != null)
-        {
-            var remote = await RemoteCommandNamesAsync(bus, log, source, cancellation)
-                .ConfigureAwait(true);
-            names.AddRange(remote);
-        }
-
-        return names
+        cancellation.ThrowIfCancellationRequested();
+        return Task.FromResult(bus.Registry.All().Select(d => d.Name)
             .Where(name => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             .Select(name => name[..^suffix.Length])
             .Where(domain => domain.Length > 0)
@@ -85,47 +55,7 @@ public static class ModuleCommandProbe
             .Where(domain => !domain.Equals(SelfDomain, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(domain => domain, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static async Task<IReadOnlyList<string>> RemoteCommandNamesAsync(
-        CommandBus bus,
-        IShellLog log,
-        string source,
-        CancellationToken cancellation)
-    {
-        lock (RemoteListGate)
-        {
-            if (ReferenceEquals(_cachedBus, bus)
-                && _cachedRemoteNames != null
-                && Environment.TickCount64 - _cachedAt < (long)RemoteListCacheDuration.TotalMilliseconds)
-                return _cachedRemoteNames;
-        }
-
-        IReadOnlyList<string> names = [];
-        try
-        {
-            var listed = await bus.ExecuteAsync("vulcan.command.list", "UI", cancellation)
-                .ConfigureAwait(true);
-            if (listed.Success
-                && CommandResultData.TryRead<IReadOnlyList<CommandCatalogRow>>(listed.Data, out var rows))
-            {
-                names = rows.Select(row => row.CommandName).ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            log.Log(ShellLogLevel.Warn, source, "读取宿主命令目录失败: " + ex.Message);
-        }
-
-        lock (RemoteListGate)
-        {
-            _cachedBus = bus;
-            _cachedRemoteNames = names;
-            _cachedAt = Environment.TickCount64;
-        }
-
-        return names;
+            .ToList());
     }
 
     private static string Capitalize(string value)

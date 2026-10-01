@@ -2,8 +2,10 @@ using HistoryAurora.Shell.Components.Pages;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -98,7 +100,7 @@ public sealed class ComponentRequestContractTests
         {
             var settings = new MemorySettings();
             var log = new MemoryLog();
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             registry.Register(new CommandDescriptor
             {
                 Name = "demo" + ModulePageLoader.DescribeSuffix,
@@ -119,7 +121,7 @@ public sealed class ComponentRequestContractTests
 
             var store = new ComponentRequestStore(settings, log);
             var loader = new ModulePageLoader(
-                new CommandBus(registry, log), new NullDocking(), log, store);
+                TestShell.Bus(registry), new NullDocking(), log, store);
 
             loader.ReloadAsync().GetAwaiter().GetResult();
 
@@ -150,7 +152,7 @@ public sealed class ComponentRequestContractTests
         var log = new MemoryLog();
         return new PageRenderContext
         {
-            Bus = new CommandBus(new CommandRegistry(), log),
+            Bus = TestShell.Bus(new CommandTable()),
             Log = log,
             Owner = "HistoryDemo",
         };

@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.28.0",
+    "version": "1.29.0",
     "branch": "main"
   },
   "paths": {
@@ -82,5 +82,36 @@
     "**/node_modules/**",
     "**/.vs/**",
     "artifacts/**"
-  ]
+  ],
+  "publish": {
+    "versionProps": "b-Code-Studio\\AuroraVersion.props",
+    "versionProperty": "HistoryAuroraVersion",
+    "sourceManifest": "b-Code-Studio\\Module\\module.manifest.json",
+    "package": {
+      "project": "b-Code-Studio\\Module\\HistoryAurora.Module.csproj",
+      "files": [
+        "HistoryAurora.dll",
+        "HistoryAurora.xml",
+        "AvalonDock.dll",
+        "AvalonDock.Themes.VS2013.dll",
+        "module.manifest.json"
+      ]
+    },
+    "validation": [
+      {
+        "tool": "dotnet.exe",
+        "configurations": [
+          "Release"
+        ],
+        "arguments": [
+          "test",
+          "b-Code-Verify\\Contracts\\Contracts.csproj",
+          "-c",
+          "{configuration}",
+          "-p:NuGetAudit=false"
+        ],
+        "description": "Run module contracts ({configuration})"
+      }
+    ]
+  }
 }

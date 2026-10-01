@@ -1,6 +1,6 @@
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Services.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Neutral.CommandSurface;
 
@@ -37,41 +37,13 @@ internal sealed partial class LocalCommandCatalogSession
         => _entries.FirstOrDefault(
             entry => entry.Name.Equals(name ?? "", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>
-    /// 重建快照。本地注册表直接读；接了远端执行器时再并入宿主目录——
-    /// 界面自己那张表里没有模块与宿主的指令，只看本地的话命令集会少掉九成。
-    /// </summary>
+    /// <summary>重建快照：读目录（宿主目录已含 Aurora 自己的指令）。</summary>
     public Task<bool> RefreshAsync(bool force = false, CancellationToken cancellationToken = default)
-        => _refresh.RunAsync(() => RefreshCoreAsync(force, cancellationToken));
+        => _refresh.RunAsync(() => RefreshCoreAsync(force));
 
-    private async Task<bool> RefreshCoreAsync(bool force, CancellationToken cancellationToken)
+    private Task<bool> RefreshCoreAsync(bool force)
     {
-        var merged = new Dictionary<string, CatalogEntry>(StringComparer.OrdinalIgnoreCase);
-
-        if (_bus.RemoteExecutor != null)
-        {
-            try
-            {
-                var listed = await _bus.ExecuteAsync("vulcan.command.list", "UI", cancellationToken)
-                    .ConfigureAwait(true);
-                if (listed.Success
-                    && CommandResultData.TryRead<IReadOnlyList<CommandCatalogRow>>(listed.Data, out var rows))
-                {
-                    foreach (var row in rows)
-                        merged[row.CommandName] = FromRow(row);
-                }
-            }
-            catch (Exception ex)
-            {
-                _log.Log(ShellLogLevel.Warn, "catalog", "读取宿主命令目录失败: " + ex.Message);
-            }
-        }
-
-        // 本地覆盖远端同名条目：真正被执行到的是本地那条。
-        foreach (var entry in LocalEntries())
-            merged[entry.Name] = entry;
-
-        var next = merged.Values.OrderBy(entry => entry.Name, StringComparer.Ordinal).ToList();
+        var next = LocalEntries().OrderBy(entry => entry.Name, StringComparer.Ordinal).ToList();
         var changed = force || !SameNames(next, _entries);
         _entries = next;
         _parameters.Clear();
@@ -79,7 +51,7 @@ internal sealed partial class LocalCommandCatalogSession
 
         if (changed)
             Raise(CommandCatalogChangeKind.Snapshot);
-        return true;
+        return Task.FromResult(true);
     }
 
     public void SetFilter(CommandCatalogFilter filter)
@@ -156,28 +128,17 @@ internal sealed partial class LocalCommandCatalogSession
     }
 
     private List<CatalogEntry> LocalEntries() => _registry.All()
-        .Select(descriptor => new CatalogEntry(
-            descriptor.Name,
-            _registry.GetDomain(descriptor.Name),
-            _registry.GetCommandClass(descriptor.Name),
-            descriptor.Summary,
-            descriptor.Example,
-            descriptor.Readonly,
-            descriptor.Level == CommandLevel.Ask,
-            _registry.GetSource(descriptor.Name),
-            descriptor.HiddenReason))
+        .Select(command => new CatalogEntry(
+            command.Name,
+            command.Domain,
+            command.CommandClass,
+            command.Summary,
+            command.Example,
+            command.Readonly,
+            command.Level == CommandLevel.Ask,
+            command.Source,
+            command.HiddenReason))
         .ToList();
-
-    private static CatalogEntry FromRow(CommandCatalogRow row) => new(
-        row.CommandName,
-        row.Domain,
-        row.CommandClass,
-        row.Summary,
-        row.Example,
-        row.Readonly,
-        row.Dangerous,
-        row.Source,
-        row.HiddenReason);
 
     private static bool SameNames(List<CatalogEntry> left, List<CatalogEntry> right)
     {

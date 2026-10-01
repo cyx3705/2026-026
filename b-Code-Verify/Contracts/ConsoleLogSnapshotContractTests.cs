@@ -120,7 +120,7 @@ public sealed class ConsoleLogSnapshotContractTests
     {
         var host = new FakeHostLog();
         host.Log(ShellLogLevel.Info, "cmd:UI", "minerva.conversion.run");
-        using var log = new MemoryShellLog(host);
+        using var log = HostBacked(host);
         var raised = new List<ShellLogEntry>();
         log.EntryAdded += (_, entry) => raised.Add(entry);
 
@@ -150,7 +150,11 @@ public sealed class ConsoleLogSnapshotContractTests
     {
         var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "b-Code-Studio", "Module", "AuroraShellHost.cs"));
 
-        Assert.Contains("new MemoryShellLog(context.Log)", source, StringComparison.Ordinal);
+        // 1.29.0：宿主日志对模块只写，读这一半走总线主题（vulcan.log.entry + vulcan.log.recent）。
+        Assert.Contains("HostLogFeed.Create(context)", source, StringComparison.Ordinal);
+        Assert.Contains("context.Log,", source, StringComparison.Ordinal);
+        Assert.Contains("\"vulcan.log.entry\"", source, StringComparison.Ordinal);
+        Assert.Contains("vulcan.log.recent", source, StringComparison.Ordinal);
         Assert.DoesNotContain("new MemoryShellLog()", source, StringComparison.Ordinal);
         Assert.Contains("consoleLog?.Dispose()", source, StringComparison.Ordinal);
     }
@@ -161,6 +165,26 @@ public sealed class ConsoleLogSnapshotContractTests
         while (directory != null && !File.Exists(Path.Combine(directory.FullName, "project.manifest.json")))
             directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("找不到仓库根目录");
+    }
+
+    /// <summary>
+    /// 按生产装配的形状挂宿主：新纪录经订阅到达（这里同步转发假宿主的事件，生产是 vulcan.log.entry），
+    /// 旧记录经补读（生产是 vulcan.log.recent）。
+    /// </summary>
+    private static MemoryShellLog HostBacked(FakeHostLog host)
+        => new(
+            host,
+            handler =>
+            {
+                EventHandler<ShellLogEntry> forward = (_, entry) => handler(entry);
+                host.EntryAdded += forward;
+                return new Unsubscribe(() => host.EntryAdded -= forward);
+            },
+            host.Snapshot);
+
+    private sealed class Unsubscribe(Action action) : IDisposable
+    {
+        public void Dispose() => action();
     }
 
     /// <summary>行为与宿主 ShellLog 一致：先入缓冲，再在锁外派发事件。</summary>

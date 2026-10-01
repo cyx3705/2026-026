@@ -4,6 +4,8 @@ using HistoryAurora.Shell.Components.Modules;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -15,7 +17,7 @@ public sealed class UiAnnotationClaimerTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var pane = new TextBlock { Text = "live" };
             registry.Register(new CommandDescriptor
             {
@@ -36,7 +38,7 @@ public sealed class UiAnnotationClaimerTests
 
             var log = new MemoryLog();
             var docking = new RecordingDocking();
-            var claimer = new UiAnnotationClaimer(new CommandBus(registry, log), docking, log);
+            var claimer = new UiAnnotationClaimer(TestShell.Bus(registry), docking, log);
             var count = claimer.ClaimAsync().GetAwaiter().GetResult();
 
             Assert.Equal(1, count);
@@ -55,7 +57,7 @@ public sealed class UiAnnotationClaimerTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             registry.Register(new CommandDescriptor
             {
                 Name = "demo.ui.pane",
@@ -72,7 +74,7 @@ public sealed class UiAnnotationClaimerTests
 
             var log = new MemoryLog();
             var docking = new RecordingDocking();
-            var claimer = new UiAnnotationClaimer(new CommandBus(registry, log), docking, log);
+            var claimer = new UiAnnotationClaimer(TestShell.Bus(registry), docking, log);
             claimer.ClaimAsync().GetAwaiter().GetResult();
             claimer.ClaimAsync().GetAwaiter().GetResult();
 

@@ -1,5 +1,6 @@
 using HistoryAurora.Shell.Components.Pages;
 using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -21,7 +22,7 @@ namespace HistoryAurora.Shell.Composition;
 /// </summary>
 internal static partial class BuiltinCommands
 {
-    private static void RegisterHostReady(CommandRegistry r, ShellCommandServices s)
+    private static void RegisterHostReady(CommandTable r, ShellCommandServices s)
     {
         RegisterFrontend(r, new CommandDescriptor
         {

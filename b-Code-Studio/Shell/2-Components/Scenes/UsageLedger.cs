@@ -1,6 +1,7 @@
 using System.Text.Json;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
+using HistoryAurora.Shell.Neutral.Storage;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Components.Scenes;
 

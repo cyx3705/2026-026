@@ -14,7 +14,6 @@ using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.Neutral.Storage;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Components.Modules;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.HostedPages.Console;
@@ -24,6 +23,7 @@ using AvalonDock.Themes;
 using AvalonDock.Layout;
 using HistoryAurora.Shell.Base;
 using HistoryAurora.Shell.Base.Dialogs;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Composition;
 
@@ -40,7 +40,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private readonly IShellLog _log;
     private readonly DockingHost _docking;
     private readonly string _dataDirectory;
-    private readonly CommandBus _bus;
+    private readonly ShellBus _bus;
+    private readonly CommandTable _ownCommands;
     private readonly CommandSelectionState _commandSelection;
     private readonly CommandHistory _history;
     private readonly DeferredCommandCatalogSession _catalogSession;
@@ -70,7 +71,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private readonly bool _hostedModulesPage;
     private readonly Components.Modules.ShellUiRegistrar _shellUi;
     private Components.Modules.UiAnnotationClaimer? _annotationClaimer;
-    private Action? _hostRegistryChanged;
+    private Action? _catalogChanged;
 
     // 命令集页与指令详情页的选中联动(0.4.4 上抛):优先用派生应用经 ShellConfig 传入的实例,
     // 未传则自建。由构造函数赋值——工具窗口内容工厂在 DockingHost 构建默认布局时即被调用,
@@ -112,7 +113,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         ILayoutStore layoutStore,
         IShellLog log,
         ISettingsService settings,
-        string dataDirectory)
+        string dataDirectory,
+        ShellBus bus,
+        CommandTable ownCommands)
     {
         InitializeComponent();
 
@@ -155,19 +158,18 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         LoadThemeResources();
         ApplyPaneStyles(chromeless: false);
 
-        // ---- 指令核心(§5):注册表 + 总线 + 历史 + 控制台（命令集/详情由 Mercury 挂载）
-        var registry = new CommandRegistry();
-        _bus = new CommandBus(registry, log)
-        {
-            UiContext = SynchronizationContext.Current,
-            Confirmation = new MessageBoxConfirmation(this),
-        };
+        // ---- 指令核心(§5):总线 + 自有指令表 + 历史 + 控制台
+        // 1.29.0：总线是宿主那条（ShellBus 只加一份目录）；自有指令表只收描述符，由装配方原样登记进宿主。
+        // 确认与界面线程编组由宿主经 IModuleContext.RegisterFrontend 交给界面，这里不再自己装配。
+        _bus = bus;
+        _ownCommands = ownCommands;
+        var registry = ownCommands;
         _commandSelection = config.CommandSelection ?? new CommandSelectionState();
         _history = new CommandHistory(
             Path.Combine(dataDirectory, "history.txt"),
             settings.GetInt(ConsoleView.KeyHistory, 500));
-        // 传入本地注册表:Mercury 未挂接时控制台的域/类过滤仍按本地权威目录工作(DEC-023)。
-        _catalogSession = new DeferredCommandCatalogSession(registry);
+        // 目录即总线的目录:Mercury 未挂接时控制台的域/类过滤仍按权威目录工作(DEC-023)。
+        _catalogSession = new DeferredCommandCatalogSession(_bus.Registry);
 
         // 命令目录会话由 Aurora 自建并当场挂上（REQ-UI-014）。
         // 5.0 之前这个会话来自 Mercury 的命令工作台，宿主拆掉界面 SDK 后没人再挂，
@@ -456,35 +458,34 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     public IDockingService Docking => _docking;
 
     /// <summary>指令总线(派生应用 / 启动参数经此执行指令)。</summary>
-    public CommandBus Commands => _bus;
+    public ShellBus Commands => _bus;
+
+    /// <summary>界面自己那批指令（只收描述符）；进程内装载时由 AuroraShellHost 原样登记进宿主。</summary>
+    internal CommandTable OwnCommands => _ownCommands;
 
     /// <summary>
-    /// 宿主总线。进程内装载后由 AuroraShellHost 注入，用来扫描模块注解并执行活对象命令。
+    /// 接上宿主（1.29.0）：认领 <c>ui.window</c> 注解窗格，目录一变就排一轮界面发现。
+    /// 独立运行（组件画廊、契约测试）不调用它。
     /// </summary>
-    internal CommandBus? HostBus { get; private set; }
-
-    internal void AttachHostBus(CommandBus hostBus)
+    internal void EnableHostIntegration()
     {
-        ArgumentNullException.ThrowIfNull(hostBus);
-        DetachHostBus();
-        HostBus = hostBus;
-        _annotationClaimer = new Components.Modules.UiAnnotationClaimer(hostBus, _docking, _log);
-        _hostRegistryChanged = () =>
+        DisableHostIntegration();
+        _annotationClaimer = new Components.Modules.UiAnnotationClaimer(_bus, _docking, _log);
+        _catalogChanged = () =>
         {
             if (Dispatcher.CheckAccess())
                 ScheduleDiscover();
             else
                 Dispatcher.BeginInvoke(ScheduleDiscover);
         };
-        hostBus.Registry.Changed += _hostRegistryChanged;
+        _bus.Registry.Changed += _catalogChanged;
     }
 
-    internal void DetachHostBus()
+    internal void DisableHostIntegration()
     {
-        if (HostBus != null && _hostRegistryChanged != null)
-            HostBus.Registry.Changed -= _hostRegistryChanged;
-        _hostRegistryChanged = null;
-        HostBus = null;
+        if (_catalogChanged != null)
+            _bus.Registry.Changed -= _catalogChanged;
+        _catalogChanged = null;
         _annotationClaimer = null;
     }
 
@@ -557,8 +558,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         ArgumentNullException.ThrowIfNull(entry);
         // The frontend command bus already records its local echo/result. Do not show
         // the same command categories again when the backend event stream arrives.
-        if (entry.Category.StartsWith(CommandBus.EchoCategoryPrefix, StringComparison.OrdinalIgnoreCase)
-            || entry.Category.Equals(CommandBus.ResultCategory, StringComparison.OrdinalIgnoreCase))
+        if (entry.Category.StartsWith(HostLogCategories.EchoPrefix, StringComparison.OrdinalIgnoreCase)
+            || entry.Category.Equals(HostLogCategories.Result, StringComparison.OrdinalIgnoreCase))
             return;
         if (!Dispatcher.CheckAccess())
         {
@@ -585,7 +586,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// </summary>
     public CommandSelectionState CommandSelection => _commandSelection;
 
-    CommandBus IShellCommandWorkbenchHost.Bus => _bus;
+    ShellBus IShellCommandWorkbenchHost.Bus => _bus;
 
     CommandSelectionState IShellCommandWorkbenchHost.CommandSelection => _commandSelection;
 
@@ -774,7 +775,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _pageDrag.Dispose();
     }
 
-    private void RegisterFrontendLifecycleCommands(CommandRegistry registry)
+    private void RegisterFrontendLifecycleCommands(CommandTable registry)
     {
         registry.Register(new CommandDescriptor
         {

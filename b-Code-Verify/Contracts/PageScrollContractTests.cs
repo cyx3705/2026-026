@@ -10,6 +10,7 @@ using HistoryAurora.Shell.Components.Table;
 using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -35,9 +36,9 @@ public sealed class PageScrollContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryShellLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new ActionRegistry(bus, log);
             ComponentGalleryCommands.Register(registry);
             actions.DeclareLocal(ComponentGalleryCommands.Owner, ComponentGalleryCommands.Actions);

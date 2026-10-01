@@ -7,6 +7,8 @@ using HistoryAurora.Shell.Components.Widgets;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -142,9 +144,9 @@ public sealed partial class PageComponentsContractTests
         return parsed.Value!.Pages[0];
     }
 
-    private static (CommandBus Bus, MemoryLog Log, ActionRegistry Actions) Host()
+    private static (ShellBus Bus, MemoryLog Log, ActionRegistry Actions) Host()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "demo.item.pin",
@@ -175,7 +177,7 @@ public sealed partial class PageComponentsContractTests
         });
 
         var log = new MemoryLog();
-        var bus = new CommandBus(registry, log);
+        var bus = TestShell.Bus(registry);
         return (bus, log, new ActionRegistry(bus, log));
     }
 

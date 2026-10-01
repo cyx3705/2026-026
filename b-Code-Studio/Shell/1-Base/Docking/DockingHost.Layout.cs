@@ -12,7 +12,7 @@ using AvalonDock.Layout;
 using AvalonDock;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
+using HistoryAurora.Shell.Neutral.Storage;
 
 namespace HistoryAurora.Shell.Base.Docking;
 

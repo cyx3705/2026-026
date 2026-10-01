@@ -3,6 +3,8 @@ using System.Windows;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Shell.Components.Modules;
 
@@ -11,7 +13,7 @@ namespace HistoryAurora.Shell.Components.Modules;
 /// 活对象停靠进布局。5.0 起宿主不再转发 IShellUiRegistrar，这是模块露出窗格的路径。
 /// </summary>
 internal sealed class UiAnnotationClaimer(
-    CommandBus bus,
+    ShellBus bus,
     IDockingService docking,
     IShellLog log)
 {
@@ -60,7 +62,7 @@ internal sealed class UiAnnotationClaimer(
     }
 
     private async Task<bool> ClaimOneAsync(
-        CommandDescriptor descriptor,
+        CommandInfo descriptor,
         string windowId,
         CancellationToken cancellation)
     {

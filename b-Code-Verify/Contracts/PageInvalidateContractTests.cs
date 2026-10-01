@@ -3,6 +3,8 @@ using HistoryAurora.Shell.Components.Pages;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
+using HistoryAurora.Shell.Neutral.Commands;
 
 namespace HistoryAurora.Verify;
 
@@ -26,9 +28,9 @@ public sealed class PageInvalidateContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var registry = new CommandRegistry();
+            var registry = new CommandTable();
             var log = new MemoryLog();
-            var bus = new CommandBus(registry, log);
+            var bus = TestShell.Bus(registry);
             var actions = new HistoryAurora.Shell.Components.Actions.ActionRegistry(bus, log);
             var actionId = "mercury.entry.refresh";
             registry.Register(new CommandDescriptor
@@ -135,7 +137,7 @@ public sealed class PageInvalidateContractTests
 
     private static (ModulePageLoader Loader, FakeDocking Docking) Loader()
     {
-        var registry = new CommandRegistry();
+        var registry = new CommandTable();
         registry.Register(new CommandDescriptor
         {
             Name = "mercury" + ModulePageLoader.DescribeSuffix,
@@ -160,7 +162,7 @@ public sealed class PageInvalidateContractTests
 
         var log = new MemoryLog();
         var docking = new FakeDocking();
-        return (new ModulePageLoader(new CommandBus(registry, log), docking, log), docking);
+        return (new ModulePageLoader(TestShell.Bus(registry), docking, log), docking);
     }
 
     /// <summary>只记发生了什么的停靠桩：这条契约与真实布局无关。</summary>

@@ -1,3 +1,4 @@
+using HistoryAurora.Shell.Neutral.Storage;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -5,6 +6,7 @@ using System.Windows.Media;
 using HistoryAurora.Shell.Composition;
 using Xunit;
 using HistoryAurora.Shell.Base.Dialogs;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -274,7 +276,7 @@ public sealed class AuroraDialogContractTests
                 new MemoryLayoutStore(),
                 new NullLog(),
                 new MemorySettings(),
-                dataDirectory)
+                dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands1), shellCommands1)
             {
                 Width = 800,
                 Height = 600,
@@ -311,7 +313,7 @@ public sealed class AuroraDialogContractTests
         public IReadOnlyList<string> ListNamed() => _named.Keys.ToList();
     }
 
-    private sealed class MemorySettings : HistoryVulcan.Core.Storage.ISettingsService
+    private sealed class MemorySettings : ISettingsService
     {
         private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
         public string? Get(string key) => _values.GetValueOrDefault(key);
@@ -320,10 +322,10 @@ public sealed class AuroraDialogContractTests
         public IReadOnlyList<KeyValuePair<string, string>> All() => _values.ToList();
     }
 
-    private sealed class NullLog : HistoryVulcan.Core.Logging.IShellLog
+    private sealed class NullLog : IShellLog
     {
         public void Log(HistoryVulcan.Core.Logging.ShellLogLevel level, string category, string message) { }
-        public event EventHandler<HistoryVulcan.Core.Logging.ShellLogEntry>? EntryAdded { add { } remove { } }
-        public IReadOnlyList<HistoryVulcan.Core.Logging.ShellLogEntry> Snapshot() => [];
+        public event EventHandler<ShellLogEntry>? EntryAdded { add { } remove { } }
+        public IReadOnlyList<ShellLogEntry> Snapshot() => [];
     }
 }

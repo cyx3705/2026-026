@@ -12,7 +12,6 @@ using System.Windows.Threading;
 using HistoryVulcan.Core.Commands;
 using HistoryAurora.Shell.Base.Docking;
 using HistoryVulcan.Core.Logging;
-using HistoryVulcan.Core.Storage;
 using HistoryAurora.Shell.Neutral.CommandSurface;
 using HistoryAurora.Shell.Neutral.Commands;
 using HistoryAurora.Shell.Neutral.Storage;
@@ -20,12 +19,12 @@ using HistoryAurora.Shell.Composition;
 using HistoryAurora.Shell.HostedPages.Console;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Components.Widgets;
-using HistoryVulcan.Services.Commands;
 using AvalonDock.Controls;
 using AvalonDock.Layout;
 using AvalonDock.Themes;
 using AvalonDock.Themes.VS2013.Themes;
 using Xunit;
+using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Verify;
 
@@ -772,7 +771,7 @@ public sealed class ShellChromeContractTests
     public void ThemeChoiceSurvivesSettingsAndWindowRecreation()
     {
         var appName = $"HistoryVulcan.Theme.Tests.{Guid.NewGuid():N}";
-        var paths = AuroraPaths.ForApplication(appName);
+        var paths = AuroraPaths.ForDataDirectory(Path.Combine(Path.GetTempPath(), appName));
         try
         {
             var firstSettings = new JsonSettingsStore(paths.SettingsFile);
@@ -1033,7 +1032,7 @@ public sealed class ShellChromeContractTests
             var log = new RelayLog();
             var logicalText = new string('W', 320);
             log.Raise(ShellLogLevel.Info, "wrap.test", logicalText);
-            var bus = new CommandBus(new CommandRegistry(), log);
+            var bus = TestShell.Bus(new CommandTable());
             var console = new ConsoleView(
                 log,
                 bus,
@@ -1380,7 +1379,7 @@ public sealed class ShellChromeContractTests
                 new MemoryLayoutStore(),
                 log ?? new NullLog(),
                 settings ?? new MemorySettings(),
-                dataDirectory)
+                dataDirectory, TestShell.NewBus(log ?? new NullLog(), out var shellCommands7), shellCommands7)
             {
                 Width = 1000,
                 Height = 700,
@@ -1417,7 +1416,7 @@ public sealed class ShellChromeContractTests
             log.Raise(ShellLogLevel.Info, "export.test", "no-dialog-export-line");
             var console = new ConsoleView(
                 log,
-                new CommandBus(new CommandRegistry(), log),
+                TestShell.Bus(new CommandTable()),
                 new CommandHistory(Path.Combine(Path.GetTempPath(), $"HistoryVulcan-history-{Guid.NewGuid():N}.txt")),
                 new HistoryAurora.Shell.Neutral.CommandSurface.DeferredCommandCatalogSession());
             var host = new Window
