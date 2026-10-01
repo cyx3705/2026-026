@@ -33,8 +33,8 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 | `app` | `about` / `window` | 关于与主窗口 |
 | `host` | `ready` 等 | 宿主装载完成钩子（内部） |
 
-模块在界面里露面的两条路（描述化页面 / 带注解命令交出窗格）见 [模块 API](./b-Office/package/模块API.md)，
-可用组件见 [组件清单与用法](./b-Office/package/HistoryAurora_组件清单与用法.md)。
+模块在界面里露面的两条路（描述化页面 / 带注解命令交出窗格）见 [组件清单与用法](./b-Office/current/HistoryAurora_组件清单与用法.md)开头一节，
+可用组件见同一文档；`aurora.*` 指令的参数读注册自描述：`diana.docs.read domain=aurora`（宿主 6.1.0 起没有消费文档）。
 
 ## 入口
 
@@ -47,7 +47,7 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 | [技术合同](./b-Office/current/技术合同.md) | 现行需求与架构 |
 | [有效决策](./b-Office/current/有效决策.md) | 仍然有效的关键决策 |
 | [验证合同](./b-Office/current/验证合同.md) | 验证层级、命令与证据 |
-| [模块 API](./b-Office/package/模块API.md) | 跨模块消费合同 |
+| [组件清单与用法](./b-Office/current/HistoryAurora_组件清单与用法.md) | 页面协议与组件写法 |
 | [UI 风格与嵌入页面规范](./b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md) | 视觉与嵌入页结构 |
 
 ## 目录
@@ -58,7 +58,7 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 | `b-Code-Studio/Shell/` | 界面源码，按层分目录（见「要点」） |
 | `b-Code-Studio/eng/` | 构建与门禁脚本 |
 | `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟 |
-| `b-Office/` | 项目文档：`current/` 现行合同、`package/` 消费合同、`history/` 只读归档 |
+| `b-Office/` | 项目文档：`current/` 现行合同、`history/` 只读归档 |
 | `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入；纳入 git，排除规则不得触碰 |
 
 ## 构建与验证

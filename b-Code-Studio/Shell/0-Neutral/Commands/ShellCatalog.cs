@@ -13,7 +13,7 @@ namespace HistoryAurora.Shell.Neutral.Commands;
 /// 此前界面直接挂宿主注册表的 C# 事件、按宿主内部类型取描述符。
 /// </para>
 /// <para>
-/// 独立运行（组件画廊、契约测试）时读本仓的 <see cref="CommandTable"/>，按宿主模块API的同一套规则投影。
+/// 独立运行（组件画廊、契约测试）时读本仓的 <see cref="CommandTable"/>，按宿主模块开发手册的同一套规则投影。
 /// </para>
 /// </remarks>
 public sealed class ShellCatalog

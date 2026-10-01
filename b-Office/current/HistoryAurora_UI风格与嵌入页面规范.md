@@ -4,7 +4,7 @@
 > 嵌入页结构和顶栏归属属于 HistoryAurora，不再随宿主消费包发布。
 >
 > 键名已按 DEC-005 写成 `Aurora.*`（无 `Shell.*` 别名）。用法与组件清单见
-> [HistoryAurora_组件清单与用法](../package/HistoryAurora_组件清单与用法.md)。
+> [HistoryAurora_组件清单与用法](./HistoryAurora_组件清单与用法.md)。
 > 业务动作进入宿主总线（见 HistoryVulcan《API 与指令手册》）。
 
 本文是 HistoryAurora 窗口、内置页面和外置 UI 模块的视觉合同。嵌入页面必须复用 Aurora 动态资源，

@@ -27,7 +27,7 @@ public interface IShellLog : IModuleLog
 }
 
 /// <summary>
-/// 宿主写指令回显、进度与结果时用的日志类别（宿主模块API「日志类别」一节）。
+/// 宿主写指令回显、进度与结果时用的日志类别（宿主模块开发手册里的日志类别）。
 /// 契约是这几段字符串，不是宿主的某个 C# 常量。
 /// </summary>
 internal static class HostLogCategories

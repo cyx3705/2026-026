@@ -394,7 +394,7 @@ internal static class AuroraShellHost
 
 /// <summary>
 /// 控制台的宿主日志来源（1.29.0）：新纪录订阅 <c>vulcan.log.entry</c>，旧记录执行 <c>vulcan.log.recent</c> 补读。
-/// 载荷按宿主模块API写明的字段读：<c>time / level / category / message</c>。
+/// 载荷按宿主模块开发手册写明的字段读（`vulcan.log.recent` 同形）：<c>time / level / category / message</c>。
 /// </summary>
 internal static class HostLogFeed
 {

@@ -1,6 +1,6 @@
 namespace HistoryAurora.Shell.Neutral.CommandSurface;
 
-// 宿主目录与模块列表的 JSON 形状（宿主模块API「载荷形状」一节，C7）在本仓的映像（1.29.0）。
+// 宿主目录与模块列表的 JSON 形状（宿主模块开发手册「宿主指令的 Data」一节，C7）在本仓的映像（1.29.0）。
 //
 // 宿主 6.0.0 起 vulcan.command.list / show、vulcan.module.list 的 Data 是 JsonElement，
 // 契约是写明的字段名，不是宿主的 C# 类。这里按同名字段声明记录，CommandResultData.TryRead 按名反序列化；

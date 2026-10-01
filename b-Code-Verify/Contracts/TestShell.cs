@@ -136,7 +136,7 @@ internal sealed class TableBus(CommandTable table, Func<string, bool>? confirm =
         }
     }
 
-    /// <summary>宿主回显的脱敏写法（宿主模块API「脱敏」一节）：敏感名的参数、敏感键的 app.set 值、语法错误整段。</summary>
+    /// <summary>宿主回显的脱敏写法（宿主模块开发手册「命令契约」一节的脱敏规则）：敏感名的参数、敏感键的 app.set 值、语法错误整段。</summary>
     private string EchoText(string text)
     {
         const string redacted = "[REDACTED]";
