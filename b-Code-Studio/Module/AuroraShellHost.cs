@@ -168,7 +168,8 @@ internal static class AuroraShellHost
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"aurora 界面启动失败: {ex}");
+            // 界面起不来必须看得见：写宿主日志（控制台没起来时它照样落盘）。只写调试输出等于没人知道。
+            context.Log.Log(ShellLogLevel.Fatal, "aurora", $"界面启动失败: {ex}");
             Ready.Set();
         }
     }
