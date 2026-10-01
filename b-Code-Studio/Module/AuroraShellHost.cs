@@ -45,6 +45,9 @@ internal static class AuroraShellHost
     /// <summary>目录变化的订阅；Shutdown 时退订。</summary>
     private static IDisposable? _catalogSubscription;
 
+    /// <summary>模块变化的订阅（刷新模块页）；Shutdown 时退订。</summary>
+    private static IDisposable? _moduleSubscription;
+
     /// <summary>界面就绪信号。宿主在 CreateUi 阶段就要取注册器，那时 STA 线程可能还没建完窗口。</summary>
     private static readonly ManualResetEventSlim Ready = new(false);
 
@@ -153,6 +156,10 @@ internal static class AuroraShellHost
 
             _window = window;
             window.EnableHostIntegration();
+            // 1.29.1：模块装上、卸下、接入失败都发 vulcan.module.changed（失败时目录不变，只看目录会漏），模块页据此重取。
+            var moduleSubscription = context.Subscribe("vulcan.module.changed", _ => window.RefreshHostPage("modules"));
+            lock (Gate)
+                _moduleSubscription = moduleSubscription;
 
             // 未处理异常落日志而不弹框：本进程是服务，没有人在屏幕前等着点"确定"。
             Dispatcher.CurrentDispatcher.UnhandledException += (_, args) =>
@@ -318,22 +325,26 @@ internal static class AuroraShellHost
         ShellWindow? window;
         MemoryShellLog? consoleLog;
         IDisposable? catalogSubscription;
+        IDisposable? moduleSubscription;
         lock (Gate)
         {
             window = _window;
             uiThread = _uiThread;
             consoleLog = _consoleLog;
             catalogSubscription = _catalogSubscription;
+            moduleSubscription = _moduleSubscription;
             _window = null;
             _uiThread = null;
             _consoleLog = null;
             _catalogSubscription = null;
+            _moduleSubscription = null;
             Ready.Reset();
         }
 
         // 先退订：界面线程即使卡住没退出，宿主也不再往旧实例里送事件。
         consoleLog?.Dispose();
         catalogSubscription?.Dispose();
+        moduleSubscription?.Dispose();
 
         if (window == null && uiThread == null)
             return;

@@ -464,7 +464,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     internal CommandTable OwnCommands => _ownCommands;
 
     /// <summary>
-    /// 接上宿主（1.29.0）：认领 <c>ui.window</c> 注解窗格，目录一变就排一轮界面发现。
+    /// 接上宿主（1.29.0）：认领 <c>ui.window</c> 注解窗格，目录一变就排一轮界面发现，并重取命令集页（1.29.1）。
     /// 独立运行（组件画廊、契约测试）不调用它。
     /// </summary>
     internal void EnableHostIntegration()
@@ -474,11 +474,35 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _catalogChanged = () =>
         {
             if (Dispatcher.CheckAccess())
-                ScheduleDiscover();
+                OnHostCatalogChanged();
             else
-                Dispatcher.BeginInvoke(ScheduleDiscover);
+                Dispatcher.BeginInvoke(OnHostCatalogChanged);
         };
         _bus.Registry.Changed += _catalogChanged;
+    }
+
+    private void OnHostCatalogChanged()
+    {
+        ScheduleDiscover();
+        RefreshHostPage(CommandsPageId);
+    }
+
+    /// <summary>命令集托管页的 id（见 HostedPageDescriptions）。</summary>
+    internal const string CommandsPageId = "mcp";
+
+    /// <summary>
+    /// 宿主那边变了，重取一张托管页的数据（1.29.1）。可在任意线程调用。
+    /// 1.28 起模块页、命令集页只在建页时取数，此后模块装卸要手点「刷新」；宿主 6.0.0 给了
+    /// <c>vulcan.module.changed</c> / <c>vulcan.catalog.changed</c>，这里接上。
+    /// </summary>
+    internal void RefreshHostPage(string page)
+    {
+        if (_closing)
+            return;
+        if (Dispatcher.CheckAccess())
+            _dataRefresher.Refresh(page, null);
+        else
+            Dispatcher.BeginInvoke(() => _dataRefresher.Refresh(page, null));
     }
 
     internal void DisableHostIntegration()

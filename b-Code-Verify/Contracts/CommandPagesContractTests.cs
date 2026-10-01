@@ -105,6 +105,8 @@ public sealed class CommandPagesContractTests
 
             var ids = parsed.Value!.Pages.Select(page => page.Id).ToList();
             Assert.Equal(["mcp", "commanddetail", "modules", "components"], ids);
+            // 宿主目录变化时按这个 id 重取命令集页（1.29.1）；页 id 改了这里先红。
+            Assert.Contains(HistoryAurora.Shell.Composition.ShellWindow.CommandsPageId, ids);
 
             var registry = new CommandTable();
             var log = new NullShellLog();
