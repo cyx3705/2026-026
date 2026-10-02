@@ -1597,6 +1597,9 @@
     <Style x:Key="Aurora.Table.CellButton" TargetType="Button" BasedOn="{StaticResource Aurora.Table.RowAction}">
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="Margin" Value="0" />
+        <!-- 一圈细线:与链接列分得开,一眼看得出是按钮(块用圆角) -->
+        <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.ControlBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
     </Style>
 
     <Style x:Key="Aurora.Table.CellButtonDanger" TargetType="Button" BasedOn="{StaticResource Aurora.Table.CellButton}">
