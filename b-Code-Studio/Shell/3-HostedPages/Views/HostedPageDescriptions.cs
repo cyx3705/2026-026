@@ -175,9 +175,9 @@ internal static class HostedPageDescriptions
                     "channel": "aurora.modules.module",
                     "dataSource": { "command": "aurora.ui.data", "args": { "view": "modules" } },
                     "columns": [
-                      { "key": "module", "title": "模块", "width": "132" },
-                      { "key": "version", "title": "版本", "width": "62" },
-                      { "key": "load", "title": "装载", "width": "56",
+                      { "key": "module", "title": "模块", "width": "124" },
+                      { "key": "version", "title": "版本", "width": "58" },
+                      { "key": "load", "title": "装载", "width": "84",
                         "cellAction": "modules.toggle", "cellStyle": "button" },
                       { "key": "description", "title": "描述", "width": "*" }
                     ]
