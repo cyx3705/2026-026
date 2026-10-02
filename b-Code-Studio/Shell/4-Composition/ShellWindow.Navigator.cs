@@ -186,10 +186,6 @@ internal partial class ShellWindow
         var hidden = scenes.Where(scene => scene.Hidden).ToList();
         foreach (var scene in hidden)
             SceneTrayItems.Children.Add(TrayCapsule(scene));
-        SceneTrayHeader.Note = hidden.Count == 0 ? "" : hidden.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        SceneTrayHint.Text = hidden.Count == 0
-            ? "拖场景进来收起；拖出窗口删除"
-            : "拖回上面放回右栏；拖出窗口删除";
     }
 
     private Border TrayCapsule(SceneInfo scene)

@@ -229,6 +229,7 @@
                     <!--
                         收起的场景(REQ-UI-135):页面调整打开时从「页面调整」按钮上方浮出,盖在常用页面上,不挤动布局。
                         场景胶囊拖进来就收起,拖回场景段就放回;点一下胶囊照样切过去。
+                        不写标题与说明(用户定,省空间);空着时留一行高,仍是拖放落点,说明放在悬停提示里。
                         圆角块(块用圆角):Surface 底、一圈细线,与页面卡片同一组令牌。
                     -->
                     <Border x:Name="SceneTray"
@@ -236,27 +237,17 @@
                             Grid.RowSpan="3"
                             Panel.ZIndex="10"
                             Margin="6,0,6,6"
-                            Padding="8"
+                            Padding="6,6,2,2"
+                            MinHeight="34"
                             VerticalAlignment="Bottom"
                             Visibility="Collapsed"
+                            ToolTip="收起的场景：拖场景进来收起，拖回上面放回右栏，拖出窗口删除"
                             Background="{DynamicResource Aurora.Brush.Surface}"
                             BorderBrush="{DynamicResource Aurora.Brush.ControlBorder}"
                             BorderThickness="1"
                             CornerRadius="{DynamicResource Aurora.Radius.Inner}"
                             Effect="{DynamicResource Aurora.Shadow.Flyout}">
-                        <StackPanel>
-                            <widgets:AuroraSectionHeading x:Name="SceneTrayHeader"
-                                                          Margin="2,0,0,6"
-                                                          Title="收起的场景" />
-                            <WrapPanel x:Name="SceneTrayItems" />
-                            <TextBlock x:Name="SceneTrayHint"
-                                       Margin="2,2,0,0"
-                                       TextWrapping="Wrap"
-                                       Text="拖场景进来收起；拖出窗口删除"
-                                       FontFamily="{DynamicResource Aurora.Font.Family}"
-                                       FontSize="{DynamicResource Aurora.Font.Small}"
-                                       Foreground="{DynamicResource Aurora.Brush.TextSecondary}" />
-                        </StackPanel>
+                        <WrapPanel x:Name="SceneTrayItems" />
                     </Border>
 
                     <!-- 场景排队的落点:拖动时在两个场景之间画一道墨色线(线用直线) -->
