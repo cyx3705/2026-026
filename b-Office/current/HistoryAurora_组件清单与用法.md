@@ -337,6 +337,25 @@ Enter/Space、确认、取消和双击确认；畸形或空列表在开窗前直
 **不要**把弹窗写进 `<域>.ui.describe` 的页面树。它不是停靠页，页面渲染器里没有
 `dialog` 组件——写了只会变成显式占位。
 
+## 页面浮窗 `aurora.ui.float`（1.30.1）
+
+想让一页在人操作别的程序时也够得着（例如 PowerSW 盖在 SolidWorks 上），用 `aurora.ui.float name=<页 id>`：
+整页浮成一张置顶的圆角卡片（与嵌入弹窗同一个长相），按住空白处拖动、四边可拉伸；再执行一次还原，`on=true|false` 可显式指定。
+停靠区原位留一块「已浮出」占位，带「还原」按钮。
+
+模块不需要新组件：面板里放一个普通按钮，绑自己声明的动作，动作指向 Aurora 的指令即可。
+
+```json
+{ "kind": "button", "action": "mymodule.page.float", "text": "浮动" }
+```
+```csharp
+new { id = "mymodule.page.float", title = "浮动", command = "aurora.ui.float",
+      args = new { name = "mypage" }, summary = "浮成置顶小窗；已浮出时再点就还原" }
+```
+
+按钮文字不随状态变化。浮着的页照旧占着它在布局里的那一格；热重载换的内容直接进浮窗；退出 Aurora 前自动放回。
+
+
 ## 表格：一律用 `AuroraTable`（1.6.0）
 
 页面描述里写 `"type": "table"` 就够了。**不要自己拼 `ListView` + `GridView`**——
