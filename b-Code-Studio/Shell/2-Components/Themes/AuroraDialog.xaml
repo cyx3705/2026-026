@@ -2,33 +2,27 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        Aurora.Dialog.*：独立 Window 弹窗的外观。弹窗拿不到 ShellWindow.Resources，
-        也不可依赖 Application.Current（界面住进宿主后它经常是 null），
-        因此本字典必须由弹窗自己合并，见 AuroraDialogWindow。
+        Aurora.Dialog.*：嵌入主窗体的弹窗卡片（REQ-UI-136，1.30.0）。
+        卡片与停靠区的页面卡片同一个长相：Surface 底、Aurora.Radius.Page 圆角（「块用圆角」）；
+        标题用页面里的段标题 + 墨色条（Aurora.Heading.*），不再有标题栏与关闭键。
+        本字典由主窗体合并（遮罩要用），单独构造的卡片（测试）自己合并，见 AuroraDialogView。
     -->
 
-    <Style x:Key="Aurora.Dialog.Chrome" TargetType="Border">
+    <Style x:Key="Aurora.Dialog.Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.Hairline}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Aurora.Radius.Page}" />
+        <Setter Property="Padding" Value="20,16,20,16" />
+        <Setter Property="Effect" Value="{DynamicResource Aurora.Shadow.Flyout}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
     </Style>
 
-    <Style x:Key="Aurora.Dialog.Caption" TargetType="Grid">
-        <Setter Property="Height" Value="{DynamicResource Aurora.Size.Tab}" />
-        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Surface}" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-    </Style>
-
-    <Style x:Key="Aurora.Dialog.CaptionTitle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{DynamicResource Aurora.Font.Family}" />
-        <Setter Property="FontSize" Value="{DynamicResource Aurora.Font.Body}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.TextPrimary}" />
-        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Margin" Value="12,0,8,0" />
+    <!-- 遮罩：画布色压暗后面的页面，深浅主题各取各的画布，不写死黑色 -->
+    <Style x:Key="Aurora.Dialog.Scrim" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Aurora.Brush.Canvas}" />
+        <Setter Property="Opacity" Value="0.72" />
     </Style>
 
     <Style x:Key="Aurora.Dialog.Title" TargetType="TextBlock">

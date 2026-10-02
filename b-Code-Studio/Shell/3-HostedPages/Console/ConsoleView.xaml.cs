@@ -85,7 +85,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         _bufferLimit = Math.Max(1000, bufferLimit);
 
         LevelFilter.ItemsSource = new[] { "全部", "Trace", "Debug", "Info", "Warn", "Error", "Fatal" };
-        LevelFilter.SelectedIndex = 0;
+        LevelFilter.SelectedIndex = LevelIndex(DefaultLevel);
         DomainFilter.ItemsSource = new[] { "全部" };
         DomainFilter.SelectedIndex = 0;
 
@@ -127,8 +127,17 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         };
     }
 
+    /// <summary>
+    /// 控制台启动时的显示级别（1.30.0 起 Info，此前是「全部」）。Trace / Debug 是排障用的，
+    /// 平时满屏都是它们，真正要看的回显与结果反而被冲走；要看时下拉或 aurora.log.level 切回去。
+    /// </summary>
+    internal const ShellLogLevel DefaultLevel = ShellLogLevel.Info;
+
     /// <summary>当前控制台显示级别(aurora.log.level,L-04;文件始终全量)。</summary>
-    public ShellLogLevel MinLevel { get; private set; } = ShellLogLevel.Trace;
+    public ShellLogLevel MinLevel { get; private set; } = DefaultLevel;
+
+    /// <summary>级别 → 下拉序号：第 0 项「全部」就是 Trace。</summary>
+    private static int LevelIndex(ShellLogLevel level) => level == ShellLogLevel.Trace ? 0 : (int)level + 1;
 
     /// <summary>aurora.log.level 指令入口:调整显示级别过滤。</summary>
     public void SetMinLevel(ShellLogLevel level)
@@ -137,7 +146,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         _suppressFilterEvents = true;
         try
         {
-            LevelFilter.SelectedIndex = level == ShellLogLevel.Trace ? 0 : (int)level + 1;
+            LevelFilter.SelectedIndex = LevelIndex(level);
         }
         finally
         {
@@ -369,10 +378,10 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         SetMuteLayout(false);
     }
 
-    /// <summary>错误自动跳转使用：清除过滤，保证输入回显与错误结果同时可见。</summary>
+    /// <summary>错误自动跳转使用：过滤回到启动时的样子（级别 Info），保证输入回显与错误结果同时可见。</summary>
     internal void ResetFilters()
     {
-        SetMinLevel(ShellLogLevel.Trace);
+        SetMinLevel(DefaultLevel);
         SetSource("全部");
         SetKeyword("");
         SetMuteLayout(false);

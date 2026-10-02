@@ -34,8 +34,11 @@ public sealed record AuroraTableColumn(
             : null;
 }
 
-/// <summary>一列的单元格动作。外观与触发方式由 <see cref="AuroraTable"/> 统一提供。</summary>
-public sealed record AuroraCellAction(string Id, string? Summary = null, bool Danger = false);
+/// <summary>
+/// 一列的单元格动作。外观与触发方式由 <see cref="AuroraTable"/> 统一提供。
+/// <paramref name="Button"/>：画成行内小按钮而不是链接（REQ-UI-137）；空格不画。
+/// </summary>
+public sealed record AuroraCellAction(string Id, string? Summary = null, bool Danger = false, bool Button = false);
 
 /// <summary>单元格动作触发事实：动作、列键与被操作行始终来自同一次点击。</summary>
 public sealed class AuroraCellActionEventArgs(

@@ -29,6 +29,9 @@ internal static class HostedPageData
         public Func<ShellBus?>? Bus { get; init; }
 
         public Func<LocalCommandCatalogSession?>? Catalog { get; init; }
+
+        /// <summary>本次会话里从模块页载出的模块（REQ-UI-137）。宿主的模块清单只列装着的，载出的靠它留在表上。</summary>
+        public ModuleUnloadLedger Unloaded { get; init; } = new();
     }
 
     private static readonly JsonSerializerOptions Compact = new()
@@ -103,7 +106,7 @@ internal static class HostedPageData
                     "commandparams" => await ParametersAsync(sources, context.GetString("name")).ConfigureAwait(false),
                     "domains" => await DomainsAsync(sources).ConfigureAwait(false),
                     "classes" => await ClassesAsync(sources, context.GetString("domain")).ConfigureAwait(false),
-                    "modules" => await ModulesAsync(sources).ConfigureAwait(false),
+                    "modules" => await ModulesAsync(sources).ConfigureAwait(true),
                     _ => CommandResult.Fail($"未知的 view: {view}"),
                 };
             },
@@ -176,6 +179,30 @@ internal static class HostedPageData
 
         Add(registry, new CommandDescriptor
         {
+            Name = "aurora.module.toggle",
+            HiddenReason = "界面自持页面的组合指令",
+            Domain = "aurora",
+            CommandClass = "module",
+            Summary = "模块页的载入载出按钮：装着的载出（卸下指令与界面，不改磁盘），载出的载入（重载装回），然后刷新模块页",
+            Example = "aurora.module.toggle name=HistoryJuno",
+            RequiresUiThread = true,
+            Parameters =
+            [
+                new ParameterSpec { Name = "name", Description = "模块名（模块页第一列），例如 HistoryJuno", Required = true, Position = 0 },
+            ],
+            Handler = async context =>
+            {
+                if (sources.Bus?.Invoke() is not { } bus)
+                    return CommandResult.Fail("命令总线尚未就绪");
+                var name = (context.GetString("name") ?? "").Trim();
+                if (name.Length == 0)
+                    return CommandResult.Fail("缺少 name");
+                return await ToggleModuleAsync(bus, sources.Unloaded, name).ConfigureAwait(true);
+            },
+        });
+
+        Add(registry, new CommandDescriptor
+        {
             Name = "aurora.module.hotreload",
             HiddenReason = "界面自持页面的组合指令",
             Domain = "aurora",
@@ -213,6 +240,51 @@ internal static class HostedPageData
     }
 
     /// <summary>
+    /// 模块页「装载」一列的按钮（REQ-UI-137）：装着的写「载出」，点了 <c>vulcan.module.unload</c>
+    /// 卸下它的指令与界面（不动磁盘）；载出的写「载入」，点了 <c>vulcan.module.reload</c> 把它装回。
+    /// 宿主没有「只装回一个」的指令，重载是全量的——与「刷新模块」同一条路，装着的模块不受影响。
+    /// Aurora 自己那一行是空的：界面载出自己就没有界面来把它载回了。
+    /// </summary>
+    internal static async Task<CommandResult> ToggleModuleAsync(ShellBus bus, ModuleUnloadLedger unloaded, string name)
+    {
+        if (name.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
+            return CommandResult.Fail("HistoryAurora 是界面本身，不能从界面里载出");
+
+        if (unloaded.Contains(name))
+        {
+            var reloaded = await bus.ExecuteAsync("vulcan.module.reload", "UI").ConfigureAwait(true);
+            if (!reloaded.Success)
+                return CommandResult.Fail("载入失败: " + FirstLine(reloaded.Message));
+
+            var after = await ModuleCatalogReader.LoadModulesAsync(bus).ConfigureAwait(true);
+            if (after.Snapshot?.Modules.Any(module => module.ModuleName.Equals(name, StringComparison.OrdinalIgnoreCase)) == true)
+                unloaded.Forget(name);
+            await RefreshModulesAsync(bus).ConfigureAwait(true);
+            return unloaded.Contains(name)
+                ? CommandResult.Fail($"重载完成，但 {name} 没有装回来（宿主日志里有原因）")
+                : CommandResult.Ok($"已载入 {name}");
+        }
+
+        var before = await ModuleCatalogReader.LoadModulesAsync(bus).ConfigureAwait(true);
+        var meta = before.Snapshot?.Modules.FirstOrDefault(
+            module => module.ModuleName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (meta == null)
+            return CommandResult.Fail($"模块 {name} 不在已装载清单里");
+
+        var result = await bus
+            .ExecuteAsync("vulcan.module.unload name=" + CommandParser.QuoteArg(meta.ModuleName), "UI")
+            .ConfigureAwait(true);
+        if (!result.Success)
+            return CommandResult.Fail("载出失败: " + FirstLine(result.Message));
+
+        unloaded.Remember(meta);
+        await RefreshModulesAsync(bus).ConfigureAwait(true);
+        return CommandResult.Ok($"已载出 {meta.ModuleName}（不改磁盘，点「载入」或「刷新模块」装回）");
+    }
+
+    private const string SelfModule = "HistoryAurora";
+
+    /// <summary>
     /// 自持页面的动作声明。与模块的 <c>&lt;域&gt;.ui.actions</c> 同一个结构，
     /// 只是由界面自己经 <see cref="ActionRegistry.DeclareLocal"/> 交上去——
     /// 界面自带的页面不该把自己伪装成模块（与 REQ-UI-020 同一条理由）。
@@ -225,6 +297,14 @@ internal static class HostedPageData
             Title = "刷新模块",
             Command = "aurora.module.reloadall",
             Summary = "重新扫描运行区并刷新清单",
+        },
+        new ActionDeclaration
+        {
+            Id = "modules.toggle",
+            Title = "载入/载出",
+            Command = "aurora.module.toggle",
+            Args = new Dictionary<string, string> { ["name"] = "{module}" },
+            Summary = "载出：卸下这个模块的指令与界面（不改磁盘）；载入：重载模块把它装回",
         },
         new ActionDeclaration
         {
@@ -586,49 +666,33 @@ internal static class HostedPageData
         if (!result.Success || result.Snapshot is not { } snapshot)
             return CommandResult.Fail(result.Message);
 
-        var rows = snapshot.Modules
-            .Select(module => new Dictionary<string, string>
-            {
-                ["module"] = module.ModuleName,
-                ["version"] = module.Version,
-                ["commands"] = DomainCommandCount(bus.Registry, module)
-                    .ToString(CultureInfo.InvariantCulture),
-                ["description"] = module.Description,
-            })
-            .ToList();
-
-        return Rows(rows);
+        return Rows(ModuleRows(snapshot.Modules, sources.Unloaded));
     }
 
     /// <summary>
-    /// 按域统计当前注册表里的指令条数；域名取自模块名（History 前缀剥离）。
-    ///
-    /// 这是**该域当前注册的指令总数**，不是本模块经模块路径注册的条数。Aurora 的
-    /// 自持命令仍从界面注册表统计；宿主模块命令不在这张表里时，回退到模块清单在
-    /// 注册完成后定稿的 CommandCount，避免把“不可见”误显示成 0。
+    /// 模块页的行（REQ-UI-137）：装着的模块按钮写「载出」，本次会话载出的模块留在表上、按钮写「载入」。
+    /// 1.30.0 前第四列是「域指令」条数；条数在命令集页按域筛选就看得到，这一格换成载入载出按钮。
+    /// 宿主清单里又出现了的（别处重载装回了），从载出台账里划掉。
     /// </summary>
-    internal static int DomainCommandCount(ShellCatalog registry, ModuleMeta module)
+    internal static List<Dictionary<string, string>> ModuleRows(
+        IReadOnlyList<ModuleMeta> loaded,
+        ModuleUnloadLedger unloaded)
     {
-        var domain = ModuleDomainNaming.ToDomain(module.ModuleName);
-        if (domain.Length == 0)
-            return 0;
+        foreach (var module in loaded)
+            unloaded.Forget(module.ModuleName);
 
-        var localCount = registry.All().Count(descriptor =>
-            string.Equals(DomainOf(descriptor), domain, StringComparison.OrdinalIgnoreCase));
-
-        // 在进程内 UI 模式下，宿主模块指令不在 Aurora 自己的注册表里。
-        // 本地计数为 0 不是模块没有指令，而是当前总线的可见范围不同；模块清单
-        // 的 CommandCount 是宿主完成注册后的权威快照，作为远端模块的兜底值。
-        return localCount > 0 ? localCount : module.CommandCount;
-    }
-
-    /// <summary>描述符未声明域时按指令名首段兜底，与注册表的归一化口径一致。</summary>
-    private static string DomainOf(CommandInfo descriptor)
-    {
-        if (!string.IsNullOrWhiteSpace(descriptor.Domain))
-            return descriptor.Domain;
-        var separator = descriptor.Name.IndexOf('.');
-        return separator > 0 ? descriptor.Name[..separator] : descriptor.Name;
+        return loaded
+            .Select(module => (Module: module, Load: module.ModuleName.Equals(SelfModule, StringComparison.OrdinalIgnoreCase) ? "" : "载出"))
+            .Concat(unloaded.All.Select(module => (Module: module, Load: "载入")))
+            .OrderBy(row => row.Module.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Select(row => new Dictionary<string, string>
+            {
+                ["module"] = row.Module.ModuleName,
+                ["version"] = row.Module.Version,
+                ["load"] = row.Load,
+                ["description"] = row.Load == "载入" ? "（已载出）" + row.Module.Description : row.Module.Description,
+            })
+            .ToList();
     }
 
     private static Dictionary<string, string> Pair(string key, string value)

@@ -21,7 +21,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.list",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "列出全部场景（按使用频次排序）：当前场景、来源、使用次数。场景不含页面集合，只是一份布局",
+            Summary = "列出全部场景（按右栏的先后）：当前场景、来源、是否收进小栏、使用次数。场景不含页面集合，只是一份布局",
             Readonly = true,
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ => WithScenes(s, scenes =>
@@ -29,6 +29,7 @@ internal static partial class BuiltinCommands
                 var list = scenes.List();
                 var lines = list.Select(scene =>
                     $"\n  {(scene.Active ? "*" : " ")} {scene.Title} [{scene.Id}] {SourceText(scene.Source)}"
+                    + (scene.Hidden ? " · 已收起" : "")
                     + (scene.Uses > 0 ? $" · 用过 {scene.Uses} 次" : ""));
                 var rows = list.Select(scene => new
                 {
@@ -36,6 +37,7 @@ internal static partial class BuiltinCommands
                     title = scene.Title,
                     source = SourceText(scene.Source),
                     active = scene.Active,
+                    hidden = scene.Hidden,
                     uses = scene.Uses,
                 }).ToList();
                 return CommandResult.Ok($"共 {list.Count} 个场景（* 为当前）:" + string.Concat(lines), rows);
@@ -90,7 +92,7 @@ internal static partial class BuiltinCommands
                 new ParameterSpec
                 {
                     Name = "id",
-                    Description = "场景 id，同时是命名布局的文件名；不能与模块场景或「all」重名",
+                    Description = "场景 id，同时是命名布局的文件名；不能与模块场景重名",
                     Required = true,
                     Position = 0,
                 },
@@ -107,7 +109,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.reset",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）",
+            Summary = "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）；点名一个删掉的模块场景则把它恢复",
             Example = "aurora.scene.reset scene=HistoryJanus",
             RequiresUiThread = true,
             Parameters = [SceneParameter(position: 0)],
@@ -120,15 +122,52 @@ internal static partial class BuiltinCommands
             Name = "aurora.scene.delete",
             Domain = "aurora",
             CommandClass = "scene",
-            Summary = "删除一个另存的场景；模块场景随模块装卸，不能删",
+            Summary = "删除一个场景：另存的连记录一起删；模块场景删后不再列出，模块装回来也不复活，aurora.scene.reset scene=<模块> 恢复。最后一个场景不能删",
             Example = "aurora.scene.delete id=出图",
             RequiresUiThread = true,
             Parameters =
             [
-                new ParameterSpec { Name = "id", Description = "另存场景的 id", Required = true, Position = 0 },
+                new ParameterSpec { Name = "id", Description = "场景 id（aurora.scene.list 方括号里那个），例如 出图、HistoryJanus", Required = true, Position = 0 },
             ],
             Handler = CommandDescriptor.Sync(ctx =>
                 WithScenes(s, scenes => FromScene(scenes.Delete(ctx.RequireString("id"))))),
+        });
+
+        // 右栏拖着排队、拖进小栏收起（REQ-UI-135）。界面上的拖放落到这两条指令上，与切场景同一条总线路径。
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.scene.move",
+            Domain = "aurora",
+            CommandClass = "scene",
+            Summary = "调整场景在右栏与菜单里的先后：挪到另一个场景前面，省略 before 则挪到最后",
+            Example = "aurora.scene.move id=HistoryJanus before=HistoryMinerva",
+            RequiresUiThread = true,
+            Parameters =
+            [
+                new ParameterSpec { Name = "id", Description = "要挪的场景 id（aurora.scene.list 可查）", Required = true, Position = 0 },
+                new ParameterSpec { Name = "before", Description = "挪到这个场景前面，例如 HistoryMinerva；省略表示挪到最后", Position = 1 },
+            ],
+            Handler = CommandDescriptor.Sync(ctx =>
+                WithScenes(s, scenes => FromScene(scenes.Move(ctx.RequireString("id"), ctx.GetString("before"))))),
+        });
+
+        RegisterFrontend(r, new CommandDescriptor
+        {
+            Name = "aurora.scene.hide",
+            Domain = "aurora",
+            CommandClass = "scene",
+            Summary = "把场景收进右下页面调整小栏（右栏不再列出，搜索与菜单照旧），hidden=false 放回右栏",
+            Example = "aurora.scene.hide id=HistoryJuno hidden=true",
+            RequiresUiThread = true,
+            Parameters =
+            [
+                new ParameterSpec { Name = "id", Description = "场景 id（aurora.scene.list 可查）", Required = true, Position = 0 },
+                new ParameterSpec { Name = "hidden", Description = "true 收起，false 放回右栏", Type = ParamType.Bool, Default = "true", Position = 1 },
+            ],
+            Handler = CommandDescriptor.Sync(ctx =>
+                WithScenes(s, scenes => FromScene(scenes.SetHidden(
+                    ctx.RequireString("id"),
+                    string.IsNullOrWhiteSpace(ctx.GetString("hidden")) || ctx.GetBool("hidden"))))),
         });
 
         RegisterFrontend(r, new CommandDescriptor
@@ -170,7 +209,6 @@ internal static partial class BuiltinCommands
 
     private static string SourceText(SceneSource source) => source switch
     {
-        SceneSource.All => "内置",
         SceneSource.Derived => "模块",
         _ => "另存",
     };

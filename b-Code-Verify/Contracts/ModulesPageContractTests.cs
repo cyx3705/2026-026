@@ -51,7 +51,16 @@ public sealed class ModulesPageContractTests
             .EnumerateArray()
             .Select(column => column.GetProperty("key").GetString())
             .ToList();
-        Assert.Equal(["module", "version", "commands", "description"], columns);
+        Assert.Equal(["module", "version", "load", "description"], columns);
+
+        // 1.30.0（REQ-UI-137）：第三列是载入载出按钮，替换原来的「域指令」条数。
+        var load = table.GetProperty("columns").EnumerateArray()
+            .Single(column => column.GetProperty("key").GetString() == "load");
+        Assert.Equal("modules.toggle", load.GetProperty("cellAction").GetString());
+        Assert.Equal("button", load.GetProperty("cellStyle").GetString());
+        Assert.Contains(HostedPageData.Actions, action => action.Id == "modules.toggle"
+                                                          && action.Command == "aurora.module.toggle"
+                                                          && action.Args!["name"] == "{module}");
     }
 
     [Fact]
@@ -67,33 +76,38 @@ public sealed class ModulesPageContractTests
     }
 
     /// <summary>
-    /// 「域指令」一列统计的是**该域当前注册的指令总数**，不是经模块路径注册的条数。
-    ///
-    /// 二者对四个业务模块相等，对 HistoryAurora 却差得很远：它是应用，
-    /// aurora.* 由应用进程自持并上报，经模块路径注册的是 0 条（DEC-007）。
-    /// 显示 0 会让人以为它坏了——这条注释此前挂在 ModulesView 上，随实现一起搬过来。
+    /// REQ-UI-137：装着的模块按钮写「载出」，Aurora 自己那一格是空的（界面不能载出自己）；
+    /// 载出过的模块留在表上写「载入」；它在宿主清单里重新出现时从台账划掉，不会出现两行。
     /// </summary>
     [Fact]
-    public void TheCommandCountColumnCountsTheWholeDomain()
+    public void ModuleRowsCarryALoadToggleAndKeepUnloadedModules()
+    {
+        var aurora = new ModuleMeta("HistoryAurora", "前端", "", "1.30.0", false, "HistoryAurora.dll", 63);
+        var janus = new ModuleMeta("HistoryJanus", "项目治理", "", "5.15.0", false, "HistoryJanus.dll", 54);
+        var juno = new ModuleMeta("HistoryJuno", "面板", "", "0.5.1", false, "HistoryJuno.dll", 10);
+        var ledger = new ModuleUnloadLedger();
+        ledger.Remember(juno);
+
+        var rows = HostedPageData.ModuleRows([aurora, janus], ledger);
+        Assert.Equal(["HistoryAurora", "HistoryJanus", "HistoryJuno"], rows.Select(row => row["module"]));
+        Assert.Equal(["", "载出", "载入"], rows.Select(row => row["load"]));
+        Assert.StartsWith("（已载出）", rows[2]["description"], StringComparison.Ordinal);
+
+        rows = HostedPageData.ModuleRows([aurora, janus, juno], ledger);
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("载出", rows.Single(row => row["module"] == "HistoryJuno")["load"]);
+        Assert.False(ledger.Contains("HistoryJuno"));
+    }
+
+    [Fact]
+    public void TheToggleUnloadsWithHostCommandsAndRefusesToUnloadAurora()
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot(), "b-Code-Studio", "Shell", "3-HostedPages", "Views", "HostedPageData.cs"));
 
-        Assert.Contains("DomainCommandCount", source, StringComparison.Ordinal);
-        Assert.Contains("ModuleDomainNaming.ToDomain", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TheCommandCountFallsBackToTheHostModuleSnapshot()
-    {
-        // The embedded Aurora UI has a separate registry. A module's commands are
-        // therefore invisible locally, but the host module snapshot still carries
-        // the finalized count from the registration pass.
-        var local = new CommandTable();
-        var module = new ModuleMeta(
-            "HistoryJanus", "", "", "5.4.8", false, "HistoryJanus.dll", 41);
-
-        Assert.Equal(41, HostedPageData.DomainCommandCount(ShellCatalog.FromTable(local), module));
+        Assert.Contains("vulcan.module.unload name=", source, StringComparison.Ordinal);
+        Assert.Contains("vulcan.module.reload", source, StringComparison.Ordinal);
+        Assert.Contains("name.Equals(SelfModule", source, StringComparison.Ordinal);
     }
 
     [Fact]

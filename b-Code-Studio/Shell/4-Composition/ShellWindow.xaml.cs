@@ -67,6 +67,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
     private readonly Components.Scenes.UsageLedger _usage;
 
+    /// <summary>弹窗层（REQ-UI-136）：所有 Aurora 弹窗都嵌在本窗体里，宿主确认也落到这里。</summary>
+    private readonly AuroraDialogHost _dialogs;
+
     /// <summary>这台机器要不要模块管理页。装配决定，不写进页面描述。</summary>
     private readonly bool _hostedModulesPage;
     private readonly Components.Modules.ShellUiRegistrar _shellUi;
@@ -97,6 +100,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     private string _theme = ThemeLight;
 
     /// <summary>弹窗与主窗体必须用同一套令牌；独立 Window 自己合并字典，但要知道此刻是哪一套。</summary>
+    /// <summary>弹窗层：<c>aurora.ui.dialog</c>、关于、宿主确认与界面自己的确认都从这里弹。</summary>
+    internal AuroraDialogHost Dialogs => _dialogs;
+
     public bool IsDarkTheme => string.Equals(_theme, ThemeDark, StringComparison.Ordinal);
 
     // 浮窗主题、标签态与右栏胶囊的低频巡检
@@ -162,6 +168,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         // 1.29.0：总线是宿主那条（ShellBus 只加一份目录）；自有指令表只收描述符，由装配方原样登记进宿主。
         // 确认与界面线程编组由宿主经 IModuleContext.RegisterFrontend 交给界面，这里不再自己装配。
         _bus = bus;
+        _dialogs = new AuroraDialogHost(this, DialogLayer);
         _ownCommands = ownCommands;
         var registry = ownCommands;
         _commandSelection = config.CommandSelection ?? new CommandSelectionState();
@@ -780,6 +787,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         }
 
         _closing = true;
+        // 摆着的弹窗按拒绝收场：同步等确认的调用方（宿主拦截器）因此能返回，不会卡在一层消息循环里。
+        _dialogs.CancelAll();
         _chromeUpkeep.Stop();
         _discoverDebounce.Stop();
         SaveWindowBounds();

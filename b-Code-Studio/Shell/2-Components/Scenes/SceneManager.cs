@@ -11,8 +11,7 @@ namespace HistoryAurora.Shell.Components.Scenes;
 /// <summary>场景从哪里来（场景与导航方案 V1.0 §1.1，已归档于 b-Office/history）。</summary>
 internal enum SceneSource
 {
-    /// <summary>「全部」：第一次进入时每一页都露面。升级后的默认场景，界面与升级前一致。</summary>
-    All,
+    // 1.30.0 删除内置场景「全部」（REQ-UI-134）：每个场景都是一个模块的或另存的。
 
     /// <summary>按模块派生：第一次进入时露出该 owner 的页，随模块装卸而生灭。</summary>
     Derived,
@@ -21,14 +20,18 @@ internal enum SceneSource
     User,
 }
 
-/// <summary>一个场景此刻的样子。场景不含页面集合（REQ-UI-094），因此这里也没有页数与断链。</summary>
+/// <summary>
+/// 一个场景此刻的样子。场景不含页面集合（REQ-UI-094），因此这里也没有页数与断链。
+/// <see cref="Hidden"/>：不在右栏列出，收在页面调整时浮出的小栏里（REQ-UI-135）；搜索照样搜得到。
+/// </summary>
 internal sealed record SceneInfo(
     string Id,
     string Title,
     SceneSource Source,
     int Uses,
     DateTimeOffset? LastUsed,
-    bool Active);
+    bool Active,
+    bool Hidden = false);
 
 internal readonly record struct SceneResult(bool Ok, string Message)
 {
@@ -47,13 +50,18 @@ internal readonly record struct SceneResult(bool Ok, string Message)
 /// <c>aurora.scene.add / remove</c> 一并退役——显隐就是 <c>aurora.ui.show / hide</c>。
 ///
 /// 按模块派生的场景第一次进入时露出该模块的页与常驻页，那只是**初值**；
-/// 之后它完全按你离开时的样子恢复，与「全部」、另存场景没有区别。
+/// 之后它完全按你离开时的样子恢复，与另存场景没有区别。
 ///
 /// 布局存成**命名布局，名字就是场景 id**；模块场景的 id 就是模块名（DEC-031）。
+///
+/// 1.30.0（REQ-UI-134 / 135）：内置场景「全部」删除，缺省场景改为 Aurora 自己的场景；
+/// 场景的先后由人拖着排（<see cref="Move"/>），可以收进小栏（<see cref="SetHidden"/>），
+/// 模块场景也能删——删掉的记一笔墓碑，模块再装回来也不复活，要 <c>aurora.scene.reset</c> 点名恢复。
 /// </summary>
 internal sealed class SceneManager
 {
-    public const string AllId = "all";
+    /// <summary>1.29 及以前的内置场景「全部」。只用来认旧设置：读到它就换成缺省场景。</summary>
+    internal const string LegacyAllId = "all";
 
     public const string SettingsKey = "aurora.scenes";
 
@@ -93,7 +101,8 @@ internal sealed class SceneManager
     /// <summary>场景集合或当前场景变了：右栏与菜单据此重画。</summary>
     public event EventHandler? Changed;
 
-    public string ActiveId => _state.Active ?? AllId;
+    /// <summary>当前场景。没有记录时是 Aurora 自己的场景——它的页（模块管理、组件测试）由界面自持，开机就在。</summary>
+    public string ActiveId => string.IsNullOrWhiteSpace(_state.Active) ? AuroraSceneId : _state.Active;
 
     /// <summary>初次发现完成才恢复完整布局：启动前半轮还没有模块的停靠节点。</summary>
     public void RestoreActiveLayout()
@@ -104,17 +113,22 @@ internal sealed class SceneManager
 
     // ---------------------------------------------------------------- 查询
 
-    /// <summary>全部场景，按使用频次、最近使用、标题排序。</summary>
+    /// <summary>
+    /// 全部场景（含收进小栏的，不含删掉的），按人排的先后（REQ-UI-135）。
+    /// 没排过的场景——新装的模块、刚另存的——按标题接在最后，人拖一下就进了排序。
+    /// </summary>
     public IReadOnlyList<SceneInfo> List()
     {
-        var scenes = new List<SceneInfo> { Describe(AllId, "全部", SceneSource.All) };
+        var scenes = new List<SceneInfo>();
 
         foreach (var owner in _docking.ListWindows()
                      .Where(w => !Resident.Contains(w.Id))
                      .Select(w => w.Owner)
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            scenes.Add(Describe(SceneIdFor(owner), TitleFor(owner), SceneSource.Derived));
+            var id = SceneIdFor(owner);
+            if (!_state.IsDeleted(id))
+                scenes.Add(Describe(id, TitleFor(owner), SceneSource.Derived));
         }
 
         foreach (var (id, record) in _state.Scenes)
@@ -124,8 +138,7 @@ internal sealed class SceneManager
         }
 
         return scenes
-            .OrderByDescending(s => s.Uses)
-            .ThenByDescending(s => s.LastUsed ?? DateTimeOffset.MinValue)
+            .OrderBy(s => _state.OrderOf(s.Id))
             .ThenBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }
@@ -186,10 +199,7 @@ internal sealed class SceneManager
 
         var clash = List().FirstOrDefault(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
         if (clash is { Source: not SceneSource.User })
-        {
-            var kind = clash.Source == SceneSource.All ? "内置" : "按模块派生的";
-            return SceneResult.Fail($"[{id}] 是{kind}场景，不能覆盖；换一个 id");
-        }
+            return SceneResult.Fail($"[{id}] 是按模块派生的场景，不能覆盖；换一个 id");
 
         // 先把当前场景记下来：每个场景都记着你离开时的样子，另存不例外。
         SaveActiveLayout();
@@ -216,29 +226,40 @@ internal sealed class SceneManager
     }
 
     /// <summary>
-    /// 回到初值：「全部」与模块场景按各页 placement 重建，露面的页回到第一次进入时的样子。
+    /// 回到初值：模块场景按各页 placement 重建，露面的页回到第一次进入时的样子。
     /// 不是当前场景的，下次切进去时再重建。
     ///
     /// 另存场景没有初值可回，只能在它是当前场景时重排：此刻露面的页按各自默认位置摆回去。
+    ///
+    /// 点名一个删掉的模块场景就是把它恢复（REQ-UI-135）：墓碑撤掉、排到最后、下次切进去按默认形态重建。
     /// </summary>
     public SceneResult Reset(string? sceneIdOrTitle = null)
     {
         var scene = Find(sceneIdOrTitle ?? ActiveId);
+        if (scene == null && sceneIdOrTitle != null && _state.Undelete(sceneIdOrTitle.Trim()) is { } revived)
+        {
+            var record = _state.GetOrAdd(revived);
+            record.ResetPending = true;
+            Persist();
+            Changed?.Invoke(this, EventArgs.Empty);
+            return SceneResult.Success($"场景 [{TitleFor(revived)}] 已恢复，下次切进去时按默认形态重建");
+        }
+
         if (scene == null)
             return SceneResult.Fail($"没有场景 [{sceneIdOrTitle}]（aurora.scene.list 可查）");
 
         if (scene.Source == SceneSource.User && !scene.Active)
             return SceneResult.Fail($"[{scene.Title}] 是另存的场景，没有初值可回；先切到它，重置会把此刻露面的页摆回默认位置");
 
-        var record = _state.GetOrAdd(scene.Id);
+        var current = _state.GetOrAdd(scene.Id);
         if (scene.Active)
         {
             Apply(scene, rebuild: true);
-            record.ResetPending = false;
+            current.ResetPending = false;
         }
         else
         {
-            record.ResetPending = true;
+            current.ResetPending = true;
         }
 
         Persist();
@@ -248,26 +269,105 @@ internal sealed class SceneManager
             : $"场景 [{scene.Title}] 已标记重置，下次切进去时按默认形态重建");
     }
 
+    /// <summary>
+    /// 删除一个场景（REQ-UI-135）。另存的连同记录一起删；模块场景随模块装卸、删了也会再派生出来，
+    /// 所以记一笔墓碑——它从此不再列出，<c>aurora.scene.reset id=&lt;模块&gt;</c> 点名才恢复。
+    /// 删的是当前场景就切到排在最前、没收进小栏的那个。最后一个场景不能删：总得有地方落脚。
+    /// </summary>
     public SceneResult Delete(string? id)
     {
-        var scene = List().FirstOrDefault(s => s.Id.Equals(id?.Trim(), StringComparison.OrdinalIgnoreCase));
+        var scenes = List();
+        var scene = scenes.FirstOrDefault(s => s.Id.Equals(id?.Trim(), StringComparison.OrdinalIgnoreCase));
         if (scene == null)
             return SceneResult.Fail($"没有场景 [{id}]（aurora.scene.list 可查）");
-        if (scene.Source != SceneSource.User)
-            return SceneResult.Fail($"[{scene.Title}] 不是另存的场景；按模块派生的场景随模块装卸，「全部」不能删");
+        if (scenes.Count <= 1)
+            return SceneResult.Fail($"[{scene.Title}] 是最后一个场景，不能删");
 
-        _state.Scenes.Remove(scene.Id);
+        if (scene.Source == SceneSource.User)
+        {
+            _state.Scenes.Remove(scene.Id);
+        }
+        else
+        {
+            _state.Delete(scene.Id);
+            // 恢复时按默认形态重建，不带回删除前的布局。
+            _state.GetOrAdd(scene.Id).ResetPending = true;
+        }
+
+        _state.Forget(scene.Id);
         _usage.Forget(UsageKey(scene.Id));
         if (scene.Active)
         {
             // 被删的场景不再写回布局，直接切走。
-            _state.Active = AllId;
-            Apply(Find(AllId)!, rebuild: false);
+            var next = List().FirstOrDefault(s => !s.Hidden) ?? List()[0];
+            var record = _state.Find(next.Id);
+            _state.Active = next.Id;
+            Apply(next, rebuild: record?.ResetPending == true);
+            if (record != null)
+                record.ResetPending = false;
         }
 
         Persist();
         Changed?.Invoke(this, EventArgs.Empty);
         return SceneResult.Success($"场景 [{scene.Title}] 已删除");
+    }
+
+    // ---------------------------------------------------------------- 排序与收起（REQ-UI-135）
+
+    /// <summary>
+    /// 把场景挪到 <paramref name="before"/> 前面；<paramref name="before"/> 为空则挪到最后。
+    /// 用「挪到谁前面」而不是序号：右栏只列没收起的场景，序号在右栏和完整清单里不是一回事。
+    /// </summary>
+    public SceneResult Move(string? id, string? before)
+    {
+        var scenes = List();
+        var scene = scenes.FirstOrDefault(s => s.Id.Equals(id?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (scene == null)
+            return SceneResult.Fail($"没有场景 [{id}]（aurora.scene.list 可查）");
+
+        SceneInfo? anchor = null;
+        if (!string.IsNullOrWhiteSpace(before))
+        {
+            anchor = scenes.FirstOrDefault(s => s.Id.Equals(before.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (anchor == null)
+                return SceneResult.Fail($"没有场景 [{before}]（aurora.scene.list 可查）");
+        }
+
+        // 挪到自己前面就是原地不动。
+        if (anchor != null && anchor.Id.Equals(scene.Id, StringComparison.OrdinalIgnoreCase))
+            return SceneResult.Success($"场景 [{scene.Title}] 位置未变");
+
+        var order = scenes.Select(s => s.Id).ToList();
+        order.RemoveAll(s => s.Equals(scene.Id, StringComparison.OrdinalIgnoreCase));
+        var at = anchor == null
+            ? -1
+            : order.FindIndex(s => s.Equals(anchor.Id, StringComparison.OrdinalIgnoreCase));
+        if (at < 0)
+            order.Add(scene.Id);
+        else
+            order.Insert(at, scene.Id);
+
+        _state.Order = order;
+        Persist();
+        Changed?.Invoke(this, EventArgs.Empty);
+        return SceneResult.Success(anchor == null
+            ? $"场景 [{scene.Title}] 已排到最后"
+            : $"场景 [{scene.Title}] 已排到 [{anchor.Title}] 前面");
+    }
+
+    /// <summary>收进小栏 / 放回右栏。只影响右栏列不列它，切换、搜索、菜单照旧。</summary>
+    public SceneResult SetHidden(string? id, bool hidden)
+    {
+        var scene = List().FirstOrDefault(s => s.Id.Equals(id?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (scene == null)
+            return SceneResult.Fail($"没有场景 [{id}]（aurora.scene.list 可查）");
+
+        _state.SetHidden(scene.Id, hidden);
+        Persist();
+        Changed?.Invoke(this, EventArgs.Empty);
+        return SceneResult.Success(hidden
+            ? $"场景 [{scene.Title}] 已收进小栏"
+            : $"场景 [{scene.Title}] 已放回右栏");
     }
 
     // ---------------------------------------------------------------- 生命周期
@@ -327,7 +427,7 @@ internal sealed class SceneManager
 
     /// <summary>
     /// 初值规则：第一次进入（或重置）时哪些页露面。只在场景没有布局可恢复时用得上。
-    /// 「全部」是每一页；模块场景是该模块的页 + 常驻页；另存场景一定存过布局，
+    /// 模块场景是该模块的页 + 常驻页；另存场景一定存过布局，
     /// 走到这里只剩重置，初值就是此刻露面的页。
     /// </summary>
     private IReadOnlyCollection<string> SeedFor(SceneInfo scene)
@@ -335,7 +435,6 @@ internal sealed class SceneManager
         var windows = _docking.ListWindows();
         return scene.Source switch
         {
-            SceneSource.All => windows.Select(w => w.Id).ToList(),
             SceneSource.User => windows.Where(w => w.IsVisible).Select(w => w.Id).ToList(),
             _ => windows.Where(w => IsSeeded(scene, w)).Select(w => w.Id).ToList(),
         };
@@ -343,7 +442,6 @@ internal sealed class SceneManager
 
     private static bool IsSeeded(SceneInfo scene, ToolWindowInfo window)
         => Resident.Contains(window.Id)
-           || scene.Source == SceneSource.All
            || scene.Source == SceneSource.Derived &&
               SceneIdFor(window.Owner).Equals(scene.Id, StringComparison.OrdinalIgnoreCase);
 
@@ -366,7 +464,8 @@ internal sealed class SceneManager
             id, title, source,
             usage?.Count ?? 0,
             usage?.LastUsed,
-            id.Equals(ActiveId, StringComparison.OrdinalIgnoreCase));
+            id.Equals(ActiveId, StringComparison.OrdinalIgnoreCase),
+            _state.IsHidden(id));
     }
 
     private void Apply(SceneInfo scene, bool rebuild)
@@ -427,7 +526,56 @@ internal sealed class SceneState
 
     public Dictionary<string, SceneRecord> Scenes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>人排的先后（REQ-UI-135）。不在表里的场景按标题接在最后。</summary>
+    public List<string> Order { get; set; } = [];
+
+    /// <summary>收进小栏的场景：右栏不列，搜索与菜单照旧。</summary>
+    public List<string> Hidden { get; set; } = [];
+
+    /// <summary>删掉的模块场景（墓碑）。模块再装回来也不派生，<c>aurora.scene.reset</c> 点名恢复。</summary>
+    public List<string> Deleted { get; set; } = [];
+
     public SceneRecord? Find(string id) => Scenes.GetValueOrDefault(id);
+
+    public int OrderOf(string id)
+    {
+        var index = Order.FindIndex(s => s.Equals(id, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? int.MaxValue : index;
+    }
+
+    public bool IsHidden(string id) => Hidden.Contains(id, StringComparer.OrdinalIgnoreCase);
+
+    public bool IsDeleted(string id) => Deleted.Contains(id, StringComparer.OrdinalIgnoreCase);
+
+    public void SetHidden(string id, bool hidden)
+    {
+        Hidden.RemoveAll(s => s.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (hidden)
+            Hidden.Add(id);
+    }
+
+    public void Delete(string id)
+    {
+        if (!IsDeleted(id))
+            Deleted.Add(id);
+    }
+
+    /// <summary>按 id、或去掉 History 的简称撤掉墓碑；返回撤掉的那个 id，没有则 null。</summary>
+    public string? Undelete(string key)
+    {
+        var id = Deleted.FirstOrDefault(s => s.Equals(key, StringComparison.OrdinalIgnoreCase))
+                 ?? Deleted.FirstOrDefault(s => s.Equals("History" + key, StringComparison.OrdinalIgnoreCase));
+        if (id != null)
+            Deleted.Remove(id);
+        return id;
+    }
+
+    /// <summary>场景没了：从排序与小栏里抹掉。恢复或重新另存时按新场景接在最后。</summary>
+    public void Forget(string id)
+    {
+        Order.RemoveAll(s => s.Equals(id, StringComparison.OrdinalIgnoreCase));
+        Hidden.RemoveAll(s => s.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
 
     public SceneRecord GetOrAdd(string id)
     {
@@ -449,6 +597,15 @@ internal sealed class SceneState
             state.Scenes = new Dictionary<string, SceneRecord>(
                 state.Scenes ?? new Dictionary<string, SceneRecord>(),
                 StringComparer.OrdinalIgnoreCase);
+            state.Order ??= [];
+            state.Hidden ??= [];
+            state.Deleted ??= [];
+
+            // 1.30.0 删除内置场景「全部」：停在它上面的换成缺省场景，它的待重置记录一并丢掉。
+            // 布局文件 all.layout 不动——它只是不再被读。
+            if (SceneManager.LegacyAllId.Equals(state.Active, StringComparison.OrdinalIgnoreCase))
+                state.Active = null;
+            state.Scenes.Remove(SceneManager.LegacyAllId);
 
             // 1.19.0 的另存场景靠「有 pages」来认；页面集合退役后改记 saved，旧账读一次就换掉。
             // 同一版里的 added / removed 没有去处，反序列化时直接丢弃。
@@ -475,7 +632,7 @@ internal sealed class SceneRecord
 {
     public string? Title { get; set; }
 
-    /// <summary>用户另存的场景。派生场景与「全部」的记录只用来挂待重置标记。</summary>
+    /// <summary>用户另存的场景。派生场景的记录只用来挂待重置标记。</summary>
     public bool Saved { get; set; }
 
     /// <summary>1.19.0 另存场景的页面集。只读不写，见 <see cref="SceneState.Parse"/>。</summary>

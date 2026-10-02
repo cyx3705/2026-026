@@ -61,6 +61,10 @@ Aurora 在界面空闲时扫描注册表、执行该命令，把返回的窗格�
 页面的停靠位置、比例、显隐和分栏由用户保存的场景布局优先。模块热重载只原位替换相同 id 的
 页面内容；它不重建当前场景的停靠树，不主动显示其它模块的页，也不改写已保存的场景。
 
+1.30.0 起（REQ-UI-134 / 135）没有内置场景「全部」，缺省场景是 Aurora 自己的场景；场景的先后由人在右栏拖着排
+（`aurora.scene.move`），可以收进右下小栏（`aurora.scene.hide`），模块场景也能删（`aurora.scene.delete`，
+删后模块装回也不复活，`aurora.scene.reset scene=<模块>` 恢复）。模块不要依赖「新页在所有场景都露面」。
+
 模块想把用户带到自己这里，调 `aurora.scene.go id=<模块名>`。页面描述的 `scene` 必须等于本模块 owner（不同 owner 的值会被拒绝）；`aurora.ui.invalidate` 在建页前会一并刷新该模块的动作声明，模块无需自己调 `reloadactions`。
 
 ## 有状态命令按钮（1.21.0）
@@ -297,11 +301,15 @@ registry.Register(new CommandDescriptor
 `Aurora.ComboBox.ToggleButton`、`Aurora.TreeExpander`、`Aurora.ScrollBar.Thumb`——
 一般不必直接引用，对应控件套用后自动生效。
 
-## 弹窗 `aurora.ui.dialog`（1.2.0）
+## 弹窗 `aurora.ui.dialog`（1.2.0；1.30.0 改为嵌入卡片）
 
 模块不要自己 `new Window`。前端独立之后，顶层窗口拿不到 `Aurora.*` 令牌，
-`DynamicResource` 会静默退化成系统外观。弹窗由 Aurora 自持，自己合并主题字典，
-并用与主窗体相同的自绘顶栏（无系统标题栏）。
+`DynamicResource` 会静默退化成系统外观。弹窗由 Aurora 自持。
+
+1.30.0 起（REQ-UI-136）弹窗**不再是独立窗口**：它是一张嵌在主窗体里的圆角卡片，与页面卡片同一个长相
+（Surface 底、20 圆角、段标题接墨色条），后面盖一层半透明画布色遮罩；主窗体隐藏或最小化时先把它请到前台。
+没有标题栏和关闭键，Esc 取消、Enter 落到默认按钮（`defaultcancel=true` 时落到取消）。
+指令等人做完决定再返回，但不占住界面线程。系统的选文件 / 选目录（`aurora.ui.selectfile` / `selectdirectory`）仍是系统对话框。
 
 写操作的宿主 `ConfirmPrompt` 在进程内也走同一组件：Aurora 启动时接管宿主确认通道。
 
@@ -374,7 +382,9 @@ Enter/Space、确认、取消和双击确认；畸形或空列表在开窗前直
 }
 ```
 
-单元格以按钮语义渲染，支持鼠标、Enter 和 Space，悬停说明取自动作的 `summary`。动作参数里的
+单元格以按钮语义渲染，支持鼠标、Enter 和 Space，悬停说明取自动作的 `summary`。
+缺省画成链接（墨色字）；写 `"cellStyle": "button"`（1.30.0，REQ-UI-137）画成行内小按钮，按钮上的字就是格里的值，
+空格不画按钮——随行变化的按钮（模块页的「载入 / 载出」）靠行数据就能写出来。动作参数里的
 `{name}` 默认取**被点那一行**的同名字段，不读取当前选中行；因此动作需要的隐藏字段可以留在行数据里，
 不必都声明成可见列。空单元格不触发。动作缺失时表格仍显示，上方会明确列出断链原因。
 **行数与列数永远由数据决定**，不用也不能另外传计数。
