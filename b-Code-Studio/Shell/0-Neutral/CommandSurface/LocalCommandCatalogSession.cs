@@ -41,7 +41,6 @@ internal sealed partial class LocalCommandCatalogSession : ICommandCatalogSessio
     private List<CatalogEntry> _entries;
     private CommandCatalogFilter _filter = new();
     private string? _selected;
-    private string _consoleQuery = "";
     private bool _disposed;
     private readonly CoalescingAsyncWork<bool> _refresh = new();
 
@@ -59,15 +58,7 @@ internal sealed partial class LocalCommandCatalogSession : ICommandCatalogSessio
 
     public event EventHandler<CommandCatalogChangedEventArgs>? Changed;
 
-    /// <summary>
-    /// 控制台输入框的内容变了。**不走 <see cref="Changed"/>**：控制台正是 Changed 的订阅方，
-    /// 而它在处理 Changed 时又会回头设置这个查询串——两者接在一起就是一个自激回路。
-    /// </summary>
-    public event EventHandler? ConsoleQueryChanged;
-
     public IReadOnlyList<CatalogEntry> Entries => _entries;
-
-    public string ConsoleQuery => _consoleQuery;
 
     public IReadOnlyList<string> Domains => _entries
         .Select(entry => entry.Domain)

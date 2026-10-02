@@ -77,7 +77,7 @@
         </Setter>
     </Style>
 
-    <!-- 控制组图标(菜单、退出专注):与窗口控件同底座,宽度略窄 -->
+    <!-- 控制组图标(菜单):与窗口控件同底座,宽度略窄 -->
     <Style x:Key="Aurora.ChromeIconButton" TargetType="Button"
            BasedOn="{StaticResource Aurora.WindowButton}">
         <Setter Property="Width" Value="36" />

@@ -49,9 +49,7 @@ internal static partial class BuiltinCommands
                             _ => "停靠",
                         };
                     var ratio = w.Ratio is { } v and > 0 ? $" {v:P0}" : "";
-                    var maximized = s.Docking.MaximizedId?.Equals(
-                        w.Id, StringComparison.OrdinalIgnoreCase) == true ? " [最大化]" : "";
-                    sb.Append($"\n  {w.Id,-12} {state}{ratio}{maximized}  {w.Title}  owner={w.Owner}");
+                    sb.Append($"\n  {w.Id,-12} {state}{ratio}  {w.Title}  owner={w.Owner}");
                 }
 
                 return CommandResult.Ok(sb.ToString());
@@ -91,46 +89,41 @@ internal static partial class BuiltinCommands
                 }
             }),
         });
-        RegisterWindowVerb(r, s, "aurora.ui.reset", "把窗口复位到注册时的默认位置",
-            (d, id) => { d.ResetWindow(id); return $"{id} 已复位到默认位置"; });
-
         RegisterFrontend(r, new CommandDescriptor
         {
-            Name = "aurora.ui.max",
+            Name = "aurora.ui.float",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "最大化指定工具窗口",
-            Example = "aurora.ui.max name=se2sw",
+            Summary = "把一页浮成置顶小窗（操作别的程序时也够得着），或还原回停靠区；不写 on 时切换",
+            Example = "aurora.ui.float name=powersw",
             RequiresUiThread = true,
-            Parameters = [nameParam],
+            Parameters =
+            [
+                nameParam,
+                new ParameterSpec
+                {
+                    Name = "on",
+                    Description = "true 浮出、false 还原；省略时切换",
+                    Type = ParamType.Bool,
+                },
+            ],
             Handler = CommandDescriptor.Sync(ctx =>
             {
+                if (ResolveWindow(s, ctx) is { } error)
+                    return error;
+
+                if (s.Docking is not DockingHost host)
+                    return CommandResult.Fail("当前停靠宿主不支持页面浮窗");
+
                 var id = ctx.RequireString("name");
-                var exists = s.Docking.ListWindows().Any(w =>
-                    w.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-                if (!exists)
-                    return CommandResult.Fail($"没有名为 {id} 的窗口");
-                return Docking(s, "aurora.ui.max", () =>
-                {
-                    s.Docking.MaximizeWindow(id);
-                    return $"{id} 已最大化";
-                });
+                bool? on = ctx.Has("on") ? ctx.GetBool("on") : null;
+                return Docking(s, "aurora.ui.float", () => host.SetPageFloating(id, on)
+                    ? $"{id} 已浮出到置顶小窗（拖空白处移动；再执行一次还原）"
+                    : $"{id} 已还原到停靠区");
             }),
         });
-
-        RegisterFrontend(r, new CommandDescriptor
-        {
-            Name = "aurora.ui.restore",
-            Domain = "aurora",
-            CommandClass = "ui",
-            Summary = "退出窗口最大化并恢复原布局",
-            RequiresUiThread = true,
-            Handler = CommandDescriptor.Sync(_ => Docking(s, "aurora.ui.restore", () =>
-            {
-                s.Docking.RestoreLayoutFromMaximized();
-                return "已恢复原布局";
-            })),
-        });
+        RegisterWindowVerb(r, s, "aurora.ui.reset", "把窗口复位到注册时的默认位置",
+            (d, id) => { d.ResetWindow(id); return $"{id} 已复位到默认位置"; });
 
         RegisterFrontend(r, new CommandDescriptor
         {
@@ -224,9 +217,9 @@ internal static partial class BuiltinCommands
     ///
     /// 指令总线对外只回「执行异常(类型名)」——它刻意不把 Message 与堆栈发出去
     /// （`ShellBus` 里 `safeError = ex.GetType().Name`）。这条策略对远端是对的，
-    /// 但本机排查也只剩一个类型名：2026-08-25 真机报
-    /// `aurora.ui.max 执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
-    /// 而这一条在自动化里复现不出来（浮窗、模块页、逐个窗口最大化都试过，全绿）。
+    /// 但本机排查也只剩一个类型名：2026-08-25 真机报一条停靠指令
+    /// `执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
+    /// 而这一条在自动化里复现不出来。
     /// 所以停靠动作在这里先把完整异常写进 Aurora 自己的控制台，再让它照常抛出去。
     /// </summary>
     private static CommandResult Docking(ShellCommandServices s, string command, Func<string> action)

@@ -24,17 +24,9 @@ internal partial class ShellWindow
     private static readonly Uri DarkTokensUri =
         new("/HistoryAurora;component/Themes/AuroraTokens.Dark.xaml", UriKind.Relative);
 
-    /// <summary>
-    /// 令牌字典整份替换:应用色与 AvalonDock 主题画刷键都在同一份令牌里,
-    /// 因此不会出现「界面已深色、页签仍浅色」。三处都要换:
-    /// 窗体(视图)、DockingManager(停靠区,压过 VS2013 主题)、应用级(浮动窗口是独立 Window)。
-    /// </summary>
-    private void ApplyFocusChrome()
+    /// <summary>主窗体外观随布局变化重下发：控制组常显、标题栏命中区为零、窗格样式。</summary>
+    private void ApplyShellChrome()
     {
-        var focused = _docking.MaximizedId != null;
-
-        ExitFocusButton.Visibility = focused ? Visibility.Visible : Visibility.Collapsed;
-        ExitFocusButton.ToolTip = focused ? "退出聚焦" : null;
         ChromeBar.Visibility = Visibility.Visible;
 
         // CaptionHeight 永久为零，避免隐藏命中区覆盖任意工具窗格顶部。
@@ -42,8 +34,7 @@ internal partial class ShellWindow
         if (WindowChrome.GetWindowChrome(this) is { } chrome)
             chrome.CaptionHeight = 0;
 
-        ApplyPaneStyles(chromeless: focused);
-        RefreshCommandCompletionFocus();
+        ApplyPaneStyles();
     }
 
     private string FindTitle(string id)
@@ -51,24 +42,7 @@ internal partial class ShellWindow
                .FirstOrDefault(d => d.Id.Equals(id, StringComparison.OrdinalIgnoreCase))?.Title
            ?? id;
 
-    private void OnExitFocusClick(object sender, RoutedEventArgs e)
-        => _ = _bus.ExecuteAsync("aurora.ui.restore", "UI");
-
-    /// <summary>F11:在当前活动页的专注态与常规态之间切换。</summary>
-    private void ToggleFocusMode()
-    {
-        if (_docking.MaximizedId != null)
-        {
-            _ = _bus.ExecuteAsync("aurora.ui.restore", "UI");
-            return;
-        }
-
-        var id = DockManager.Layout?.ActiveContent?.ContentId;
-        if (!string.IsNullOrWhiteSpace(id))
-            _ = _bus.ExecuteAsync($"aurora.ui.max name={id}", "UI");
-    }
-
-    // ---------------------------------------------------------------- 键盘(UI-03.4 / UI-04.4)
+    // ---------------------------------------------------------------- 键盘(UI-03.4)
 
     private void OnShellPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -78,16 +52,6 @@ internal partial class ShellWindow
         if (e.Key == Key.F10 && Keyboard.Modifiers == ModifierKeys.None)
         {
             OpenShellMenu();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.F11 && Keyboard.Modifiers == ModifierKeys.None)
-        {
-            ToggleFocusMode();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape && _docking.MaximizedId != null && !IsTextInputFocused())
-        {
-            _ = _bus.ExecuteAsync("aurora.ui.restore", "UI");
             e.Handled = true;
         }
     }
@@ -102,16 +66,6 @@ internal partial class ShellWindow
             e.Handled = true;
         }
     }
-
-    /// <summary>
-    /// Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。
-    ///
-    /// 逐个列举取值控件,不写 <c>Selector</c>:Selector 连 TabControl 一起框进来,
-    /// 而焦点落在页签上是常态,那样 Esc 会在最该起作用的时候失效。
-    /// </summary>
-    private static bool IsTextInputFocused()
-        => Keyboard.FocusedElement is TextBoxBase or ComboBox or PasswordBox
-            or Components.Widgets.AuroraOptionBox;
 
     private static object? FindInDictionary(ResourceDictionary dict, object key)
     {
@@ -164,9 +118,6 @@ internal partial class ShellWindow
         }
 
         view.Items.Add(new Separator());
-        var restore = Item("退出窗口最大化", "aurora.ui.restore");
-        restore.IsEnabled = _docking.MaximizedId != null;
-        view.Items.Add(restore);
         view.Items.Add(Item("重置默认布局", "aurora.ui.layoutreset"));
         // UI-08:主题切换(S-02,同样是发指令)
         view.Items.Add(new Separator());

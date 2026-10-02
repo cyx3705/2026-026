@@ -312,7 +312,6 @@ public sealed class ModulePageLoaderContractTests
 
         public void UnregisterOwner(string owner) => Dropped.Add(owner);
 
-        public string? MaximizedId => null;
 
         public IReadOnlyList<ToolWindowInfo> ListWindows() => [];
 
@@ -336,9 +335,6 @@ public sealed class ModulePageLoaderContractTests
 
         public void UnregisterWindow(string id) { }
 
-        public void MaximizeWindow(string id) { }
-
-        public void RestoreLayoutFromMaximized() { }
 
         public event EventHandler<ShellCommandEventArgs>? CommandGenerated { add { } remove { } }
 

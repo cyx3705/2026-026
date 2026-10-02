@@ -313,16 +313,10 @@ public sealed class ShellChromeContractTests
     }
 
     [Fact]
-    public void FailedConsoleCommandDoesNotExitFocusedConsole()
+    public void FailedConsoleCommandKeepsTheInputFocused()
     {
         RunShell(window =>
         {
-            var maximize = window.Commands.ExecuteAsync(
-                $"aurora.ui.max name={StandardWindowIds.Console}", "test").GetAwaiter().GetResult();
-            Assert.True(maximize.Success, maximize.Message);
-            UiTestHost.Pump();
-            Assert.Equal(StandardWindowIds.Console, window.Docking.MaximizedId);
-
             var input = FindVisualDescendants<TextBox>(window)
                 .Single(item => item.Name == "Input");
             input.Focus();
@@ -337,7 +331,6 @@ public sealed class ShellChromeContractTests
             });
             UiTestHost.PumpFor(400);
 
-            Assert.Equal(StandardWindowIds.Console, window.Docking.MaximizedId);
             Assert.True(input.IsKeyboardFocusWithin);
         });
     }
@@ -358,7 +351,7 @@ public sealed class ShellChromeContractTests
             var input = FindVisualDescendants<TextBox>(window)
                 .Single(item => item.Name == "Input");
             Assert.True(window.IsVisible);
-            Assert.Equal(StandardWindowIds.Console, window.Docking.MaximizedId);
+            Assert.True(window.Docking.ListWindows().Single(item => item.Id == StandardWindowIds.Console).IsVisible);
             Assert.True(HasKeyboardOrLogicalFocus(input));
             Assert.False(window.Topmost);
 
@@ -370,7 +363,6 @@ public sealed class ShellChromeContractTests
 
             Assert.True(HasKeyboardOrLogicalFocus(input));
             Assert.False(window.Topmost);
-            Assert.Equal(StandardWindowIds.Console, window.Docking.MaximizedId);
             Assert.True(layoutChanges >= 0); // ???????????????????????
         });
     }
@@ -572,52 +564,34 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// REQ-UI-101 第 3 条：专注态右栏不让位，窗口控制组一直在右栏顶部；专注的那一页没有页签行，内容铺满窗格。
-    /// 退出专注后「退出聚焦」按钮收起。取代 1.20.1 及以前「控制组搬进专注页页头」的三条用例。
+    /// REQ-UI-139（1.30.1）：专注态（页面铺满主窗体）整个删除。没有 aurora.ui.max / aurora.ui.restore、
+    /// 没有「退出聚焦」按钮、没有专注窗格模板，F11 不再改布局；停靠门面上也没有对应成员。
     /// </summary>
     [Fact]
-    public void FocusedPageKeepsTheWindowChromeInTheRightRail()
+    public void FocusModeIsGone()
     {
-        RunShell(
-            window =>
+        foreach (var member in new[] { "MaximizedId", "MaximizeWindow", "RestoreLayoutFromMaximized" })
+            Assert.Empty(typeof(IDockingService).GetMember(member));
+
+        RunShell(window =>
+        {
+            foreach (var command in new[] { "aurora.ui.max", "aurora.ui.restore" })
+                Assert.False(window.Commands.Registry.TryGet(command, out _), $"{command} 仍然登记着");
+            Assert.Null(window.FindName("ExitFocusButton"));
+            Assert.Null(window.TryFindResource("Aurora.Icon.ExitFocus"));
+
+            var before = window.Docking.ListWindows().Select(item => (item.Id, item.IsVisible, item.Side)).ToList();
+            window.RaiseEvent(new KeyEventArgs(
+                Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(window),
+                0,
+                Key.F11)
             {
-                var exitFocus = RequireButton(window, "ExitFocusButton");
-                Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
-
-                var result = window.Commands.ExecuteAsync("aurora.ui.max name=focus.tool", "test")
-                    .GetAwaiter().GetResult();
-                Assert.True(result.Success, result.Message);
-                UiTestHost.Pump();
-
-                var rail = RequireElement<FrameworkElement>(window, "NavRail");
-                var chromeBar = RequireElement<Panel>(window, "ChromeBar");
-                Assert.True(rail.IsVisible, "专注态右栏不该让位");
-                Assert.True(chromeBar.IsDescendantOf(rail));
-                Assert.Single(FindVisualDescendants<Panel>(window), panel => panel.Name == "ChromeBar");
-                Assert.Equal(Visibility.Visible, exitFocus.Visibility);
-                Assert.All(
-                    new[] { "MenuButton", "MinimizeButton", "MaximizeButton", "CloseButton" },
-                    name => Assert.Equal(Visibility.Visible, RequireButton(window, name).Visibility));
-
-                Assert.DoesNotContain(FindVisualDescendants<LayoutAnchorableTabItem>(window), item => item.IsVisible);
-                var content = FindVisualDescendants<ContentPresenter>(window)
-                    .Single(item => item.IsVisible && item.Name == "PART_SelectedContentHost");
-                Assert.NotNull(content.Content);
-                Assert.True(content.ActualHeight > 0, $"focused content height={content.ActualHeight}");
-
-                Assert.True(window.Commands.ExecuteAsync("aurora.ui.restore", "test").GetAwaiter().GetResult().Success);
-                UiTestHost.Pump();
-                Assert.Null(window.Docking.MaximizedId);
-                Assert.Equal(Visibility.Collapsed, exitFocus.Visibility);
-            },
-            configure: config => config.ToolWindows.Add(new ToolWindowDescriptor
-            {
-                Id = "focus.tool",
-                Title = "Focus Tool",
-                DefaultSide = DockSide.Right,
-                DefaultRatio = 0.3,
-                ContentFactory = () => new Border(),
-            }));
+                RoutedEvent = Keyboard.PreviewKeyDownEvent,
+            });
+            UiTestHost.Pump();
+            Assert.Equal(before, window.Docking.ListWindows().Select(item => (item.Id, item.IsVisible, item.Side)).ToList());
+        });
     }
 
     /// <summary>
@@ -914,48 +888,19 @@ public sealed class ShellChromeContractTests
         });
     }
 
+    /// <summary>1.30.1 起控制台行内补全常驻（原先只在控制台专注时出现，平时联动命令集页筛选）。</summary>
     [Fact]
-    public void ConsoleTypingInNormalLayoutKeepsCompletionInConsole()
+    public void ConsoleCompletesDomainClassMethodAndParameter()
     {
         var session = new CompletionCatalogSession();
         RunShell(window =>
         {
             window.AttachCommandCatalogSession(session);
-            var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
-            var input = Assert.IsType<TextBox>(console.FindName("Input"));
-            var popup = Assert.IsType<Popup>(console.FindName("CompletionPopup"));
-
-            Assert.Null(window.Docking.MaximizedId);
-            input.Focus();
-            Keyboard.Focus(input);
-            input.Text = "v";
-            input.CaretIndex = input.Text.Length;
-
-            UiTestHost.PumpUntil(() => input.Text == "v");
-            Assert.False(popup.IsOpen);
-            Assert.True(input.IsKeyboardFocusWithin);
-            Assert.Equal("v", input.Text);
-            Assert.Equal("", session.LastText);
-            Assert.False(console.HandleCompletionKey(Key.Tab, ModifierKeys.None));
-            Assert.Equal("v", input.Text);
-        });
-    }
-
-    [Fact]
-    public void FocusedConsoleCompletesDomainClassMethodAndParameter()
-    {
-        var session = new CompletionCatalogSession();
-        RunShell(window =>
-        {
-            window.AttachCommandCatalogSession(session);
-            window.Docking.MaximizeWindow(StandardWindowIds.Console);
             UiTestHost.Pump();
-            window.RefreshCommandCompletionFocus();
             var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
             var input = Assert.IsType<TextBox>(console.FindName("Input"));
             var popup = Assert.IsType<Popup>(console.FindName("CompletionPopup"));
 
-            Assert.Equal(StandardWindowIds.Console, window.Docking.MaximizedId);
             input.Focus();
             Keyboard.Focus(input);
             input.Text = "v";
@@ -1002,9 +947,7 @@ public sealed class ShellChromeContractTests
         RunShell(window =>
         {
             window.AttachCommandCatalogSession(session);
-            window.Docking.MaximizeWindow(StandardWindowIds.Console);
             UiTestHost.Pump();
-            window.RefreshCommandCompletionFocus();
             var console = Assert.Single(FindVisualDescendants<ConsoleView>(window));
             var input = Assert.IsType<TextBox>(console.FindName("Input"));
             var popup = Assert.IsType<Popup>(console.FindName("CompletionPopup"));
@@ -1118,7 +1061,7 @@ public sealed class ShellChromeContractTests
                     "aurora.log.level", "aurora.log.source", "aurora.log.keyword", "aurora.log.mute", "aurora.log.autoscroll",
                     "aurora.log.clear", "aurora.log.export", "aurora.log.copy", "aurora.log.focus",
                     "vulcan.app.hide", "vulcan.app.show", "vulcan.app.focusconsole", "vulcan.app.close",
-                    "aurora.ui.max", "aurora.log.focus",
+                    "aurora.log.focus",
                     "aurora.app.window", "aurora.ui.autohide", "aurora.command.copyexample",
                     "aurora.ui.selectfile", "aurora.ui.selectdirectory", "aurora.ui.dialog",
                 },
@@ -1257,8 +1200,10 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// REQ-UI-120：没有独立浮窗。指令、停靠门面、视图菜单与布局快照里都找不到能把页面单独浮出来的入口；
+    /// REQ-UI-120：停靠层没有独立浮窗。停靠门面、视图菜单与布局快照里都找不到把页面浮成 AvalonDock 浮窗的入口；
     /// 拖动途中的浮出只在 internal 的 <c>DockingHost.FloatForDrag</c> 上，不对外。
+    /// 1.30.1（REQ-UI-138）起 <c>aurora.ui.float</c> 这个名字回来了，但它是 Aurora 自己的置顶页面浮窗：
+    /// 不建 AvalonDock 浮窗、不进布局树；<c>aurora.ui.floatstate</c> 仍然没有。
     /// </summary>
     [Fact]
     public void FloatingWindowsAreNotAUserSurface()
@@ -1269,12 +1214,18 @@ public sealed class ShellChromeContractTests
 
         RunShell(window =>
         {
-            foreach (var command in new[] { "aurora.ui.float", "aurora.ui.floatstate" })
-            {
-                var result = window.Commands.ExecuteAsync($"{command} name={StandardWindowIds.Console}", "test")
-                    .GetAwaiter().GetResult();
-                Assert.False(result.Success, $"{command} 仍然可用");
-            }
+            var floatState = window.Commands.ExecuteAsync($"aurora.ui.floatstate name={StandardWindowIds.Console}", "test")
+                .GetAwaiter().GetResult();
+            Assert.False(floatState.Success, "aurora.ui.floatstate 仍然可用");
+
+            var floated = window.Commands.ExecuteAsync($"aurora.ui.float name={StandardWindowIds.Console} on=true", "test")
+                .GetAwaiter().GetResult();
+            Assert.True(floated.Success, floated.Message);
+            Assert.Empty(Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window)).Layout.FloatingWindows);
+            var restored = window.Commands.ExecuteAsync($"aurora.ui.float name={StandardWindowIds.Console}", "test")
+                .GetAwaiter().GetResult();
+            Assert.True(restored.Success, restored.Message);
+            Assert.Contains("还原", restored.Message, StringComparison.Ordinal);
 
             var menu = RequireButton(window, "MenuButton").ContextMenu!;
             var view = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "视图(_V)"));
@@ -1629,7 +1580,6 @@ public sealed class ShellChromeContractTests
             return availableClasses.Contains(commandClass, StringComparer.OrdinalIgnoreCase);
         }
 
-        public void SetConsoleQuery(string query) { }
         public bool MoveSelection(int direction) => false;
         public void Select(string? commandName) { }
 

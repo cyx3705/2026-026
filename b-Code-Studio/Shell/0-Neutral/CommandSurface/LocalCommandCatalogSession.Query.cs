@@ -84,15 +84,6 @@ internal sealed partial class LocalCommandCatalogSession
         return true;
     }
 
-    public void SetConsoleQuery(string query)
-    {
-        var normalized = query ?? "";
-        if (string.Equals(_consoleQuery, normalized, StringComparison.Ordinal))
-            return;
-        _consoleQuery = normalized;
-        ConsoleQueryChanged?.Invoke(this, EventArgs.Empty);
-    }
-
     public bool MoveSelection(int direction)
     {
         var visible = Visible();

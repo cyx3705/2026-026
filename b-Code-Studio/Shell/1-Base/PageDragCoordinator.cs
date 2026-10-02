@@ -15,7 +15,7 @@ namespace HistoryAurora.Shell.Base;
 /// <summary>
 /// 页面拖动的唯一入口（1.20.2 起；前身是顶栏协调器 <c>ShellTopBarCoordinator</c>）。
 ///
-/// 顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、双击页签专注、拖页签、
+/// 顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、拖页签、
 /// 拖页头移动窗口一并没有了。页面只剩两种拖法，走同一条 浮出 → 系统移动循环 → 蓝色停靠点 的路：
 /// <list type="bullet">
 ///   <item>Ctrl 标签态（REQ-UI-097）：按住 Ctrl，每一格窗格盖上写着页名的标签，按住标签拖走整页；</item>
@@ -33,7 +33,6 @@ internal sealed partial class PageDragCoordinator : IDisposable
     private readonly Window _window;
     private readonly DockingManager _manager;
     private readonly DockingHost _docking;
-    private readonly ShellBus _bus;
     private readonly IShellLog _log;
     private readonly WindowDragDriver _windowDragDriver = new();
 
@@ -45,13 +44,11 @@ internal sealed partial class PageDragCoordinator : IDisposable
         Window window,
         DockingManager manager,
         DockingHost docking,
-        ShellBus bus,
         IShellLog log)
     {
         _window = window;
         _manager = manager;
         _docking = docking;
-        _bus = bus;
         _log = log;
         _manager.LayoutFloatingWindowControlCreated += OnFloatingWindowCreated;
         _manager.AddHandler(
@@ -127,7 +124,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
         if (!session.TryTransition(DockingDragState.ThresholdReached))
             return;
         session.LastScreenPoint = start;
-        QueueRestoreAndFloat(session);
+        QueueFloat(session);
     }
 
     private static bool IsPageLabelCover(FrameworkElement element)
@@ -196,27 +193,12 @@ internal sealed partial class PageDragCoordinator : IDisposable
         surface.CaptureMouse();
     }
 
-    private async Task RestoreAndFloatAsync(DockingDragSession session)
+    private async Task FloatAsync(DockingDragSession session)
     {
         if (!ReferenceEquals(_dragSession, session))
             return;
 
         var id = session.PageId;
-        if (_docking.MaximizedId != null)
-        {
-            var restored = await _bus.ExecuteAsync("aurora.ui.restore", "UI").ConfigureAwait(true);
-            if (!restored.Success)
-            {
-                CompleteDragSession(session, "restore command failed", cancelled: true);
-                _log.Error(ChromeLogSource, $"恢复专注布局失败：{restored.Message}");
-                return;
-            }
-
-            await _window.Dispatcher.InvokeAsync(
-                _window.UpdateLayout,
-                DispatcherPriority.Loaded);
-        }
-
         var context = new FloatingDragContext(
             id,
             ResolveEmbeddedPaneSize(id),
@@ -240,7 +222,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
         session.Completion = completion;
         try
         {
-            // 浮出只作拖动载体（REQ-UI-120），直接调停靠层——aurora.ui.float 随独立浮窗删除。
+            // 浮出只作拖动载体（REQ-UI-120），直接调停靠层；与置顶页面浮窗（aurora.ui.float，REQ-UI-138）无关。
             _docking.FloatForDrag(id);
         }
         catch (Exception ex)
@@ -336,11 +318,11 @@ internal sealed partial class PageDragCoordinator : IDisposable
         session.LastScreenPoint = current;
         WindowDragDriver.ReleaseMouseCapture(session.Surface);
         // 过阈值才浮出：载体有了真正的系统移动循环，蓝色停靠点才会出现，落点才确定。
-        QueueRestoreAndFloat(session);
+        QueueFloat(session);
         e.Handled = true;
     }
 
-    private void QueueRestoreAndFloat(DockingDragSession session)
+    private void QueueFloat(DockingDragSession session)
     {
         // 让 AvalonDock 先走完这一次鼠标路由再改布局：在 PreviewMouseMove 里直接建浮窗
         // 会重入焦点钩子，钩子去查另一个调度器的可视元素，能把宿主整个带走。
@@ -349,7 +331,7 @@ internal sealed partial class PageDragCoordinator : IDisposable
 
         _window.Dispatcher.BeginInvoke(
             DispatcherPriority.Input,
-            new Action(() => _ = RestoreAndFloatAsync(session)));
+            new Action(() => _ = FloatAsync(session)));
     }
 
     private void OnDockPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

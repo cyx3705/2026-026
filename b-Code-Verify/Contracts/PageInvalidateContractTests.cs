@@ -172,7 +172,6 @@ public sealed class PageInvalidateContractTests
 
         public List<string> Dropped { get; } = [];
 
-        public string? MaximizedId => null;
 
         public event EventHandler<ShellCommandEventArgs>? CommandGenerated;
 
@@ -209,9 +208,6 @@ public sealed class PageInvalidateContractTests
 
         public void UnregisterWindow(string id) { }
 
-        public void MaximizeWindow(string id) { }
-
-        public void RestoreLayoutFromMaximized() { }
     }
 
     private sealed class MemoryLog : IShellLog

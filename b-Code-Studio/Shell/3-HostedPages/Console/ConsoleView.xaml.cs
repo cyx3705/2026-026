@@ -57,10 +57,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     private ConsoleCompletionResult _completionResult = ConsoleCompletionResult.Empty;
     private int _completionIndex;
     private bool _suppressTextChanged;
-    private Func<bool>? _completionFocusPredicate;
-    private Action? _showCommandCatalog;
-    private bool _completionFocusEnabled = true;
-    private bool _catalogShownForInput;
     private CancellationTokenSource? _completionRefresh;
 
     public ConsoleView(
@@ -173,37 +169,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
 
     /// <inheritdoc />
     public void ActivateContent() => FocusInput();
-
-    /// <summary>由 ShellWindow 注入聚焦判定和非聚焦命令集切换；保持为内部接线，不进入公开 API。</summary>
-    internal void ConfigureCompletionRouting(
-        Func<bool> completionFocusPredicate,
-        Action showCommandCatalog)
-    {
-        _completionFocusPredicate = completionFocusPredicate;
-        _showCommandCatalog = showCommandCatalog;
-        RefreshCompletionFocus();
-    }
-
-    /// <summary>停靠布局改变后刷新候选模式；非聚焦时不显示候选 Popup。</summary>
-    internal void RefreshCompletionFocus()
-    {
-        var enabled = _completionFocusPredicate?.Invoke() ?? true;
-        if (enabled != _completionFocusEnabled)
-        {
-            _completionFocusEnabled = enabled;
-            _catalogShownForInput = false;
-        }
-
-        if (!enabled)
-        {
-            HideCompletions();
-            SyncCommandCatalog(showCatalog: false);
-        }
-        else if (Input.IsKeyboardFocusWithin && !string.IsNullOrWhiteSpace(Input.Text))
-            RefreshCompletions();
-        else
-            _catalogSession.SetConsoleQuery("");
-    }
 
     internal bool TrySetSource(string source, out IReadOnlyList<string> availableDomains)
     {
@@ -643,7 +608,7 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
     private void OnInputTextChanged(object sender, TextChangedEventArgs e)
     {
         if (!_suppressTextChanged)
-            RefreshCompletions(redirectNonFocused: true);
+            RefreshCompletions();
     }
 
     private void OnInputSelectionChanged(object sender, RoutedEventArgs e)
@@ -667,42 +632,26 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         Input.Text = text;
         Input.CaretIndex = text.Length;
         _suppressTextChanged = false;
-        if (string.IsNullOrWhiteSpace(text))
-            _catalogShownForInput = false;
         HideCompletions();
-        RefreshCompletions(redirectNonFocused: true);
+        RefreshCompletions();
     }
 
     private void RefreshCompletions()
-        => RefreshCompletions(redirectNonFocused: false);
-
-    private void RefreshCompletions(bool redirectNonFocused)
     {
         _completionRefresh?.Cancel();
         _completionRefresh?.Dispose();
         _completionRefresh = new CancellationTokenSource();
-        _ = RefreshCompletionsAsync(redirectNonFocused, _completionRefresh.Token);
+        _ = RefreshCompletionsAsync(_completionRefresh.Token);
     }
 
-    private async Task RefreshCompletionsAsync(
-        bool redirectNonFocused,
-        CancellationToken cancellationToken)
+    private async Task RefreshCompletionsAsync(CancellationToken cancellationToken)
     {
         if (!IsLoaded)
             return;
 
         if (string.IsNullOrWhiteSpace(Input.Text))
         {
-            _catalogShownForInput = false;
-            _catalogSession.SetConsoleQuery("");
             ClearCompletionVisuals();
-            return;
-        }
-
-        if (!(_completionFocusPredicate?.Invoke() ?? _completionFocusEnabled))
-        {
-            ClearCompletionVisuals();
-            SyncCommandCatalog(showCatalog: false);
             return;
         }
 
@@ -712,8 +661,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
             return;
         }
 
-        _catalogShownForInput = false;
-        _catalogSession.SetConsoleQuery("");
         var text = Input.Text;
         var caret = Input.CaretIndex;
         try
@@ -738,30 +685,6 @@ public partial class ConsoleView : UserControl, HistoryAurora.Shell.Components.M
         CompletionList.SelectedIndex = _completionResult.HasCandidates ? 0 : -1;
         CompletionBorder.Width = Math.Clamp(Input.ActualWidth, 1, 720);
         CompletionPopup.IsOpen = _completionResult.HasCandidates;
-    }
-
-    private void SyncCommandCatalog(bool showCatalog)
-    {
-        var query = Input.Text;
-        _catalogSession.SetConsoleQuery(query);
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            _catalogShownForInput = false;
-            return;
-        }
-
-        if (!showCatalog || _catalogShownForInput)
-            return;
-
-        _catalogShownForInput = true;
-        try
-        {
-            _showCommandCatalog?.Invoke();
-        }
-        catch (Exception ex)
-        {
-            _log.Error("console", $"切换命令集失败: {ex.GetType().Name}");
-        }
     }
 
     private void CycleCompletion(int direction)

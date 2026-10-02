@@ -161,7 +161,6 @@ internal sealed class DeferredCommandCatalogSession : ICommandCatalogSession
                choice => choice.Equals(value, StringComparison.OrdinalIgnoreCase))
            ?? value;
 
-    public void SetConsoleQuery(string query) => Inner?.SetConsoleQuery(query);
 
     public bool MoveSelection(int direction) => Inner?.MoveSelection(direction) ?? false;
 

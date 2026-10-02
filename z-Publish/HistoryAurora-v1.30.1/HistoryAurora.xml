@@ -245,12 +245,6 @@
         <member name="M:HistoryAurora.Shell.Neutral.CommandSurface.LocalCommandCatalogSession.CompleteParameterName(System.String,System.String,System.Collections.Generic.IReadOnlyList{HistoryAurora.Shell.Neutral.CommandSurface.CommandParameterInfo},System.Int32,System.Int32)">
             <summary>参数名补全。已经写过的参数不再列出——重复给同一个参数赋值是语法错。</summary>
         </member>
-        <member name="E:HistoryAurora.Shell.Neutral.CommandSurface.LocalCommandCatalogSession.ConsoleQueryChanged">
-            <summary>
-            控制台输入框的内容变了。**不走 <see cref="E:HistoryAurora.Shell.Neutral.CommandSurface.LocalCommandCatalogSession.Changed"/>**：控制台正是 Changed 的订阅方，
-            而它在处理 Changed 时又会回头设置这个查询串——两者接在一起就是一个自激回路。
-            </summary>
-        </member>
         <member name="P:HistoryAurora.Shell.Neutral.CommandSurface.LocalCommandCatalogSession.Classes">
             <summary>严格两级：域为「全部」时不列类，否则类的取值范围随域收敛（DEC-021）。</summary>
         </member>
@@ -1524,17 +1518,6 @@
             （REQ-UI-134），"all" 这个值也就不再有特殊含义。
             </summary>
         </member>
-        <member name="F:HistoryAurora.Shell.Base.Docking.DockingHost._rootBeforeMaximize">
-             <summary>
-             聚焦（最大化某一页）之前的布局树本身。
-            
-             聚焦与还原不经序列化：留住这棵树的引用，还原时装回去。聚焦期间若要关闭或
-             保存命名布局，另用纯数据 JSON 快照记录聚焦前状态；两条职责不要合并。
-             </summary>
-        </member>
-        <member name="F:HistoryAurora.Shell.Base.Docking.DockingHost._snapshotBeforeMaximize">
-            <summary>聚焦前的纯数据快照，供聚焦期间关闭或保存命名布局时使用。</summary>
-        </member>
         <member name="P:HistoryAurora.Shell.Base.Docking.DockingHost.CurrentLayoutName">
             <summary>当前布局方案名(状态栏显示用)。</summary>
         </member>
@@ -1575,7 +1558,7 @@
             <summary>把一页摆回登记时的默认位置并露面，那一格原来那一页被藏起来。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.ReplaceWindow(HistoryAurora.Shell.Base.Docking.ToolWindowDescriptor,System.String)">
-            <summary>热重载只换内容，保留停靠节点、隐藏、分栏、页面浮窗与专注布局。</summary>
+            <summary>热重载只换内容，保留停靠节点、隐藏、分栏与页面浮窗。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.Suppress">
             <summary>防再入(§14.2 清单 4):指令/API 驱动的布局变更不回声成新指令。</summary>
@@ -1617,7 +1600,7 @@
             <summary>热重载换了内容：浮着的话新内容直接进浮窗。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.SetNodeContents(System.String,System.Object)">
-            <summary>两棵布局树（专注态留着的那棵也算）里这一页的全部节点换内容。</summary>
+            <summary>布局树里这一页的全部节点（含隐藏的）换内容。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.FloatResources">
             <summary>主窗体与停靠管理器的资源：页面在停靠区里就是从这两层取令牌和样式的。</summary>
@@ -1675,7 +1658,7 @@
              </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.EnsureRegistered(System.String)">
-            <summary>这一页还不在布局里（聚焦期间登记、布局恢复遗漏）：按默认位置补进来，不抢位。</summary>
+            <summary>这一页还不在布局里（布局恢复遗漏）：按默认位置补进来，不抢位。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.CapturePlacements">
             <summary>每页的位置台账。一格一页之后没有「标签组目标」与「中央区第几页」，这两项一律写空。</summary>
@@ -1761,7 +1744,6 @@
             布局里出现了一格多页（AvalonDock 的「放进这一格」停靠点，或 1.20.1 及以前存下的布局）：
             每格留一页，其余隐藏。留哪一页按先后：<paramref name="keepId"/>；刚从浮窗落下来的；
             活动页；这一格的选中页；最后一页。
-            专注态换的是另一棵布局树，不处理。
             </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Base.Docking.DockingHost.OnFloatingWindowControlCreated(System.Object,AvalonDock.LayoutFloatingWindowControlCreatedEventArgs)">
@@ -1920,7 +1902,7 @@
              <summary>
              页面拖动的唯一入口（1.20.2 起；前身是顶栏协调器 <c>ShellTopBarCoordinator</c>）。
             
-             顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、双击页签专注、拖页签、
+             顶栏已经整个删掉（REQ-UI-101）：窗格不再画页签行，按页签换页、拖页签、
              拖页头移动窗口一并没有了。页面只剩两种拖法，走同一条 浮出 → 系统移动循环 → 蓝色停靠点 的路：
              <list type="bullet">
                <item>Ctrl 标签态（REQ-UI-097）：按住 Ctrl，每一格窗格盖上写着页名的标签，按住标签拖走整页；</item>
@@ -4981,12 +4963,6 @@
         <member name="M:HistoryAurora.Shell.HostedPages.Console.ConsoleView.ActivateContent">
             <inheritdoc />
         </member>
-        <member name="M:HistoryAurora.Shell.HostedPages.Console.ConsoleView.ConfigureCompletionRouting(System.Func{System.Boolean},System.Action)">
-            <summary>由 ShellWindow 注入聚焦判定和非聚焦命令集切换；保持为内部接线，不进入公开 API。</summary>
-        </member>
-        <member name="M:HistoryAurora.Shell.HostedPages.Console.ConsoleView.RefreshCompletionFocus">
-            <summary>停靠布局改变后刷新候选模式；非聚焦时不显示候选 Popup。</summary>
-        </member>
         <member name="M:HistoryAurora.Shell.HostedPages.Console.ConsoleView.TrySetClass(System.String,System.Collections.Generic.IReadOnlyList{System.String}@)">
             <summary>
             设置命令类过滤。落点只剩命令集：控制台自 1.25.0 起不按类过滤，
@@ -5332,9 +5308,9 @@
             
              指令总线对外只回「执行异常(类型名)」——它刻意不把 Message 与堆栈发出去
              （`ShellBus` 里 `safeError = ex.GetType().Name`）。这条策略对远端是对的，
-             但本机排查也只剩一个类型名：2026-08-25 真机报
-             `aurora.ui.max 执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
-             而这一条在自动化里复现不出来（浮窗、模块页、逐个窗口最大化都试过，全绿）。
+             但本机排查也只剩一个类型名：2026-08-25 真机报一条停靠指令
+             `执行异常(NotSupportedException)`，日志里没有任何能定位到行的东西，
+             而这一条在自动化里复现不出来。
              所以停靠动作在这里先把完整异常写进 Aurora 自己的控制台，再让它照常抛出去。
              </summary>
         </member>
@@ -5412,7 +5388,7 @@
             
              1.20.0 起右栏从左侧搬到右侧，并接下两件从顶栏转过来的事：顶部的窗口控制组，
              和下半部分的常用页面胶囊——按住拖出来就是一个带蓝色停靠点的浮窗，落到停靠点上就嵌进场景。
-             1.20.2 顶栏整个删掉（REQ-UI-101），右栏在专注态也不让位：窗口控制组一直在这里。
+             1.20.2 顶栏整个删掉（REQ-UI-101），窗口控制组一直在右栏。
             
              1.20.3（REQ-UI-106）搜索浮层退役：搜索框就是右栏第二行，输入随手**筛下面这两段**——
              场景与常用页面，回车打开排在最前的那个候选。浮层是「另开一个满屏的界面去找东西」，
@@ -5487,9 +5463,9 @@
              AvalonDock 默认外观。**同一个毛病要一次找全。**
              </summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ApplyPaneStyles(System.Boolean)">
+        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ApplyPaneStyles">
             <summary>
-            窗格外观下发(UI-01 卡片化 + UI-04 专注形态)。1.20.2 起窗格没有页签行（REQ-UI-101，顶栏删除）。
+            窗格外观下发(UI-01 卡片化)。1.20.2 起窗格没有页签行（REQ-UI-101，顶栏删除）。
             必须经 DockingManager.AnchorablePaneControlStyle / DocumentPaneControlStyle 属性下发:
             主题字典里的隐式 Style 不会命中窗格控件,浮动窗口也走这两个属性。
             以主题内置窗格样式为基底(继承 ItemContainerStyle 等),只覆盖模板。
@@ -5499,23 +5475,8 @@
         <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ScheduleFloatingTheme">
             <summary>R4-3:浮动窗口是布局后才建出来的,换完窗格样式后补一次主题最稳妥。</summary>
         </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ApplyFocusChrome">
-            <summary>
-            令牌字典整份替换:应用色与 AvalonDock 主题画刷键都在同一份令牌里,
-            因此不会出现「界面已深色、页签仍浅色」。三处都要换:
-            窗体(视图)、DockingManager(停靠区,压过 VS2013 主题)、应用级(浮动窗口是独立 Window)。
-            </summary>
-        </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ToggleFocusMode">
-            <summary>F11:在当前活动页的专注态与常规态之间切换。</summary>
-        </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.IsTextInputFocused">
-             <summary>
-             Esc 退出专注不得抢走控制台等输入控件的 Esc(UI-04.4)。
-            
-             逐个列举取值控件,不写 <c>Selector</c>:Selector 连 TabControl 一起框进来,
-             而焦点落在页签上是常态,那样 Esc 会在最该起作用的时候失效。
-             </summary>
+        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ApplyShellChrome">
+            <summary>主窗体外观随布局变化重下发：控制组常显、标题栏命中区为零、窗格样式。</summary>
         </member>
         <member name="M:HistoryAurora.Shell.Composition.ShellWindow.Item(System.String,System.String)">
             <summary>菜单项点击同样是发指令(S-02):统一经总线分发、回显、留痕。</summary>
@@ -5808,12 +5769,6 @@
             </summary>
         </member>
         <member name="M:HistoryAurora.Shell.Composition.ShellWindow.AttachCommandCatalogSession(HistoryAurora.Shell.Neutral.CommandSurface.ICommandCatalogSession)">
-            <inheritdoc />
-        </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.ConfigureCommandCompletionRouting(System.Func{System.Boolean},System.Action)">
-            <inheritdoc />
-        </member>
-        <member name="M:HistoryAurora.Shell.Composition.ShellWindow.RefreshCommandCompletionFocus">
             <inheritdoc />
         </member>
         <member name="P:HistoryAurora.Shell.Composition.ShellWindow.AboutText">

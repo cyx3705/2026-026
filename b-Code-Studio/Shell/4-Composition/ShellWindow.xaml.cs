@@ -92,7 +92,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     // Alt 单独按下(未与其他键组合)才呼出菜单,避免抢走 Alt+Tab 等组合
     private bool _altPressedAlone;
 
-    // 主题字典副本:窗格基底样式与 3.1 卡片/专注模板都从这里取
+    // 主题字典副本:窗格基底样式与 3.1 卡片模板都从这里取
     private ResourceDictionary? _themeResources;
 
     // UI-08:浅色/深色令牌整份切换(aurora.app.theme),设置项持久化
@@ -162,7 +162,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         RestoreWindowBounds();
 
         LoadThemeResources();
-        ApplyPaneStyles(chromeless: false);
+        ApplyPaneStyles();
 
         // ---- 指令核心(§5):总线 + 自有指令表 + 历史 + 控制台
         // 1.29.0：总线是宿主那条（ShellBus 只加一份目录）；自有指令表只收描述符，由装配方原样登记进宿主。
@@ -248,15 +248,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         // 才按当前场景决定露不露面。上次退出时的布局本来就是当前场景的样子，这里不再切一次。
         _usage = new Components.Scenes.UsageLedger(settings, log);
         _scenes = new Components.Scenes.SceneManager(_docking, settings, _usage, log);
-        ConfigureCommandCompletionRouting(
-            () => _docking.MaximizedId?.Equals(
-                StandardWindowIds.Console,
-                StringComparison.OrdinalIgnoreCase) == true,
-            () =>
-            {
-                _ = ShowCommandCatalogForCompletionAsync();
-            });
-        _pageDrag = new PageDragCoordinator(this, DockManager, _docking, _bus, _log);
+        _pageDrag = new PageDragCoordinator(this, DockManager, _docking, _log);
         // 浮动窗口主题需要在「布局稳定之后」才补得准,但不能挂
         // LayoutUpdated:那个事件每帧都发,回调里任何写操作都会再触发一次布局,
         // 直接转成 100% CPU 的死循环(实测)。改为低频巡检 + 幂等写入。
@@ -303,15 +295,13 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             }
             UpdateLayoutIndicator();
 
-            // UI-04:页面最大化态与常规态的窗格外观在此切换。
-            // WindowsChanged 是 MaximizeWindow / RestoreLayoutFromMaximized 的共同出口。
-            ApplyFocusChrome();
+            ApplyShellChrome();
 
             // R4-3:刚拖出来的浮动窗口带的是自己那份浅色令牌,补一次主题
             ApplyThemeToFloatingWindows();
 
             // 新登记的页不属于当前场景就藏起来（Janus 热重载不能挤进 Minerva 场景）；
-            // 右栏（场景与常用页面胶囊）跟着页面显隐与专注态重画。
+            // 右栏（场景与常用页面胶囊）跟着页面显隐重画。
             _scenes.OnWindowsChanged();
             RefreshNavigatorRail();
         });
@@ -396,7 +386,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         {
             if (!result.Success)
             {
-                FocusConsole(resetFilters: true, preserveMaximizedLayout: true);
+                FocusConsole(resetFilters: true);
             }
             UpdateLayoutIndicator();
         });
@@ -409,7 +399,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
                 {
                     UpdateErrorBadge();
                     if (entry.Level >= ShellLogLevel.Fatal)
-                        FocusConsole(resetFilters: true, preserveMaximizedLayout: true);
+                        FocusConsole(resetFilters: true);
                 });
             }
         };
@@ -420,7 +410,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
         BuildMenus();
         UpdateLayoutIndicator();
-        ApplyFocusChrome();
+        ApplyShellChrome();
         InitializeNavigator();
         InitializeLabelMode();
 
@@ -631,13 +621,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     public void AttachCommandCatalogSession(ICommandCatalogSession session)
         => _catalogSession.Attach(session);
 
-    /// <inheritdoc />
-    public void ConfigureCommandCompletionRouting(Func<bool> isConsoleFocused, Action showCommandCatalog)
-        => _console.ConfigureCompletionRouting(isConsoleFocused, showCommandCatalog);
-
-    /// <inheritdoc />
-    public void RefreshCommandCompletionFocus() => _console.RefreshCompletionFocus();
-
     /// <summary>关于对话框文本(aurora.app.about)。</summary>
     public string AboutText =>
         $"{_config.AppName} v{_config.AppVersion}\n\n基于 HistoryVulcan 通用窗口框架模板\n.NET 8 + WPF + AvalonDock 4.72.1";
@@ -693,16 +676,10 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         };
     }
 
-    private void FocusConsole(bool resetFilters = false, bool preserveMaximizedLayout = false)
+    private void FocusConsole(bool resetFilters = false)
     {
         if (resetFilters)
             _console.ResetFilters();
-        if (preserveMaximizedLayout && _docking.MaximizedId != null)
-        {
-            if (_docking.MaximizedId.Equals(StandardWindowIds.Console, StringComparison.OrdinalIgnoreCase))
-                ActivateToolContent(StandardWindowIds.Console);
-            return;
-        }
         _docking.Show(StandardWindowIds.Console);
         ActivateToolContent(StandardWindowIds.Console);
     }
@@ -711,22 +688,6 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     {
         if (_docking.FindContent(id) is IActivatableToolContent activatable)
             activatable.ActivateContent();
-    }
-
-    private async Task ShowCommandCatalogForCompletionAsync()
-    {
-        try
-        {
-            var result = await _bus.ExecuteAsync(
-                $"aurora.ui.show name={StandardWindowIds.Mcp}",
-                "UI");
-            if (!result.Success)
-                _log.Error("console", $"切换命令集失败: {result.Message}");
-        }
-        catch (Exception ex)
-        {
-            _log.Error("console", $"切换命令集异常: {ex.GetType().Name}");
-        }
     }
 
     // ---------------------------------------------------------------- 错误徽章(UI-05)
@@ -792,6 +753,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         _chromeUpkeep.Stop();
         _discoverDebounce.Stop();
         SaveWindowBounds();
+        // 置顶小窗里的页先搬回停靠区（REQ-UI-138）：浮窗没有 Owner，不收的话进程关不掉。
+        _docking.RestoreAllFloats();
         // 先写回当前场景：下次切回来是离开时的样子。layout.v1.json 照旧另存一份供启动恢复。
         _scenes.SaveActiveLayout();
         _docking.SaveCurrentLayout();
@@ -829,7 +792,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
             Name = "vulcan.app.focusconsole",
             Domain = "vulcan",
             CommandClass = "app",
-            Summary = "显示窗口、打开并聚焦控制台，同时最大化控制台",
+            Summary = "显示窗口、打开控制台并把输入焦点放进去",
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
@@ -837,10 +800,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
                 if (WindowState == WindowState.Minimized)
                     WindowState = WindowState.Normal;
                 Activate();
-                FocusConsole(resetFilters: false, preserveMaximizedLayout: false);
-                _docking.MaximizeWindow(StandardWindowIds.Console);
+                FocusConsole();
                 _console.FocusInput();
-                return CommandResult.Ok("控制台已显示、聚焦并最大化");
+                return CommandResult.Ok("控制台已显示并聚焦");
             }),
         }, FrontendCommandCatalog.Source);
 

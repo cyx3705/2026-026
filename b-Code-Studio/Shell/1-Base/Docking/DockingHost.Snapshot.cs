@@ -403,7 +403,6 @@ internal sealed partial class DockingHost : ISceneDocking
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(seed);
-        RestoreLayoutFromMaximized();
         SetRegistrationScene(name);
 
         var initial = new HashSet<string>(seed, StringComparer.OrdinalIgnoreCase);

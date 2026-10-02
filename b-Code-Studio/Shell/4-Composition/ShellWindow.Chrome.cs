@@ -107,20 +107,18 @@ internal partial class ShellWindow
     }
 
     /// <summary>
-    /// 窗格外观下发(UI-01 卡片化 + UI-04 专注形态)。1.20.2 起窗格没有页签行（REQ-UI-101，顶栏删除）。
+    /// 窗格外观下发(UI-01 卡片化)。1.20.2 起窗格没有页签行（REQ-UI-101，顶栏删除）。
     /// 必须经 DockingManager.AnchorablePaneControlStyle / DocumentPaneControlStyle 属性下发:
     /// 主题字典里的隐式 Style 不会命中窗格控件,浮动窗口也走这两个属性。
     /// 以主题内置窗格样式为基底(继承 ItemContainerStyle 等),只覆盖模板。
     /// v5 迁移注意:基底样式的资源键随主题版本变化,需同步调整。
     /// </summary>
-    private void ApplyPaneStyles(bool chromeless)
+    private void ApplyPaneStyles()
     {
-        var suffix = chromeless ? ".Chromeless" : string.Empty;
-
         if (BuildPaneStyle(
                 typeof(AvalonDock.Controls.LayoutAnchorablePaneControl),
                 "AvalonDockThemeVs2013AnchorablePaneControlStyle",
-                $"Aurora.Docking.AnchorablePaneTemplate{suffix}",
+                "Aurora.Docking.AnchorablePaneTemplate",
                 "Aurora.Docking.AnchorableTabContainerStyle") is { } anchorableStyle)
         {
             DockManager.AnchorablePaneControlStyle = anchorableStyle;
@@ -129,7 +127,7 @@ internal partial class ShellWindow
         if (BuildPaneStyle(
                 typeof(AvalonDock.Controls.LayoutDocumentPaneControl),
                 "AvalonDockThemeVs2013DocumentPaneControlStyle",
-                $"Aurora.Docking.DocumentPaneTemplate{suffix}",
+                "Aurora.Docking.DocumentPaneTemplate",
                 "Aurora.Docking.DocumentTabContainerStyle") is { } documentStyle)
         {
             DockManager.DocumentPaneControlStyle = documentStyle;
@@ -197,10 +195,4 @@ internal partial class ShellWindow
                 ApplyThemeToFloatingWindows();
         });
     }
-
-    // ---------------------------------------------------------------- 专注模式(UI-04)
-    //
-    // 页面最大化 = 专注态:窗格铺满,右栏(含窗口控制组)照常在右侧。
-    // 由 DockingHost.WindowsChanged 驱动 —— MaximizeWindow 与
-    // RestoreLayoutFromMaximized 都从那里出口,不需要新增公开 API。
 }

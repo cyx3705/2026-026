@@ -189,7 +189,6 @@ public sealed class ComponentRequestContractTests
 
     private sealed class NullDocking : IDockingService
     {
-        public string? MaximizedId => null;
 
         public IReadOnlyList<ToolWindowInfo> ListWindows() => [];
 
@@ -217,9 +216,6 @@ public sealed class ComponentRequestContractTests
 
         public void UnregisterOwner(string owner) { }
 
-        public void MaximizeWindow(string id) { }
-
-        public void RestoreLayoutFromMaximized() { }
 
         public event EventHandler<ShellCommandEventArgs>? CommandGenerated { add { } remove { } }
 

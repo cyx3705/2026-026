@@ -42,8 +42,4 @@ internal interface IShellCommandWorkbenchHost
     string DataDirectory { get; }
 
     void AttachCommandCatalogSession(ICommandCatalogSession session);
-
-    void ConfigureCommandCompletionRouting(Func<bool> isConsoleFocused, Action showCommandCatalog);
-
-    void RefreshCommandCompletionFocus();
 }

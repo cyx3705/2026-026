@@ -50,7 +50,6 @@
             <Geometry x:Key="Aurora.Icon.Maximize">M 0,0 H 10 V 10 H 0 Z</Geometry>
             <Geometry x:Key="Aurora.Icon.Restore">M 0,2.5 H 7.5 V 10 H 0 Z M 2.5,2.5 V 0 H 10 V 7.5 H 7.5</Geometry>
             <Geometry x:Key="Aurora.Icon.Close">M 0,0 L 10,10 M 10,0 L 0,10</Geometry>
-            <Geometry x:Key="Aurora.Icon.ExitFocus">M 0,4 H 4 V 0 M 12,0 V 4 H 16 M 16,8 H 12 V 12 M 4,12 V 8 H 0</Geometry>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -91,7 +90,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 窗口控制组的唯一落点。专注态右栏也在,它不再搬家。 -->
+                    <!-- 窗口控制组的唯一落点。 -->
                     <ContentControl x:Name="NavChromeHost"
                                     Grid.Row="0"
                                     Height="{DynamicResource Aurora.Size.Tab}"
@@ -104,16 +103,6 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Orientation="Horizontal">
-                <!-- UI-04.4:退出专注,仅页面最大化时出现 -->
-                <Button x:Name="ExitFocusButton"
-                        Style="{StaticResource Aurora.ChromeIconButton}"
-                        Visibility="Collapsed"
-                        Click="OnExitFocusClick">
-                    <Path Data="{StaticResource Aurora.Icon.ExitFocus}"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                          StrokeThickness="1.2" />
-                </Button>
-
                 <!-- UI-03:折叠后的菜单,恒在三个窗口按钮左侧 -->
                 <Button x:Name="MenuButton"
                         Style="{StaticResource Aurora.ChromeIconButton}"

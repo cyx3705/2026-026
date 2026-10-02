@@ -15,8 +15,6 @@ internal sealed record ToolWindowInfo(
 /// <summary>停靠系统对外门面。5.0 起由 Aurora 自持，不再来自宿主 Core。</summary>
 internal interface IDockingService
 {
-    string? MaximizedId { get; }
-
     IReadOnlyList<ToolWindowInfo> ListWindows();
 
     void Show(string id);
@@ -48,10 +46,6 @@ internal interface IDockingService
     void UnregisterWindow(string id);
 
     void UnregisterOwner(string owner);
-
-    void MaximizeWindow(string id);
-
-    void RestoreLayoutFromMaximized();
 
     event EventHandler<ShellCommandEventArgs>? CommandGenerated;
 

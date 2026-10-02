@@ -39,8 +39,6 @@ public interface ICommandCatalogSession : IDisposable
 
     bool TrySetCommandClass(string commandClass, out IReadOnlyList<string> availableClasses);
 
-    void SetConsoleQuery(string query);
-
     bool MoveSelection(int direction);
 
     void Select(string? commandName);

@@ -82,8 +82,7 @@
 
     <!--
         工具页内容宿主:原模板是「标题条 + 内容」两段,标题条就是那条蓝条。改成内容铺满。
-        1.20.2 顶栏删除(REQ-UI-101):页签行上的「恢复页面」等动作一并删掉,
-        退出专注走右栏窗口控制组里的按钮、F11 或 Esc。
+        1.20.2 顶栏删除(REQ-UI-101):页签行上的「恢复页面」等动作一并删掉。
     -->
     <Style TargetType="{x:Type adc:LayoutAnchorableControl}">
         <Setter Property="Template">
@@ -278,35 +277,6 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
-    <!-- ================================================================ 窗格模板:专注形态(UI-04) -->
-
-    <ControlTemplate x:Key="Aurora.Docking.AnchorablePaneTemplate.Chromeless"
-                     TargetType="{x:Type adc:LayoutAnchorablePaneControl}">
-        <Grid Background="{DynamicResource Aurora.Brush.Surface}"
-              ClipToBounds="True"
-              KeyboardNavigation.TabNavigation="Local"
-              SnapsToDevicePixels="True">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <!-- 专注态同样没有页签行;窗口控制组一直在右栏 -->
-            <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
-                <adc:AnchorablePaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
-            </Grid>
-            <ContentPresenter x:Name="PART_SelectedContentHost"
-                              Grid.Row="1"
-                              Margin="0"
-                              Content="{TemplateBinding SelectedContent}"
-                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"
-                              ContentStringFormat="{TemplateBinding SelectedContentStringFormat}"
-                              ContentSource="SelectedContent"
-                              KeyboardNavigation.DirectionalNavigation="Contained"
-                              KeyboardNavigation.TabNavigation="Cycle"
-                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-        </Grid>
-    </ControlTemplate>
-
     <!-- Keep AvalonDock's FloatingWindowContentHost and remove only its outer title row. -->
     <Style TargetType="{x:Type adc:LayoutAnchorableFloatingWindowControl}">
         <Setter Property="WindowStyle" Value="None" />
@@ -403,30 +373,5 @@
             </Setter.Value>
         </Setter>
     </Style>
-
-    <ControlTemplate x:Key="Aurora.Docking.DocumentPaneTemplate.Chromeless"
-                     TargetType="{x:Type adc:LayoutDocumentPaneControl}">
-        <Grid Background="{DynamicResource Aurora.Brush.Surface}"
-              ClipToBounds="True"
-              KeyboardNavigation.TabNavigation="Local"
-              SnapsToDevicePixels="True">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Height="0" ClipToBounds="True" Visibility="Hidden" IsHitTestVisible="False">
-                <adc:DocumentPaneTabPanel x:Name="HeaderPanel" IsItemsHost="True" />
-            </Grid>
-            <ContentPresenter x:Name="PART_SelectedContentHost"
-                              Grid.Row="1"
-                              Content="{TemplateBinding SelectedContent}"
-                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"
-                              ContentStringFormat="{TemplateBinding SelectedContentStringFormat}"
-                              ContentSource="SelectedContent"
-                              KeyboardNavigation.DirectionalNavigation="Contained"
-                              KeyboardNavigation.TabNavigation="Cycle"
-                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-        </Grid>
-    </ControlTemplate>
 
 </ResourceDictionary>

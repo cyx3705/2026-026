@@ -70,17 +70,6 @@ internal sealed partial class DockingHost : IDockingService
     private Dictionary<string, WinState> _baseline = new(StringComparer.OrdinalIgnoreCase);
     private LayoutRoot? _attachedRoot;
     private int _suppress;
-    private string? _maximizedId;
-    /// <summary>
-    /// 聚焦（最大化某一页）之前的布局树本身。
-    ///
-    /// 聚焦与还原不经序列化：留住这棵树的引用，还原时装回去。聚焦期间若要关闭或
-    /// 保存命名布局，另用纯数据 JSON 快照记录聚焦前状态；两条职责不要合并。
-    /// </summary>
-    private LayoutRoot? _rootBeforeMaximize;
-
-    /// <summary>聚焦前的纯数据快照，供聚焦期间关闭或保存命名布局时使用。</summary>
-    private string? _snapshotBeforeMaximize;
     private bool _centerRepairPending;
     private bool _presentationRefreshPending;
 
@@ -160,8 +149,6 @@ internal sealed partial class DockingHost : IDockingService
 
     /// <summary>当前布局方案名(状态栏显示用)。</summary>
     public string CurrentLayoutName { get; private set; } = "默认";
-
-    public string? MaximizedId => _maximizedId;
 
     /// <summary>true 表示下一次比例处理应从已恢复的布局反向采集比例,而非施加记录值。</summary>
     private bool _seedRatiosFromLayout;
@@ -251,7 +238,7 @@ internal sealed partial class DockingHost : IDockingService
         // 完整快照与位置台账独立保存：任一写入失败都不能阻断另一项。
         try
         {
-            var payload = _snapshotBeforeMaximize ?? SerializeLayout();
+            var payload = SerializeLayout();
             _store.WriteCurrent(payload);
             _log.Info(LayoutSource, "退出前已自动保存布局");
         }
@@ -277,8 +264,9 @@ internal sealed partial class DockingHost : IDockingService
             .Select(d =>
             {
                 var s = ComputeState(d.Id);
+                // 浮着 = 在 aurora.ui.float 的置顶小窗里（REQ-UI-138），或拖动途中的停靠层载体。
                 return new ToolWindowInfo(
-                    d.Id, d.Title, s.Visible, s.Floating, s.Side,
+                    d.Id, d.Title, s.Visible, s.Floating || IsPageFloating(d.Id), s.Side,
                     s.Visible && !s.Floating && s.Ratio > 0 ? s.Ratio : null,
                     _owners.GetValueOrDefault(d.Id, "framework"));
             })
@@ -287,7 +275,6 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>显示一页：它回到它的位置，那一格原来那一页被藏起来（REQ-UI-100）。</summary>
     public void Show(string id)
     {
-        RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
@@ -309,7 +296,6 @@ internal sealed partial class DockingHost : IDockingService
     {
         if (!_byId.TryGetValue(id, out var descriptor) || !descriptor.DefaultVisible)
             return;
-        RestoreLayoutFromMaximized();
         using (Suppress())
         {
             EnsureRegistered(id);
@@ -328,7 +314,6 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>明确隐藏一页。它的位置就空着，不会有别的页自己补进来。</summary>
     public void Hide(string id)
     {
-        RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
@@ -340,11 +325,11 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>
     /// 把一页浮出，**只给页面拖动当载体**（REQ-UI-120）。浮出之后由系统移动循环带着走，
     /// 落到停靠点上就进那一格，落空由拖动协调器隐藏——不会留下一个独立浮窗。
-    /// 不在 <see cref="IDockingService"/> 上：没有指令、菜单或模块能单独把页面浮出来。
+    /// 不在 <see cref="IDockingService"/> 上：没有指令、菜单或模块能把页面浮成停靠层浮窗。
+    /// 置顶页面浮窗（<c>aurora.ui.float</c>，REQ-UI-138）不经这里，见 <c>DockingHost.Float.cs</c>。
     /// </summary>
     internal void FloatForDrag(string id)
     {
-        RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
@@ -359,7 +344,6 @@ internal sealed partial class DockingHost : IDockingService
 
     internal void ToggleAutoHide(string id)
     {
-        RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
@@ -372,7 +356,6 @@ internal sealed partial class DockingHost : IDockingService
 
     public void Dock(string id, DockSide side, double? ratio = null, string? targetId = null)
     {
-        RestoreLayoutFromMaximized();
         if (!_byId.TryGetValue(id, out var descriptor))
             throw new ArgumentException($"未注册的窗口: {id}", nameof(id));
         if (ratio is { } providedRatio &&
@@ -393,7 +376,6 @@ internal sealed partial class DockingHost : IDockingService
 
     public void SetRatio(string id, double ratio)
     {
-        RestoreLayoutFromMaximized();
         if (!double.IsFinite(ratio) || ratio is <= 0 or >= 1)
             throw new ArgumentOutOfRangeException(nameof(ratio), "比例须严格位于 (0,1)");
 
@@ -415,7 +397,6 @@ internal sealed partial class DockingHost : IDockingService
     /// <summary>把一页摆回登记时的默认位置并露面，那一格原来那一页被藏起来。</summary>
     public void ResetWindow(string id)
     {
-        RestoreLayoutFromMaximized();
         var d = _byId[id];
         using (Suppress())
         {
@@ -427,7 +408,6 @@ internal sealed partial class DockingHost : IDockingService
 
     public void ResetLayout()
     {
-        RestoreLayoutFromMaximized();
         using (Suppress())
         {
             BuildDefaultLayout();
@@ -445,14 +425,13 @@ internal sealed partial class DockingHost : IDockingService
 
     public void SaveLayout(string name)
     {
-        _store.WriteNamed(name, _snapshotBeforeMaximize ?? SerializeLayout());
+        _store.WriteNamed(name, SerializeLayout());
         CurrentLayoutName = name;
         _log.Info(LayoutSource, $"布局方案已保存: {name}");
     }
 
     public bool LoadLayout(string name)
     {
-        RestoreLayoutFromMaximized();
         string? payload;
         try
         {
@@ -544,7 +523,7 @@ internal sealed partial class DockingHost : IDockingService
         WindowsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>热重载只换内容，保留停靠节点、隐藏、分栏、浮窗与专注布局。</summary>
+    /// <summary>热重载只换内容，保留停靠节点、隐藏、分栏与页面浮窗。</summary>
     public void ReplaceWindow(ToolWindowDescriptor descriptor, string owner)
     {
         if (!_byId.TryGetValue(descriptor.Id, out var previous))
@@ -559,14 +538,14 @@ internal sealed partial class DockingHost : IDockingService
         {
             _byId[descriptor.Id] = descriptor;
             _descriptors[_descriptors.IndexOf(previous)] = descriptor;
-            var roots = new[] { _manager.Layout, _rootBeforeMaximize }.OfType<LayoutRoot>().Distinct();
-            foreach (var root in roots)
+            var root = _manager.Layout;
             foreach (var node in root.Descendents().OfType<LayoutContent>().Concat(root.Hidden)
                          .Where(node => node.ContentId == descriptor.Id).Distinct())
             {
                 node.Title = descriptor.Title;
-                node.Content = content;
+                node.Content = DockedContent(descriptor.Id, content);
             }
+            ReplaceFloatingContent(descriptor.Id, content);
             if (_contents.Remove(descriptor.Id, out var old) && !ReferenceEquals(old, content))
                 TryDispose(old, descriptor.Id);
             if (content != null)
@@ -580,7 +559,7 @@ internal sealed partial class DockingHost : IDockingService
         if (!_byId.TryGetValue(id, out var descriptor))
             return;
 
-        RestoreLayoutFromMaximized();
+        DropFloat(id);
         using (Suppress())
         {
             if (CapturePlacements().TryGetValue(id, out var previousPlacement))
@@ -610,7 +589,6 @@ internal sealed partial class DockingHost : IDockingService
 
     public void UnregisterOwner(string owner)
     {
-        RestoreLayoutFromMaximized();
         foreach (var id in _owners
                      .Where(pair => pair.Value.Equals(owner, StringComparison.OrdinalIgnoreCase))
                      .Select(pair => pair.Key)
@@ -618,69 +596,6 @@ internal sealed partial class DockingHost : IDockingService
         {
             UnregisterWindow(id);
         }
-    }
-
-    public void MaximizeWindow(string id)
-    {
-        if (_maximizedId != null && _maximizedId.Equals(id, StringComparison.OrdinalIgnoreCase))
-            return;
-        RestoreLayoutFromMaximized();
-        if (!_byId.ContainsKey(id))
-            throw new ArgumentException($"未注册的工具窗口: {id}", nameof(id));
-
-        using (Suppress())
-        {
-            // 中途抛出时必须把暂存的布局丢掉：_maximizedId 还是 null，
-            // RestoreLayoutFromMaximized 会直接返回，而保存布局与关闭窗口那两条路径
-            // 写的是 `_snapshotBeforeMaximize ?? SerializeLayout()`——
-            // 留着它就等于把一份**过期的**布局当成当前布局写回磁盘。
-            try
-            {
-                _rootBeforeMaximize = _manager.Layout;
-                // 布局持久化是另一件事，失败不该拖垮"聚焦这一页"。
-                _snapshotBeforeMaximize = SerializeLayout();
-                BuildMaximizedLayout(id);
-                AttachLayout();
-                _maximizedId = id;
-            }
-            catch
-            {
-                _rootBeforeMaximize = null;
-                _snapshotBeforeMaximize = null;
-                throw;
-            }
-        }
-
-        WindowsChanged?.Invoke(this, EventArgs.Empty);
-        RebaseSoon();
-    }
-
-    public void RestoreLayoutFromMaximized()
-    {
-        if (_maximizedId == null || _rootBeforeMaximize == null)
-            return;
-
-        using (Suppress())
-        {
-            // 聚焦只替换 LayoutRoot；还原时装回原树。1.22（REQ-UI-120）起没有独立浮窗，
-            // 不再需要从快照里把浮窗节点重建一遍。
-            _manager.Layout = _rootBeforeMaximize;
-
-            if (!LayoutHasMainDocumentPane())
-                throw new InvalidOperationException("布局中缺少中央主文档区");
-            // 聚焦期间新注册的窗口不在那棵旧树里，补一遍。
-            EnsureRegisteredWindows();
-            EnsureCentralWorkspace();
-            AttachLayout();
-            _maximizedId = null;
-            _rootBeforeMaximize = null;
-            _snapshotBeforeMaximize = null;
-            _seedRatiosFromLayout = true;
-        }
-
-        EvictExtraPages();
-        WindowsChanged?.Invoke(this, EventArgs.Empty);
-        RebaseSoon();
     }
 
     // ---------------------------------------------------------------- 布局事件 → 指令(W-10)
@@ -739,7 +654,7 @@ internal sealed partial class DockingHost : IDockingService
             if (!cur.Visible)
                 continue;
 
-            // 浮着只是拖动途中的载体（REQ-UI-120）：不回放成指令——aurora.ui.float 已删除，
+            // 停靠层的浮着只是拖动途中的载体（REQ-UI-120），不回放成指令（1.30.1 的 aurora.ui.float 是另一回事，不进布局树），
             // 落进一格后由下面的停靠差分回放，落空隐藏由上面的 hide 回放。
             if (cur.Floating || cur.Side == null)
                 continue;

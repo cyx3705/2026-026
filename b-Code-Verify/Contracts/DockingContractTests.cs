@@ -1198,32 +1198,6 @@ public sealed class DockingContractTests
     }
 
     [Fact]
-    public void SavingWhileMaximizedPersistsTheStablePreFocusLayout()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var store = new MemoryLayoutStore();
-            var descriptors = new[]
-            {
-                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                Tool("details", DockSide.Right, 0.3),
-            };
-            var first = new DockingHost(new DockingManager(), descriptors, store, new NullLog());
-            first.Initialize();
-            first.MaximizeWindow(StandardWindowIds.Mcp);
-            first.SaveCurrentLayout();
-
-            var restored = new DockingHost(
-                new DockingManager(), descriptors, store, new NullLog());
-            restored.Initialize();
-            var states = restored.ListWindows().ToDictionary(item => item.Id);
-            Assert.Equal(DockSide.Center, states[StandardWindowIds.Mcp].Side);
-            Assert.Equal(DockSide.Right, states["details"].Side);
-            Assert.Null(restored.MaximizedId);
-        });
-    }
-
-    [Fact]
     public void UnsupportedOrDuplicateSnapshotFallsBackToDefaultLayout()
     {
         UiTestHost.RunSta(() =>
@@ -1787,6 +1761,119 @@ public sealed class DockingContractTests
             }
         });
     }
+
+    /// <summary>
+    /// REQ-UI-138：aurora.ui.float 把页面对象原样搬进置顶浮窗，停靠区原位换成占位；再切一次搬回来。
+    /// 停靠模型不动——页仍在原来那一格。
+    /// </summary>
+    [Fact]
+    public void FloatMovesThePageIntoATopmostWindowAndBack()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var window = ShowHost(
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("page", DockSide.Center, 1),
+                    Tool("tool", DockSide.Right, 0.3),
+                ],
+                new MemoryLayoutStore(),
+                out var host);
+            try
+            {
+                host.Show("page");
+                UiTestHost.Pump();
+                var page = host.FindContent("page");
+                var node = AnchorableOf(window, "page");
+
+                Assert.True(host.SetPageFloating("page"));
+                UiTestHost.Pump();
+                var floating = host.FloatWindowOf("page");
+                Assert.NotNull(floating);
+                Assert.True(floating!.Topmost);
+                Assert.True(floating.IsVisible);
+                Assert.Null(floating.Owner);
+                Assert.Same(page, floating.Page);
+                Assert.NotSame(page, node.Content);
+                Assert.True(host.IsPageFloating("page"));
+                Assert.True(InfoOf(host, "page").IsFloating);
+                Assert.True(InfoOf(host, "page").IsVisible);
+                Assert.Equal(DockSide.Center, InfoOf(host, "page").Side);
+
+                // 已浮着时 on=true 不重建窗口。
+                Assert.True(host.SetPageFloating("page", true));
+                Assert.Same(floating, host.FloatWindowOf("page"));
+
+                Assert.False(host.SetPageFloating("page"));
+                UiTestHost.Pump();
+                Assert.False(floating.IsVisible);
+                Assert.Null(floating.Page);
+                Assert.Same(page, AnchorableOf(window, "page").Content);
+                Assert.False(InfoOf(host, "page").IsFloating);
+                Assert.Null(host.FloatWindowOf("page"));
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-138：浮着时热重载，新内容直接进浮窗；直接关浮窗（Alt+F4）等于还原；
+    /// 页面被注销时浮窗跟着关，不往回搬。
+    /// </summary>
+    [Fact]
+    public void FloatingPageSurvivesReloadCloseAndUnregister()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var window = ShowHost(
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("page", DockSide.Right, 0.3),
+                ],
+                new MemoryLayoutStore(),
+                out var host);
+            try
+            {
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+                var fresh = new Border();
+                host.ReplaceWindow(
+                    new ToolWindowDescriptor { Id = "page", Title = "page", DefaultSide = DockSide.Right, ContentFactory = () => fresh },
+                    "framework");
+                UiTestHost.Pump();
+                var floating = host.FloatWindowOf("page")!;
+                Assert.Same(fresh, floating.Page);
+                Assert.NotSame(fresh, AnchorableOf(window, "page").Content);
+
+                floating.Close();
+                UiTestHost.Pump();
+                Assert.False(host.IsPageFloating("page"));
+                Assert.Same(fresh, AnchorableOf(window, "page").Content);
+
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+                floating = host.FloatWindowOf("page")!;
+                host.UnregisterWindow("page");
+                UiTestHost.Pump();
+                Assert.False(floating.IsVisible);
+                Assert.False(host.IsPageFloating("page"));
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+        });
+    }
+
+    private static LayoutAnchorable AnchorableOf(Window window, string id)
+        => ((DockingManager)window.Content).Layout.Descendents().OfType<LayoutAnchorable>()
+            .Concat(((DockingManager)window.Content).Layout.Hidden)
+            .Single(item => item.ContentId == id);
 
     private static Window ShowHost(
         IReadOnlyList<ToolWindowDescriptor> tools,

@@ -202,7 +202,7 @@ internal sealed partial class DockingHost
     {
         ContentId = d.Id,
         Title = d.Title,
-        Content = GetOrCreateContent(d),
+        Content = DockedContent(d.Id, GetOrCreateContent(d)),
         // §4.1:关闭按钮语义为隐藏,不销毁
         CanClose = false,
         CanHide = true,
@@ -303,7 +303,7 @@ internal sealed partial class DockingHost
         control.SelectedItem = selected;
     }
 
-    /// <summary>这一页还不在布局里（聚焦期间登记、布局恢复遗漏）：按默认位置补进来，不抢位。</summary>
+    /// <summary>这一页还不在布局里（布局恢复遗漏）：按默认位置补进来，不抢位。</summary>
     private void EnsureRegistered(string id)
     {
         if (!_byId.TryGetValue(id, out var descriptor))
@@ -334,14 +334,6 @@ internal sealed partial class DockingHost
 
     internal object? FindContent(string id)
         => _contents.GetValueOrDefault(id);
-
-    private void BuildMaximizedLayout(string id)
-    {
-        _hiddenCenterIds.Clear();
-        var pane = new LayoutAnchorablePane(CreateAnchorable(_byId[id]));
-        var rootPanel = new LayoutPanel(pane) { Orientation = Orientation.Horizontal };
-        _manager.Layout = new LayoutRoot { RootPanel = rootPanel };
-    }
 
     private void TryDispose(object content, string id)
     {
@@ -596,9 +588,6 @@ internal sealed partial class DockingHost
 
     private bool NeedsCentralWorkspaceRepair()
     {
-        if (_maximizedId != null)
-            return false;
-
         if (HasStockDocumentPane())
             return true;
 
@@ -673,9 +662,6 @@ internal sealed partial class DockingHost
     /// </summary>
     private bool EnsureCentralWorkspace()
     {
-        if (_maximizedId != null)
-            return false;
-
         var upgraded = UpgradeStockDocumentPanes();
 
         var pane = TryFindMainDocumentPane();
@@ -792,8 +778,6 @@ internal sealed partial class DockingHost
     /// </summary>
     private void ReapplyRatios()
     {
-        if (_maximizedId != null)
-            return;
         if (_manager.ActualWidth <= 0 || _manager.ActualHeight <= 0)
             return;
 
@@ -989,13 +973,9 @@ internal sealed partial class DockingHost
     /// 布局里出现了一格多页（AvalonDock 的「放进这一格」停靠点，或 1.20.1 及以前存下的布局）：
     /// 每格留一页，其余隐藏。留哪一页按先后：<paramref name="keepId"/>；刚从浮窗落下来的；
     /// 活动页；这一格的选中页；最后一页。
-    /// 专注态换的是另一棵布局树，不处理。
     /// </summary>
     internal void EvictExtraPages(string? keepId = null)
     {
-        if (_maximizedId != null)
-            return;
-
         var active = _manager.Layout.ActiveContent;
         using (Suppress())
         {
@@ -1047,8 +1027,6 @@ internal sealed partial class DockingHost
         _manager.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             _singlePagePending = false;
-            if (_maximizedId != null)
-                return;
             if (_suppress > 0)
             {
                 // 程序路径正在改布局：它自己不会留下一格多页；这一拍的用户手势等它放手再看。
@@ -1068,7 +1046,6 @@ internal sealed partial class DockingHost
     /// </summary>
     public void ParkHidden(string id)
     {
-        RestoreLayoutFromMaximized();
         EnsureRegistered(id);
         using (Suppress())
         {
