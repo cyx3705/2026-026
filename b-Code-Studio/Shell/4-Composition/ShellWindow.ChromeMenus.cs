@@ -175,11 +175,9 @@ internal partial class ShellWindow
             : Item("切换到深色模式", $"aurora.app.theme mode={ThemeDark}"));
         rebuilt.Add(view);
 
-        // 场景（REQ-UI-085）：与右栏同一条命令路径，菜单里列全，右栏只列常用的
+        // 场景（REQ-UI-085）：与右栏同一条命令路径、同一个先后（REQ-UI-135）；菜单里列全，收进小栏的也在
         var scenes = new MenuItem { Header = "场景(_S)" };
-        foreach (var scene in _scenes.List()
-                     .OrderBy(s => s.Source == SceneSource.All ? 0 : 1)
-                     .ThenBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase))
+        foreach (var scene in _scenes.List())
         {
             var item = Item(scene.Title, "aurora.scene.go id=" + CommandParser.QuoteArg(scene.Id));
             item.IsChecked = scene.Active;

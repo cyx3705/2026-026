@@ -11,11 +11,11 @@ using HistoryAurora.Shell.Neutral.Logging;
 namespace HistoryAurora.Verify;
 
 /// <summary>
-/// 弹窗组件的契约：独立 Window 必须自带主题字典，不得依赖 Application.Current。
+/// 弹窗组件的契约（REQ-UI-004 / 136）。
 ///
-/// 前端切出后模块自己的对话框全坏，根因就是这条——<c>DynamicResource Aurora.*</c>
-/// 在没有合并令牌的顶层窗口里静默退化成系统外观。本轮只交付 Aurora 侧组件，
-/// 模块适配下一轮。
+/// 1.30.0 起弹窗是嵌在主窗体里的圆角卡片 <see cref="AuroraDialogView"/>，由 <see cref="AuroraDialogHost"/>
+/// 放进主窗体的弹窗层；独立的 <c>AuroraDialogWindow</c> 删除。单独构造的卡片（这里的大部分用例）
+/// 仍要自带主题字典、不依赖 Application.Current——那是 1.2.0 起守的老问题。
 /// </summary>
 [Collection(TestCollections.Ui)]
 public sealed class AuroraDialogContractTests
@@ -35,7 +35,7 @@ public sealed class AuroraDialogContractTests
 
             try
             {
-                var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+                var dialog = Card(new AuroraDialogRequest
                 {
                     Kind = AuroraDialogKind.Message,
                     Title = "关于",
@@ -46,12 +46,11 @@ public sealed class AuroraDialogContractTests
                 Assert.True(surface.Color.R > 0xE0 && surface.Color.G > 0xE0 && surface.Color.B > 0xE0,
                     $"dialog should resolve the light surface, got {surface.Color}");
                 Assert.NotNull(dialog.TryFindResource("Aurora.Button.Accent"));
-                Assert.NotNull(dialog.TryFindResource("Aurora.Dialog.Chrome"));
-                Assert.Equal(WindowStyle.None, dialog.WindowStyle);
+                Assert.NotNull(dialog.TryFindResource("Aurora.Dialog.Card"));
+                Assert.Equal(new CornerRadius(20), dialog.CornerRadius);
                 Assert.Equal("关于", dialog.CaptionTitle?.Text);
                 Assert.Equal("关闭", dialog.PrimaryButton.Content);
                 Assert.Null(dialog.CancelButton);
-                dialog.Close();
             }
             finally
             {
@@ -66,13 +65,13 @@ public sealed class AuroraDialogContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var dialog = AuroraDialogWindow.Create(
+            var dialog = new AuroraDialogView(
                 new AuroraDialogRequest { Kind = AuroraDialogKind.Message, Body = "dark" },
+                standalone: true,
                 dark: true);
 
             var surface = Assert.IsType<SolidColorBrush>(dialog.TryFindResource("Aurora.Brush.Surface"));
             Assert.Equal((Color)ColorConverter.ConvertFromString("#1D201F")!, surface.Color);
-            dialog.Close();
         });
     }
 
@@ -81,7 +80,7 @@ public sealed class AuroraDialogContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var confirm = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var confirm = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Confirm,
                 Title = "需要确认",
@@ -92,11 +91,10 @@ public sealed class AuroraDialogContractTests
             });
             Assert.Equal("覆盖？", confirm.BodyText?.Text);
             Assert.NotNull(confirm.CancelButton);
-            Assert.True(confirm.CancelButton!.IsDefault);
+            Assert.Same(confirm.CancelButton, confirm.DefaultButton);
             Assert.Contains("秒内未操作", confirm.CountdownText?.Text);
-            confirm.Close();
 
-            var prompt = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var prompt = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Prompt,
                 Title = "生成恢复提交",
@@ -105,9 +103,8 @@ public sealed class AuroraDialogContractTests
             });
             Assert.Equal("revert abc", prompt.PromptBox?.Text);
             Assert.Equal("确定", prompt.PrimaryButton.Content);
-            prompt.Close();
 
-            var content = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var content = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Content,
                 Title = "预览",
@@ -117,10 +114,8 @@ public sealed class AuroraDialogContractTests
             Assert.Equal("abc123 提交", content.BodyText?.Text);
             Assert.Equal("diff --git a/file", content.ContentBox?.Text);
             Assert.IsType<TextBox>(content.ContentBox);
-            Assert.Equal(WindowStyle.None, content.WindowStyle);
             Assert.Equal("预览", content.CaptionTitle?.Text);
-            Assert.NotNull(content.TryFindResource("Aurora.WindowButton.Close"));
-            content.Close();
+            Assert.NotNull(content.TryFindResource("Aurora.Heading.Bar"));
         });
     }
 
@@ -136,7 +131,7 @@ public sealed class AuroraDialogContractTests
                     Value = $"z-{index}",
                 })
                 .ToList();
-            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var dialog = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Choice,
                 Title = "选择 z 级文件夹",
@@ -153,8 +148,7 @@ public sealed class AuroraDialogContractTests
             dialog.ChoiceBox.SelectedIndex = 18;
             Assert.Equal("z-19", dialog.SelectedChoiceValue);
             Assert.NotNull(dialog.CancelButton);
-            Assert.True(dialog.CancelButton!.IsCancel);
-            dialog.Close();
+            Assert.Same(dialog.PrimaryButton, dialog.DefaultButton);
         });
     }
 
@@ -165,7 +159,7 @@ public sealed class AuroraDialogContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var dialog = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Content,
                 Title = "提交",
@@ -189,7 +183,6 @@ public sealed class AuroraDialogContractTests
             Assert.NotNull(dialog.CancelButton);
             Assert.Equal("执行", dialog.PrimaryButton.Content);
             Assert.True(dialog.PrimaryButton.IsEnabled);
-            dialog.Close();
         });
     }
 
@@ -199,7 +192,7 @@ public sealed class AuroraDialogContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var dialog = AuroraDialogWindow.Create(new AuroraDialogRequest
+            var dialog = Card(new AuroraDialogRequest
             {
                 Kind = AuroraDialogKind.Content,
                 Title = "预览",
@@ -209,7 +202,6 @@ public sealed class AuroraDialogContractTests
             Assert.Null(dialog.ChoiceBox);
             Assert.Null(dialog.CancelButton);
             Assert.Equal("关闭", dialog.PrimaryButton.Content);
-            dialog.Close();
         });
     }
 
@@ -236,7 +228,7 @@ public sealed class AuroraDialogContractTests
     {
         var module = Path.Combine(RepositoryRoot(), "b-Code-Studio", "Module");
         var frontend = File.ReadAllText(Path.Combine(module, "AuroraFrontend.cs"));
-        Assert.Contains("new MessageBoxConfirmation(window)", frontend, StringComparison.Ordinal);
+        Assert.Contains("new DialogConfirmation(window.Dialogs)", frontend, StringComparison.Ordinal);
 
         // 宿主 5.4：确认经唯一前端登记交出，不得再改写宿主总线的确认开关。
         var composition = File.ReadAllText(Path.Combine(RepositoryRoot(), "b-Code-Studio", "AuroraBusinessComposition.cs"));
@@ -248,6 +240,106 @@ public sealed class AuroraDialogContractTests
             Assert.DoesNotContain("Bus.Confirmation =", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Bus.FrontendExecutor", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Bus.UiContext =", source, StringComparison.Ordinal);
+        }
+    }
+
+    private static AuroraDialogView Card(AuroraDialogRequest request) => new(request, standalone: true);
+
+    /// <summary>
+    /// REQ-UI-136：弹窗嵌在主窗体里——卡片进弹窗层、遮罩盖住后面的页面、不多开任何窗口；
+    /// Esc 拒绝、主按钮接受，结果经 ShowAsync 交回，弹窗层随最后一张收起。
+    /// </summary>
+    [Fact]
+    public void DialogsAreEmbeddedCardsInTheShellWindow()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var dataDirectory = Path.Combine(Path.GetTempPath(), $"HistoryAurora-dialog-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(dataDirectory);
+            var window = new ShellWindow(
+                new ShellConfig { AppName = "Dialog Test", AppVersion = "1.1.0" },
+                new MemoryLayoutStore(),
+                new NullLog(),
+                new MemorySettings(),
+                dataDirectory, TestShell.NewBus(new NullLog(), out var shellCommands), shellCommands)
+            {
+                Width = 800,
+                Height = 600,
+                ShowInTaskbar = false,
+            };
+
+            try
+            {
+                window.Show();
+                UiTestHost.Pump();
+                var windowsBefore = Application.Current?.Windows.Count ?? 0;
+
+                var first = window.Dialogs.ShowAsync(new AuroraDialogRequest
+                {
+                    Kind = AuroraDialogKind.Confirm,
+                    Title = "删除场景",
+                    Body = "删除？",
+                    Danger = true,
+                    DefaultCancel = true,
+                });
+                UiTestHost.Pump();
+                Assert.Equal(1, window.Dialogs.OpenCount);
+                Assert.Equal(windowsBefore, Application.Current?.Windows.Count ?? 0);
+                var card = window.Dialogs.Top!;
+                Assert.True(card.IsVisible);
+                Assert.True(card.ActualWidth > 0 && card.ActualWidth <= 800);
+                Assert.Same(card.CancelButton, card.DefaultButton);
+
+                card.RaiseEvent(new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice,
+                    PresentationSource.FromVisual(card)!,
+                    0,
+                    System.Windows.Input.Key.Escape) { RoutedEvent = UIElement.PreviewKeyDownEvent });
+                UiTestHost.Pump();
+                Assert.True(first.IsCompleted);
+                Assert.False(first.Result.Accepted);
+                Assert.Equal(0, window.Dialogs.OpenCount);
+
+                var second = window.Dialogs.ShowAsync(new AuroraDialogRequest
+                {
+                    Kind = AuroraDialogKind.Prompt,
+                    Title = "另存场景",
+                    Value = "出图",
+                });
+                UiTestHost.Pump();
+                window.Dialogs.Top!.Accept();
+                UiTestHost.Pump();
+                Assert.True(second.Result.Accepted);
+                Assert.Equal("出图", second.Result.Input);
+
+                // 窗体关闭时摆着的弹窗按拒绝收场，同步等确认的一方才能返回。
+                var pending = window.Dialogs.ShowAsync(new AuroraDialogRequest { Kind = AuroraDialogKind.Message, Body = "x" });
+                UiTestHost.Pump();
+                window.Dialogs.CancelAll();
+                Assert.False(pending.Result.Accepted);
+            }
+            finally
+            {
+                window.Close();
+                try { Directory.Delete(dataDirectory, recursive: true); }
+                catch (IOException) { }
+            }
+        });
+    }
+
+    /// <summary>旧的独立弹窗窗口不许回来：源码里不得再出现 AuroraDialogWindow 类型或 ShowDialog 弹 Aurora 自己的窗。</summary>
+    [Fact]
+    public void TheStandaloneDialogWindowIsGone()
+    {
+        var shell = Path.Combine(RepositoryRoot(), "b-Code-Studio");
+        foreach (var file in Directory.EnumerateFiles(shell, "*.cs", SearchOption.AllDirectories)
+                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                                    && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("class AuroraDialogWindow", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("AuroraDialogWindow.Show", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("MessageBox.Show", source, StringComparison.Ordinal);
         }
     }
 

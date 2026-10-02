@@ -177,7 +177,8 @@ internal static class HostedPageDescriptions
                     "columns": [
                       { "key": "module", "title": "模块", "width": "132" },
                       { "key": "version", "title": "版本", "width": "62" },
-                      { "key": "commands", "title": "域指令", "width": "56" },
+                      { "key": "load", "title": "装载", "width": "56",
+                        "cellAction": "modules.toggle", "cellStyle": "button" },
                       { "key": "description", "title": "描述", "width": "*" }
                     ]
                   }

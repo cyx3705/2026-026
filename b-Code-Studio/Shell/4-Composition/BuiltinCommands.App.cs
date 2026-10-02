@@ -39,15 +39,13 @@ internal static partial class BuiltinCommands
             RequiresUiThread = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                AuroraDialogWindow.Show(
-                    new AuroraDialogRequest
-                    {
-                        Kind = AuroraDialogKind.Message,
-                        Title = "关于",
-                        Body = s.Window.AboutText,
-                    },
-                    s.Window,
-                    s.Window.IsDarkTheme);
+                // 不等人点关闭：关于框只是看一眼，指令当场返回（REQ-UI-136 起弹窗嵌在主窗体里，不阻塞界面线程）。
+                s.Window.Dialogs.ShowAsync(new AuroraDialogRequest
+                {
+                    Kind = AuroraDialogKind.Message,
+                    Title = "关于",
+                    Body = s.Window.AboutText,
+                });
                 return CommandResult.Ok("已显示关于");
             }),
         });

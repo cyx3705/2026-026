@@ -70,7 +70,7 @@ internal partial class ShellWindow
             // 闸门也要看见这一拍：松开 Ctrl 才算这次按下结束，下次按下才能再进。
             var otherKey = ctrl && IsAnyOtherKeyDown(includeMouse: false);
             _labelGate.Update(ctrl, otherKey, shellInFront: false);
-            if (_labelFollowsCtrl && (!ctrl || otherKey) && !_pageDrag.IsDragging)
+            if (_labelFollowsCtrl && (!ctrl || otherKey) && !_pageDrag.IsDragging && _sceneDrag == null)
                 SetLabelMode(false);
             return;
         }
@@ -99,6 +99,8 @@ internal partial class ShellWindow
         _labelMode = active;
         PageAdjustmentToggle.IsChecked = active;
         PageAdjustmentToggle.Content = active ? "页面调整：开" : "页面调整：关";
+        // 收起的场景小栏跟着页面调整一起浮出（REQ-UI-135）
+        SceneTray.Visibility = active ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         _pageDrag.LabelMode = active;
         PageLabelMode.SetIsActive(this, active);
         ApplyLabelModeToFloatingWindows();

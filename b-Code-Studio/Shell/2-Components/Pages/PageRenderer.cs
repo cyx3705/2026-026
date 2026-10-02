@@ -360,7 +360,8 @@ public static partial class PageRenderer
                     new AuroraCellAction(
                         column.CellAction,
                         string.IsNullOrWhiteSpace(action.Summary) ? action.Title : action.Summary,
-                        action.Danger));
+                        action.Danger,
+                        string.Equals(column.CellStyle, "button", StringComparison.OrdinalIgnoreCase)));
             })
             .ToList();
 

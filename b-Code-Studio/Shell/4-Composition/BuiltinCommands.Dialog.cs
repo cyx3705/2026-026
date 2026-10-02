@@ -5,8 +5,8 @@ using HistoryAurora.Shell.Neutral.Commands;
 namespace HistoryAurora.Shell.Composition;
 
 /// <summary>
-/// 页面注册协议之外的弹窗命令。弹窗不是停靠页，不能进 <c>PageRenderer</c> 组件集；
-/// 模块下一轮用本命令替换自己的 <c>Window</c>，本轮只把能力做出来。
+/// 页面注册协议之外的弹窗命令。弹窗不是停靠页，不能进 <c>PageRenderer</c> 组件集。
+/// 1.30.0 起弹窗是嵌在主窗体里的圆角卡片（REQ-UI-136），本命令等人做完决定再返回，但不阻塞界面线程。
 /// </summary>
 internal static partial class BuiltinCommands
 {
@@ -41,7 +41,7 @@ internal static partial class BuiltinCommands
                 new ParameterSpec { Name = "defaultcancel", Description = "Enter 落到取消", Type = ParamType.Bool, Default = "false" },
                 new ParameterSpec { Name = "timeout", Description = "confirm 倒计时秒数，到期拒绝", Type = ParamType.Int },
             ],
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = async context =>
             {
                 var kindText = context.GetString("kind") ?? "message";
                 if (!TryParseKind(kindText, out var kind))
@@ -72,7 +72,7 @@ internal static partial class BuiltinCommands
                     TimeoutSeconds = context.GetInt("timeout"),
                 };
 
-                var result = AuroraDialogWindow.Show(request, s.Window, s.Window.IsDarkTheme);
+                var result = await s.Window.Dialogs.ShowAsync(request).ConfigureAwait(true);
                 if (result.TimedOut)
                     return CommandResult.Fail("已超时，按拒绝处理");
                 if (!result.Accepted)
@@ -80,7 +80,7 @@ internal static partial class BuiltinCommands
                 return kind == AuroraDialogKind.Prompt || request.PicksChoice
                     ? CommandResult.Ok(result.Input ?? "", result.Input)
                     : CommandResult.Ok("已确认");
-            }),
+            },
         });
     }
 

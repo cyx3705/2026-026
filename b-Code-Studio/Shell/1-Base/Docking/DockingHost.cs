@@ -39,12 +39,17 @@ internal sealed partial class DockingHost : IDockingService
     private const string LayoutSource = "layout";
     private const double RatioEpsilon = 0.02;
     private const string PlacementSettingsKey = "layout.placements";
-    private string _registrationScene = "all";
+    /// <summary>
+    /// 新登记的页按哪个场景的初值规则决定露不露面。null 表示没有场景在管（停靠层单独使用、测试），
+    /// 页按自己的声明露面。界面里场景管理器构造时就会设上当前场景；1.30.0 起没有内置场景「全部」
+    /// （REQ-UI-134），"all" 这个值也就不再有特殊含义。
+    /// </summary>
+    private string? _registrationScene;
 
     public void SetRegistrationScene(string id) => _registrationScene = id;
 
     private bool IsSceneDefault(ToolWindowDescriptor descriptor, string owner)
-        => _registrationScene.Equals("all", StringComparison.OrdinalIgnoreCase)
+        => _registrationScene == null
            || (descriptor.Scene ?? (owner == "framework" ? "HistoryAurora" : owner))
                .Equals(_registrationScene, StringComparison.OrdinalIgnoreCase)
            || owner == "framework" && descriptor.Id is StandardWindowIds.Console or StandardWindowIds.Mcp;

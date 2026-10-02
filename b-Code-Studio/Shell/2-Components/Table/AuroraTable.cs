@@ -560,7 +560,17 @@ public sealed class AuroraTable : UserControl
                 : column.CellAction.Summary);
         button.SetResourceReference(
             StyleProperty,
-            column.CellAction.Danger ? "Aurora.Table.CellActionDanger" : "Aurora.Table.CellAction");
+            column.CellAction.Button
+                ? column.CellAction.Danger ? "Aurora.Table.CellButtonDanger" : "Aurora.Table.CellButton"
+                : column.CellAction.Danger ? "Aurora.Table.CellActionDanger" : "Aurora.Table.CellAction");
+        if (column.CellAction.Button)
+        {
+            // 链接列的空格本来就什么都不显示；按钮列的空格会是一个空框，所以干脆不画。
+            button.SetBinding(VisibilityProperty, new Binding("[" + column.Key + "]")
+            {
+                Converter = EmptyToCollapsed.Instance,
+            });
+        }
         button.AddHandler(ClickEvent, new RoutedEventHandler(OnCellActionClick));
         button.AddHandler(LoadedEvent, new RoutedEventHandler(OnActionLoaded));
 
@@ -772,6 +782,18 @@ public sealed class AuroraTable : UserControl
     }
 
     private sealed record CellActionTag(string ActionId, string ColumnKey);
+
+    /// <summary>按钮列：格里没字就不画按钮。</summary>
+    private sealed class EmptyToCollapsed : IValueConverter
+    {
+        public static readonly EmptyToCollapsed Instance = new();
+
+        public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+            => string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+            => Binding.DoNothing;
+    }
 
     /// <summary>行内按钮列的宽度按标题估算：中日韩字符按 14px，其余按 8px，另加边框与间距。</summary>
     private static double InlineWidth(IReadOnlyList<AuroraRowAction> actions)

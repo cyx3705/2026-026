@@ -193,6 +193,12 @@ public sealed class PageColumn
     /// 与 <see cref="PageRowAction"/> 使用同一套动作台账和占位符规则。
     /// </summary>
     public string? CellAction { get; init; }
+
+    /// <summary>
+    /// 带 <see cref="CellAction"/> 的格画成什么：缺省是链接（墨色字），<c>"button"</c> 画成行内小按钮（1.30.0，REQ-UI-137）。
+    /// 格里的字就是按钮上的字，所以「载入 / 载出」这种随行变化的按钮靠数据就能写出来；空格不画按钮。
+    /// </summary>
+    public string? CellStyle { get; init; }
 }
 
 /// <summary>组件取数：一条只读命令加固定参数，分页与筛选由组件追加。</summary>

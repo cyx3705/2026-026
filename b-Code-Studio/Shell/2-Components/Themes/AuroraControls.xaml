@@ -1590,6 +1590,19 @@
         </Style.Triggers>
     </Style>
 
+    <!--
+        按钮列(REQ-UI-137,1.30.0):cellStyle=button 的格画成行内小按钮,与「操作」列的按钮同一个长相,
+        只是靠左摆在自己那一格里。按钮上的字就是格里的值(模块页的「载入 / 载出」)。
+    -->
+    <Style x:Key="Aurora.Table.CellButton" TargetType="Button" BasedOn="{StaticResource Aurora.Table.RowAction}">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style x:Key="Aurora.Table.CellButtonDanger" TargetType="Button" BasedOn="{StaticResource Aurora.Table.CellButton}">
+        <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.Danger}" />
+    </Style>
+
     <Style x:Key="Aurora.Table.RowActionDanger" TargetType="Button" BasedOn="{StaticResource Aurora.Table.RowAction}">
         <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.Danger}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Aurora.Brush.DangerSoft}" />

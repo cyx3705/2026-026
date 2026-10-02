@@ -27,8 +27,9 @@ public sealed class SceneContractTests
         var list = scenes.List();
         Assert.Equal(SceneSource.Derived, list.Single(s => s.Id == "HistoryJanus").Source);
         Assert.Equal(SceneSource.Derived, list.Single(s => s.Id == "HistoryMinerva").Source);
-        Assert.Equal(SceneSource.All, list.Single(s => s.Id == SceneManager.AllId).Source);
-        Assert.Equal(SceneManager.AllId, scenes.ActiveId);
+        // 1.30.0（REQ-UI-134）：没有内置场景「全部」，缺省是 Aurora 自己的场景。
+        Assert.DoesNotContain(list, s => s.Id.Equals(SceneManager.LegacyAllId, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(SceneManager.AuroraSceneId, scenes.ActiveId);
 
         // 命令集是常驻页，但顶栏只留一页：留的是场景自己的中央页。
         Assert.True(scenes.Go("Minerva").Ok);
@@ -69,7 +70,7 @@ public sealed class SceneContractTests
         scenes.Go("Minerva");
         scenes.Go("Janus");
 
-        Assert.Contains("all", host.ListLayouts());
+        Assert.Contains(SceneManager.AuroraSceneId, host.ListLayouts());
         Assert.Contains("HistoryMinerva", host.ListLayouts());
     });
 
@@ -162,7 +163,7 @@ public sealed class SceneContractTests
         AssertVisible(host, "console", "overview");
     });
 
-    /// <summary>当前场景与使用频次跨重启还在；列表按频次排。</summary>
+    /// <summary>当前场景与使用频次跨重启还在；没人排过时列表按标题排（1.30.0 起不再按频次）。</summary>
     [Fact]
     public void ActiveSceneAndUsageSurviveARestart() => RunScene((host, scenes, settings) =>
     {
@@ -192,6 +193,68 @@ public sealed class SceneContractTests
         Assert.Equal("drawing", legacy.ActiveId);
         Assert.Equal(SceneSource.User, legacy.Find("出图")!.Source);
         Assert.Equal(SceneSource.Derived, legacy.Find("Minerva")!.Source);
+    });
+
+    /// <summary>1.29 停在「全部」上的设置：读进来换成缺省场景，「全部」的记录丢掉（REQ-UI-134）。</summary>
+    [Fact]
+    public void LegacyAllSceneFallsBackToTheAuroraScene() => RunScene((host, _, settings) =>
+    {
+        settings.Set(SceneManager.SettingsKey,
+            """{"schemaVersion":1,"active":"all","scenes":{"all":{"resetPending":true}}}""");
+
+        var legacy = new SceneManager(host, settings, new UsageLedger(settings, new NullLog()), new NullLog());
+        Assert.Equal(SceneManager.AuroraSceneId, legacy.ActiveId);
+        Assert.Null(legacy.Find("all"));
+        Assert.Null(legacy.Find("全部"));
+    });
+
+    /// <summary>REQ-UI-135：先后由人排，挪到谁前面就在谁前面；收起只影响右栏，跨重启都还在。</summary>
+    [Fact]
+    public void ScenesCanBeReorderedAndHiddenAndItSticks() => RunScene((host, scenes, settings) =>
+    {
+        scenes.Save("drawing", "出图");
+        Assert.Equal(["drawing", "HistoryJanus", "HistoryMinerva"], scenes.List().Select(s => s.Id));
+
+        Assert.True(scenes.Move("HistoryMinerva", "drawing").Ok);
+        Assert.Equal(["HistoryMinerva", "drawing", "HistoryJanus"], scenes.List().Select(s => s.Id));
+        Assert.True(scenes.Move("HistoryMinerva", null).Ok);
+        Assert.Equal(["drawing", "HistoryJanus", "HistoryMinerva"], scenes.List().Select(s => s.Id));
+        Assert.True(scenes.Move("drawing", "drawing").Ok);
+        Assert.False(scenes.Move("nope", null).Ok);
+
+        Assert.True(scenes.SetHidden("HistoryJanus", true).Ok);
+        Assert.True(scenes.Find("Janus")!.Hidden);
+
+        var again = new SceneManager(host, settings, new UsageLedger(settings, new NullLog()), new NullLog());
+        Assert.Equal(["drawing", "HistoryJanus", "HistoryMinerva"], again.List().Select(s => s.Id));
+        Assert.True(again.Find("Janus")!.Hidden);
+        Assert.True(again.Go("Janus").Ok);
+        Assert.True(again.SetHidden("HistoryJanus", false).Ok);
+        Assert.False(again.Find("Janus")!.Hidden);
+    });
+
+    /// <summary>
+    /// REQ-UI-135：模块场景也能删——记墓碑，模块重新登记页面也不复活；reset 点名恢复。
+    /// 删当前场景切到排在最前的；最后一个场景不能删。
+    /// </summary>
+    [Fact]
+    public void DeletingAModuleSceneTombstonesItUntilReset() => RunScene((host, scenes, _) =>
+    {
+        scenes.Go("Minerva");
+        Assert.True(scenes.Delete("HistoryMinerva").Ok);
+        Assert.Null(scenes.Find("Minerva"));
+        Assert.Equal("HistoryJanus", scenes.ActiveId);
+
+        host.RegisterWindow(Tool("options", DockSide.Right), "HistoryMinerva");
+        scenes.OnWindowsChanged();
+        Assert.Null(scenes.Find("Minerva"));
+
+        Assert.False(scenes.Delete("HistoryJanus").Ok);
+
+        Assert.True(scenes.Reset("Minerva").Ok);
+        Assert.Equal(SceneSource.Derived, scenes.Find("Minerva")!.Source);
+        Assert.True(scenes.Go("Minerva").Ok);
+        AssertVisible(host, "console", "mapping", "options");
     });
 
     private static void RunScene(Action<DockingHost, SceneManager, MemorySettings> body)

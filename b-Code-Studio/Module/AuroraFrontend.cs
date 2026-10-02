@@ -16,13 +16,13 @@ namespace HistoryAurora.Module;
 internal sealed class AuroraFrontend : IFrontend
 {
     private readonly ShellWindow _window;
-    private readonly MessageBoxConfirmation _confirmation;
+    private readonly DialogConfirmation _confirmation;
 
     public AuroraFrontend(ShellWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
         _window = window;
-        _confirmation = new MessageBoxConfirmation(window);
+        _confirmation = new DialogConfirmation(window.Dialogs);
         UiContext = new DispatcherSynchronizationContext(window.Dispatcher);
     }
 
