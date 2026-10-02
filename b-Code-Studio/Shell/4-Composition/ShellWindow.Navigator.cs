@@ -33,8 +33,8 @@ namespace HistoryAurora.Shell.Composition;
 /// （标题、id、owner），不新增要人维护的关键词——要人维护的元数据，
 /// 会在项目变成历史的那一刻起开始腐烂。
 ///
-/// 场景膨胀的对策是**搜索 + 频次**（用户拍板）：右栏只挑用得多的几个，
-/// 其余一律靠搜，频次给结果加权。不给场景做管理页。
+/// 场景膨胀的对策是**搜索 + 人排**：1.30.0（REQ-UI-135）起右栏列出没收起的全部场景，
+/// 先后由人在页面调整时拖着排，用不上的拖进小栏收起，频次只给搜索结果加权。不给场景做管理页。
 /// </summary>
 internal partial class ShellWindow
 {
@@ -48,9 +48,6 @@ internal partial class ShellWindow
     /// 抢 Ctrl+K 等于在浏览器、VS 与每一个编辑器里拿走它。
     /// </summary>
     internal const string DefaultNavigatorHotkey = "Ctrl+Alt+K";
-
-    /// <summary>没有搜索词时右栏最多列几个场景。搜索时不限——筛出来的就那么几个。</summary>
-    private const int RailLimit = 12;
 
     /// <summary>指针在胶囊拖出来的新浮窗里的落点：靠左上的一点，拖起来像拎着页签。</summary>
     private static readonly Point CapsuleDragAnchor = new(48, 16);
@@ -75,6 +72,7 @@ internal partial class ShellWindow
     {
         NavQuery.TextChanged += (_, _) => OnNavigatorQueryChanged();
         NavQuery.PreviewKeyDown += OnNavigatorKeyDown;
+        InitializeSceneDrag();
 
         // 拖窗口的两片空白（REQ-UI-107）：右栏整条，以及停靠区里卡片之外的画布。
         // 走 Preview 而不是冒泡：右栏里的滚动区、停靠区里的窗格都会先把按下吃掉，
@@ -100,17 +98,25 @@ internal partial class ShellWindow
     // ---------------------------------------------------------------- 场景
 
     /// <summary>
-    /// 右栏上半。没有搜索词时挑「全部」+ 用得最多的几个 + 当前场景，**按标题排**而不是按频次排：
-    /// 频次每切一次就变，按它排的话按钮会在手底下跳位置。
+    /// 右栏上半。没有搜索词时按人排的先后列出没收起的场景（REQ-UI-135）；收起的进右下小栏。
+    /// 不按频次排：频次每切一次就变，按它排的话按钮会在手底下跳位置。
     ///
-    /// 有搜索词时改为筛选（REQ-UI-106）：不限条数、按匹配得分排，不再硬塞「全部」与当前场景——
+    /// 有搜索词时改为筛选（REQ-UI-106）：收起的也搜、按匹配得分排——
     /// 搜索时用户要的是「叫这个名字的那个」，不是「顺手能看到的那几个」。
+    ///
+    /// 拖着场景的时候不重画：拖动会话握着的是这一批按钮，换掉它们落点就算错了；松手后补画一次。
     /// </summary>
     private void RefreshNavigatorRail()
     {
         if (_closing)
             return;
+        if (_sceneDrag != null)
+        {
+            _railStale = true;
+            return;
+        }
 
+        _railStale = false;
         NavQuery.ToolTip = $"搜索场景与页面（{NavigatorHotkey}）；回车打开排在最前的候选";
 
         var filter = NavFilter;
@@ -128,12 +134,7 @@ internal partial class ShellWindow
         }
         else
         {
-            var rest = scenes.Where(scene => scene.Source != SceneSource.All).Take(RailLimit).ToList();
-            var active = scenes.FirstOrDefault(scene => scene.Active);
-            if (active != null && active.Source != SceneSource.All && !rest.Contains(active))
-                rest.Add(active);
-            rest = rest.OrderBy(scene => scene.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
-            shown = scenes.Where(scene => scene.Source == SceneSource.All).Concat(rest).ToList();
+            shown = scenes.Where(scene => !scene.Hidden).ToList();
         }
 
         NavRailItems.Children.Clear();
@@ -141,18 +142,21 @@ internal partial class ShellWindow
             NavRailItems.Children.Add(RailButton(scene));
 
         _topSceneId = filter.Length > 0 ? shown.FirstOrDefault()?.Id : null;
-        NavScenesEmpty.Visibility = filter.Length > 0 && shown.Count == 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        NavScenesEmpty.Text = filter.Length > 0 ? "没有匹配的场景" : "场景都收进小栏了";
+        NavScenesEmpty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        RefreshSceneTray(scenes);
         RefreshNavigatorPages(force: true);
     }
 
     private Button RailButton(SceneInfo scene)
     {
         var tip = $"{scene.Title} · {SceneKindText(scene.Source)}场景";
+        if (scene.Hidden)
+            tip += " · 已收进小栏";
         if (scene.Uses > 0)
             tip += $" · 用过 {scene.Uses} 次";
+        tip += "\n页面调整时可按住拖动：上下排队、拖进小栏收起、拖出窗口删除";
 
         var button = new Button
         {
@@ -160,6 +164,7 @@ internal partial class ShellWindow
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(0, 1, 0, 1),
             ToolTip = tip,
+            Tag = new SceneHandle(scene.Id, scene.Title, InTray: false),
         };
         // 当前场景是墨色块、字反白（REQ-UI-132），与站点选中的筛选片同一个样子
         button.SetResourceReference(StyleProperty, scene.Active ? "Aurora.Button.Ink" : "Aurora.Button.Ghost");
@@ -170,12 +175,63 @@ internal partial class ShellWindow
         }
 
         button.Click += (_, _) => _ = _bus.ExecuteAsync("aurora.scene.go id=" + CommandParser.QuoteArg(scene.Id), "UI");
+        AttachSceneDrag(button);
         return button;
+    }
+
+    /// <summary>右下小栏里的胶囊：收起的场景，长相同常用页面胶囊（圆角、一圈细线）。点一下切过去，拖动同右栏按钮。</summary>
+    private void RefreshSceneTray(IReadOnlyList<SceneInfo> scenes)
+    {
+        SceneTrayItems.Children.Clear();
+        var hidden = scenes.Where(scene => scene.Hidden).ToList();
+        foreach (var scene in hidden)
+            SceneTrayItems.Children.Add(TrayCapsule(scene));
+    }
+
+    private Border TrayCapsule(SceneInfo scene)
+    {
+        var text = new TextBlock
+        {
+            Text = scene.Title,
+            MaxWidth = 150,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        text.SetResourceReference(TextBlock.FontFamilyProperty, "Aurora.Font.Family");
+        text.SetResourceReference(TextBlock.FontSizeProperty, "Aurora.Font.Small");
+
+        var capsule = new Border
+        {
+            Child = text,
+            Tag = new SceneHandle(scene.Id, scene.Title, InTray: true),
+            Margin = new Thickness(0, 0, 4, 4),
+            Padding = new Thickness(10, 3, 10, 3),
+            CornerRadius = new CornerRadius(11),
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand,
+            ToolTip = $"{scene.Title} · {SceneKindText(scene.Source)}场景（已收起）\n点一下切过去；拖回上面放回右栏，拖出窗口删除",
+        };
+        // 当前场景即使收起了也是墨色块，免得人找不到自己在哪
+        if (scene.Active)
+        {
+            capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.Ink");
+            capsule.SetResourceReference(Border.BorderBrushProperty, "Aurora.Brush.Ink");
+            text.SetResourceReference(TextBlock.ForegroundProperty, "Aurora.Brush.OnInk");
+        }
+        else
+        {
+            capsule.Background = Brushes.Transparent;
+            capsule.SetResourceReference(Border.BorderBrushProperty, "Aurora.Brush.ControlBorder");
+            text.SetResourceReference(TextBlock.ForegroundProperty, "Aurora.Brush.TextPrimary");
+            capsule.MouseEnter += (_, _) => capsule.SetResourceReference(Border.BackgroundProperty, "Aurora.Brush.SurfaceHover");
+            capsule.MouseLeave += (_, _) => capsule.Background = Brushes.Transparent;
+        }
+
+        AttachSceneDrag(capsule);
+        return capsule;
     }
 
     private static string SceneKindText(SceneSource source) => source switch
     {
-        SceneSource.All => "内置",
         SceneSource.Derived => "模块",
         _ => "另存",
     };
@@ -243,6 +299,8 @@ internal partial class ShellWindow
             if (node is ButtonBase or TextBoxBase or ScrollBar or Thumb)
                 return true;
             if (node is Border { Tag: string tag } && tag.Length > 0)
+                return true;
+            if (node is Border { Tag: SceneHandle })
                 return true;
         }
 

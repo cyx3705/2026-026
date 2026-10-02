@@ -26,6 +26,8 @@
                 <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraTokens.xaml" />
                 <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraControls.xaml" />
                 <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraChrome.xaml" />
+                <!-- 弹窗卡片与遮罩(REQ-UI-136):弹窗嵌在本窗体的 DialogLayer 里 -->
+                <ResourceDictionary Source="/HistoryAurora;component/Themes/AuroraDialog.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--
@@ -86,6 +88,7 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <!-- 窗口控制组的唯一落点。专注态右栏也在,它不再搬家。 -->
@@ -178,17 +181,15 @@
                         </Grid>
                     </DockPanel>
 
-                    <ScrollViewer Grid.Row="2"
+                    <!--
+                        场景(REQ-UI-135):先后由人排。页面调整打开时按住场景拖动:在这一段里上下拖是排队,
+                        拖进右下浮出的小栏是收起,拖出整个窗体是删除(弹窗确认)。
+                    -->
+                    <ScrollViewer x:Name="NavScenesScroll"
+                                  Grid.Row="2"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="6,0,6,6">
-                            <ToggleButton x:Name="PageAdjustmentToggle"
-                                          Content="页面调整：关"
-                                          Margin="0,0,0,8"
-                                          HorizontalContentAlignment="Left"
-                                          Style="{StaticResource Aurora.Panel.Switch}"
-                                          ToolTip="开关页面调整模式；也可按住 Ctrl 临时调整"
-                                          Click="OnPageAdjustmentClick" />
                             <StackPanel x:Name="NavRailItems" />
                             <TextBlock x:Name="NavScenesEmpty"
                                        Margin="2,2,0,0"
@@ -224,8 +225,61 @@
                                        Foreground="{DynamicResource Aurora.Brush.TextSecondary}" />
                         </StackPanel>
                     </ScrollViewer>
+
+                    <!--
+                        收起的场景(REQ-UI-135):页面调整打开时从「页面调整」按钮上方浮出,盖在常用页面上,不挤动布局。
+                        场景胶囊拖进来就收起,拖回场景段就放回;点一下胶囊照样切过去。
+                        不写标题与说明(用户定,省空间);空着时留一行高,仍是拖放落点,说明放在悬停提示里。
+                        圆角块(块用圆角):Surface 底、一圈细线,与页面卡片同一组令牌。
+                    -->
+                    <Border x:Name="SceneTray"
+                            Grid.Row="2"
+                            Grid.RowSpan="3"
+                            Panel.ZIndex="10"
+                            Margin="6,0,6,6"
+                            Padding="6,6,2,2"
+                            MinHeight="34"
+                            VerticalAlignment="Bottom"
+                            Visibility="Collapsed"
+                            ToolTip="收起的场景：拖场景进来收起，拖回上面放回右栏，拖出窗口删除"
+                            Background="{DynamicResource Aurora.Brush.Surface}"
+                            BorderBrush="{DynamicResource Aurora.Brush.ControlBorder}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Aurora.Radius.Inner}"
+                            Effect="{DynamicResource Aurora.Shadow.Flyout}">
+                        <WrapPanel x:Name="SceneTrayItems" />
+                    </Border>
+
+                    <!-- 场景排队的落点:拖动时在两个场景之间画一道墨色线(线用直线) -->
+                    <Canvas x:Name="SceneDropLayer"
+                            Grid.Row="0"
+                            Grid.RowSpan="6"
+                            Panel.ZIndex="20"
+                            IsHitTestVisible="False">
+                        <Border x:Name="SceneDropLine"
+                                Height="2"
+                                Visibility="Collapsed"
+                                Background="{DynamicResource Aurora.Brush.Ink}" />
+                    </Canvas>
+
+                    <!-- 页面调整(1.30.0 挪到右下角,REQ-UI-135):打开时上方浮出收起的场景小栏 -->
+                    <ToggleButton x:Name="PageAdjustmentToggle"
+                                  Grid.Row="5"
+                                  Margin="6,0,6,6"
+                                  Content="页面调整：关"
+                                  HorizontalContentAlignment="Left"
+                                  Style="{StaticResource Aurora.Panel.Switch}"
+                                  ToolTip="开关页面调整模式；也可按住 Ctrl 临时调整。打开时可拖动场景排队、收起或删除"
+                                  Click="OnPageAdjustmentClick" />
                 </Grid>
             </Border>
+
+            <!-- 弹窗层(REQ-UI-136):盖住停靠区与右栏,弹窗卡片居中嵌在这里。没有弹窗时折叠。 -->
+            <Grid x:Name="DialogLayer"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  Panel.ZIndex="100"
+                  Visibility="Collapsed" />
 
         </Grid>
     </Border>
