@@ -421,7 +421,16 @@ new { id = "mymodule.page.float", title = "浮动", command = "aurora.ui.float",
 > 此前 `stack` 是 `StackPanel`，它在排列方向上以无穷尺寸量子元素——放进去的表格
 > 会把每一行都画出来，表现为**撑满整页且滚不动**（Janus 项目总览页实测）。
 > 现在 `stack` 是按行分档的 Grid：`table` 与 `swimlane`（以及内含它们的容器）拿剩余尺寸，
-> 其余按内容尺寸。你不需要声明任何东西，也没有可声明的东西。
+> 其余按内容尺寸。表格不需要声明任何东西。
+>
+> **1.30.2：想把某一行固定到页底，给它前面那一格写 `"fill": true`。** 那一格占住剩余空间（内容不滚的仍按自身大小顶着放），
+> 后面的兄弟就被推到 stack 末端：
+>
+> ```json
+> { "type": "stack", "children": [ { "type": "panel", "id": "toolbar" }, { "type": "switch", "fill": true }, { "type": "panel", "id": "footer" } ] }
+> ```
+>
+> `fill` 只在 stack 的子节点上起作用（REQ-UI-140）。
 
 1.8.6 起表格外围不再绘制背景、描边、圆角或裁剪，表格直接平铺在页面内容中；表头、行分隔线、
 悬停态、选中态和空态仍由 `AuroraTable` 统一提供。表格可以与控制面板作为响应式栅格的同级项，

@@ -143,6 +143,49 @@ public sealed class PageProtocolContractTests
     }
 
     [Fact]
+    public void Render_FillTakesTheLeftoverAndPushesLaterSiblingsToTheEnd()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            // REQ-UI-140：PowerSW 要把开关一行放在窗口最下面——中间那块标 fill，后面的兄弟就被推到底。
+            var page = Page("""
+                {
+                  "type": "stack",
+                  "children": [
+                    { "type": "text", "text": "工具条" },
+                    { "type": "panel", "fill": true, "rows": [ { "widgets": [ { "kind": "text", "text": "面板" } ] } ] },
+                    { "type": "text", "text": "开关" }
+                  ]
+                }
+                """);
+
+            var rendered = PageRenderer.Render(page, Context(out _, out _));
+            var stack = Assert.IsType<Grid>(rendered.Root);
+            Assert.Equal(GridUnitType.Auto, stack.RowDefinitions[0].Height.GridUnitType);
+            Assert.Equal(GridUnitType.Star, stack.RowDefinitions[1].Height.GridUnitType);
+            Assert.Equal(GridUnitType.Auto, stack.RowDefinitions[2].Height.GridUnitType);
+            // 面板不滚：按自身高度贴着上一格，不被拉成整格高。
+            Assert.Equal(VerticalAlignment.Top, ((FrameworkElement)stack.Children[1]).VerticalAlignment);
+
+            // 真摆一次：600 高的窗口里最后一格贴着底边。
+            var host = new Window { Width = 400, Height = 600, ShowActivated = false, Content = rendered.Root };
+            host.Show();
+            try
+            {
+                host.UpdateLayout();
+                var last = (FrameworkElement)stack.Children[2];
+                var bottom = last.TranslatePoint(new Point(0, last.ActualHeight), stack).Y;
+                Assert.True(Math.Abs(bottom - stack.ActualHeight) < 1, $"最后一格底边 {bottom}，stack 高 {stack.ActualHeight}");
+                Assert.True(stack.ActualHeight > 400, "stack 应占满窗口高度");
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void Render_UnknownComponentBecomesVisiblePlaceholderAndIsReported()
     {
         UiTestHost.RunSta(() =>

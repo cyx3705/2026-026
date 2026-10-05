@@ -78,6 +78,12 @@ public sealed class PageNode
     /// <summary>stack 专用：vertical（缺省）或 horizontal。</summary>
     public string? Orientation { get; init; }
 
+    /// <summary>
+    /// stack 的子节点用（1.30.2，REQ-UI-140）：这一格拿走 stack 的剩余尺寸，内容仍按自身大小贴着前一格放；
+    /// 排在它后面的兄弟节点因此被推到 stack 的末端（竖排即窗口底部）。内容自带滚动（含表格）时照 REQ-UI-042 撑满这一格。
+    /// </summary>
+    public bool Fill { get; init; }
+
     /// <summary>stack / grid 专用：间距档位 none / tight / normal。tight 与 normal 同值（等于页面内边距，REQ-UI-122），只有 none 是 0。</summary>
     public string? Gap { get; init; }
 

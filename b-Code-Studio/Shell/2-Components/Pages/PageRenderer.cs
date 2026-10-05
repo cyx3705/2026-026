@@ -236,7 +236,10 @@ public static partial class PageRenderer
     /// 放在 StackPanel 里的话它们量到的是无穷高，于是一次性把全部行画出来——
     /// 表现就是"表格撑满整页、还滚不动"（Janus 实测）。
     /// </summary>
-    private static bool IsGreedy(PageNode node)
+    private static bool IsGreedy(PageNode node) => node.Fill || ScrollsInside(node);
+
+    /// <summary>自己（或里面的组件）带滚动视口：这样的节点拿到星号格要撑满它，滚动才发生在它自己的框里。</summary>
+    private static bool ScrollsInside(PageNode node)
     {
         var type = (node.Type ?? "").ToLowerInvariant();
         if (type is "table" or "swimlane")
@@ -245,7 +248,7 @@ public static partial class PageRenderer
         // 容器跟着里面走：栅格里放了表格，那一格照样得拿到高度。
         // switch 同理，而且**必须**算上：它的分支里放着表格，少算的话
         // 切过去看到的是一张只有表头、按内容高度缩成一条的表。
-        return type is "stack" or "grid" or "switch" && (node.Children ?? []).Any(IsGreedy);
+        return type is "stack" or "grid" or "switch" && (node.Children ?? []).Any(ScrollsInside);
     }
 
     private static FrameworkElement Build(PageNode node, RenderState state)
@@ -299,6 +302,17 @@ public static partial class PageRenderer
                 grid.RowDefinitions.Add(new RowDefinition { Height = length });
 
             var child = Build(children[i], state);
+
+            // fill（REQ-UI-140）只是把剩余尺寸占住、把后面的兄弟推到末端；内容不滚的就按自身大小贴着前一格，
+            // 否则一块面板会被拉成整格高的底色块。
+            if (children[i].Fill && !ScrollsInside(children[i]))
+            {
+                if (horizontal)
+                    child.HorizontalAlignment = HorizontalAlignment.Left;
+                else
+                    child.VerticalAlignment = VerticalAlignment.Top;
+            }
+
             if (gap > 0 && i < children.Count - 1)
                 child.Margin = horizontal
                     ? new Thickness(0, 0, gap, 0)
@@ -549,7 +563,7 @@ public static partial class PageRenderer
         foreach (var child in node.Children ?? [])
         {
             var element = Build(child, state);
-            element.SetValue(AuroraGridPanel.FillHeightProperty, IsGreedy(child));
+            element.SetValue(AuroraGridPanel.FillHeightProperty, ScrollsInside(child));
             grid.Children.Add(element);
         }
 
