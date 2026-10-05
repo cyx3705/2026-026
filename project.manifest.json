@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.30.3",
+    "version": "1.32.0",
     "branch": "main"
   },
   "paths": {
@@ -36,7 +36,6 @@
       "z-Publish"
     ],
     "archiveRoots": [
-      "b-Office/history",
       "z-Publish/history"
     ],
     "releaseRoots": [
@@ -49,14 +48,7 @@
     ]
   },
   "documents": {
-    "center": "b-Office/文档中心.md",
-    "components": "b-Office/current/HistoryAurora_组件清单与用法.md",
-    "structure": "b-Office/文档中心.md",
-    "overview": "b-Office/current/项目概览.md",
-    "technicalContract": "b-Office/current/技术合同.md",
-    "decisions": "b-Office/current/有效决策.md",
-    "verification": "b-Office/current/验证合同.md",
-    "uiStyle": "b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md"
+    "conventions": "b-Office/current/现行约定.md"
   },
   "commands": {
     "setup": "dotnet restore .\\HistoryAurora.sln --locked-mode -p:NuGetAudit=false",
@@ -73,7 +65,6 @@
     "Dirkster.AvalonDock.Themes.VS2013 4.72.1"
   ],
   "contextExclusions": [
-    "b-Office/history/**",
     "z-Publish/**",
     "**/bin/**",
     "**/obj/**",

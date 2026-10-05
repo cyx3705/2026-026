@@ -223,8 +223,7 @@ public sealed class PageProtocolContractTests
                   "type": "table",
                   "id": "rows",
                   "dataSource": { "command": "test.rows" },
-                  "columns": [ { "key": "name", "title": "名称" } ],
-                  "view": { "selection": "single" }
+                  "columns": [ { "key": "name", "title": "名称" } ]
                 }
                 """);
 

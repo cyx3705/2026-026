@@ -59,9 +59,9 @@ public sealed class PageRenderContext
     public PageDataRefresher? Refresher { get; init; }
 
     /// <summary>
-    /// 列序记忆（REQ-UI-062）。为 null 时列照样拖得动，只是重开页面回到声明顺序。
+    /// 列序与列宽记忆（REQ-UI-062/142）。为 null 时列照样拖得动，只是重开页面回到声明的顺序与比例。
     /// </summary>
-    public IColumnOrderStore? ColumnOrder { get; init; }
+    public IColumnLayoutStore? ColumnLayout { get; init; }
 }
 
 /// <summary>渲染结果。缺件被记录下来而不是丢弃，供缺件清单查询。</summary>
@@ -110,14 +110,28 @@ public static partial class PageRenderer
         => string.Equals(node.Gap, "none", StringComparison.OrdinalIgnoreCase) ? 0d : ComponentGap;
 
     /// <summary>
+    /// 节点类型 → 构造方法。新增节点类型只在这里加一行，再到 <see cref="Catalog.ComponentCatalog"/> 写它的规格；
+    /// 两边由合同测试逐个对账，漏写规格门禁不过。
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, Func<PageNode, RenderState, FrameworkElement>> Builders =
+        new Dictionary<string, Func<PageNode, RenderState, FrameworkElement>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["stack"] = BuildStack,
+            ["text"] = (node, _) => BuildText(node),
+            ["table"] = BuildTable,
+            ["panel"] = BuildPanel,
+            ["swimlane"] = BuildSwimlane,
+            ["grid"] = BuildGrid,
+            ["popup"] = BuildPopup,
+            ["switch"] = BuildSwitch,
+        };
+
+    /// <summary>
     /// V1 组件集。这是「某个申请是否已交付」的**唯一权威**——台账不另存一份状态，
-    /// 否则两边会各说各话。新增组件时改这里与 <see cref="Build"/> 的分派，两处必须同步。
+    /// 否则两边会各说各话。由 <see cref="Builders"/> 推出，不另写一份。
     /// </summary>
     public static readonly IReadOnlySet<string> SupportedComponents =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "stack", "text", "table", "panel", "swimlane", "grid", "popup", "switch",
-        };
+        new HashSet<string>(Builders.Keys, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 曾经是页面节点、现已退役的类型。
@@ -260,18 +274,9 @@ public static partial class PageRenderer
         if (node.Channel is { Length: > 0 } && type != "table")
             state.WarnUnbound($"只有表格能声明选择通道，{type} 上的 channel={node.Channel} 已忽略");
 
-        return type switch
-        {
-            "stack" => BuildStack(node, state),
-            "text" => BuildText(node),
-            "table" => BuildTable(node, state),
-            "panel" => BuildPanel(node, state),
-            "swimlane" => BuildSwimlane(node, state),
-            "grid" => BuildGrid(node, state),
-            "popup" => BuildPopup(node, state),
-            "switch" => BuildSwitch(node, state),
-            _ => Placeholder(node.Type, state),
-        };
+        return Builders.TryGetValue(type, out var build)
+            ? build(node, state)
+            : Placeholder(node.Type, state);
     }
 
     /// <summary>
@@ -388,7 +393,7 @@ public static partial class PageRenderer
 
             // 列序按「模块/页面/节点」记（REQ-UI-062）。没写 id 的表不记：
             // 那样的表拖完也认不出是哪一张，记下来只会张冠李戴。
-            table.UseColumnOrder(state.ColumnOrder, state.ColumnOrderKey(id));
+            table.UseColumnLayout(state.ColumnLayout, state.ColumnLayoutKey(id));
         }
 
         if (node.Channel is { Length: > 0 } channel)
@@ -738,14 +743,14 @@ public static partial class PageRenderer
 
         public void RegisterNode(string id, AuroraTable table) => _nodes[id] = table;
 
-        /// <summary>列序记忆的落点。</summary>
-        public IColumnOrderStore? ColumnOrder => context.ColumnOrder;
+        /// <summary>列序与列宽记忆的落点。</summary>
+        public IColumnLayoutStore? ColumnLayout => context.ColumnLayout;
 
         /// <summary>
-        /// 一张表在列序台账里的身份：<c>模块/页面/节点</c>。
+        /// 一张表在列布局台账里的身份：<c>模块/页面/节点</c>。
         /// 与通道来源用的是同一套三段式——同一张表在两本账里应该叫同一个名字。
         /// </summary>
-        public string ColumnOrderKey(string nodeId) => $"{context.Owner}/{pageId}/{nodeId}";
+        public string ColumnLayoutKey(string nodeId) => $"{context.Owner}/{pageId}/{nodeId}";
 
         /// <summary>
         /// 把一张表接到选择通道上。**来源写成 owner/页/节点**：热重载时同一个节点重新渲染，
@@ -875,67 +880,6 @@ public static partial class PageRenderer
 
         public void WarnUnbound(string reason)
             => context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": " + reason);
-
-        /// <summary>
-        /// 直接写指令名的按钮不拦，但要留痕：模块改一次指令名它就会静默失效，
-        /// 而"哪些按钮还没换成动作"必须是可查的，不能只存在于某次代码走查的印象里。
-        /// </summary>
-        public void WarnRawCommand(string command)
-            => context.Log.Log(
-                ShellLogLevel.Warn,
-                "page",
-                context.Owner + ": 按钮直接绑定指令 " + command
-                + "，改名后会静默失效；建议改用模块声明的动作（<域>.ui.actions）");
-
-        /// <summary>组件调用走指令总线：按钮点击变成一条命令，参数可从视图状态取值。</summary>
-        public void Invoke(PageInvoke invoke)
-        {
-            string text;
-            if (invoke.Action is { Length: > 0 } actionId)
-            {
-                // 点击时**现取**声明：构建时固化下来的那份在模块热重载后就是过期的。
-                var binding = ResolveAction(actionId);
-                if (!binding.Ok)
-                {
-                    context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": " + binding.Error);
-                    return;
-                }
-
-                var built = ActionRegistry.BuildCommandText(
-                    binding.Action!,
-                    control => ResolveArgument(invoke, control),
-                    out var error);
-                if (built == null)
-                {
-                    context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": " + error);
-                    return;
-                }
-
-                text = built;
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(invoke.Command))
-                    return;
-
-                text = invoke.Command;
-                foreach (var pair in invoke.Args ?? new Dictionary<string, PageArgument>())
-                {
-                    var value = Resolve(pair.Value);
-                    if (value == null)
-                        continue;
-                    text += " " + pair.Key + "=" + CommandParser.QuoteArg(value);
-                }
-            }
-
-            _ = context.Bus.ExecuteAsync(text, "UI");
-        }
-
-        /// <summary>动作占位符 <c>{name}</c> 从本按钮的 args 取值，取不到返回 null 让动作报错。</summary>
-        private string? ResolveArgument(PageInvoke invoke, string name)
-            => invoke.Args != null && invoke.Args.TryGetValue(name, out var argument)
-                ? Resolve(argument)
-                : null;
 
         private string? Resolve(PageArgument argument)
         {

@@ -26,15 +26,16 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
-| `ui` | `show` / `dock` / `max` / `layouts` / `panels` / `dialog` / `selectfile` … | 窗口、布局、面板、弹窗与文件选择 |
+| `ui` | `show` / `dock` / `float` / `layouts` / `panels` / `dialog` / `selectfile` … | 窗口、布局、面板、弹窗与文件选择 |
+| `component` | `list` / `show` | 页面协议与组件用法的自描述 |
 | `scene` | `list` / `open` / `go` / `save` / `reset` / `delete` | 场景 |
 | `log` | `source` / `level` / `keyword` / `clear` / `export` … | 控制台筛选与导出 |
 | `command` | `history` / `copyexample` / `runreadonly` | 命令集 |
 | `app` | `about` / `window` | 关于与主窗口 |
 | `host` | `ready` 等 | 宿主装载完成钩子（内部） |
 
-模块在界面里露面的两条路（描述化页面 / 带注解命令交出窗格）见 [组件清单与用法](./b-Office/current/HistoryAurora_组件清单与用法.md)开头一节，
-可用组件见同一文档；`aurora.*` 指令的参数读注册自描述：`diana.docs.read domain=aurora`（宿主 6.1.0 起没有消费文档）。
+模块怎么在界面里露面、有哪些组件、怎么写：`aurora.component.list` → `aurora.component.show name=<名>`（从 `page` 看起）；
+`aurora.*` 指令的参数读注册自描述：`diana.docs.read domain=aurora`。本仓不写手工用法文档。
 
 ## 入口
 
@@ -42,13 +43,7 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 | --- | --- |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令 |
-| [文档中心](./b-Office/文档中心.md) | 文档索引与读取顺序 |
-| [项目概览](./b-Office/current/项目概览.md) | 目标、范围与状态 |
-| [技术合同](./b-Office/current/技术合同.md) | 现行需求与架构 |
-| [有效决策](./b-Office/current/有效决策.md) | 仍然有效的关键决策 |
-| [验证合同](./b-Office/current/验证合同.md) | 验证层级、命令与证据 |
-| [组件清单与用法](./b-Office/current/HistoryAurora_组件清单与用法.md) | 页面协议与组件写法 |
-| [UI 风格与嵌入页面规范](./b-Office/current/HistoryAurora_UI风格与嵌入页面规范.md) | 视觉与嵌入页结构 |
+| [现行约定](./b-Office/current/现行约定.md) | 唯一的长期文档：真相在哪、组件层规矩、界面取舍、工程约定 |
 
 ## 目录
 
@@ -58,7 +53,7 @@ HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记�
 | `b-Code-Studio/Shell/` | 界面源码，按层分目录（见「要点」） |
 | `b-Code-Studio/eng/` | 构建与门禁脚本 |
 | `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟 |
-| `b-Office/` | 项目文档：`current/` 现行合同、`history/` 只读归档 |
+| `b-Office/` | `current/现行约定.md`，仅此一份 |
 | `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入；纳入 git，排除规则不得触碰 |
 
 ## 构建与验证
@@ -81,13 +76,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code-Studio\eng\Test-Qua
 
 ## 要点
 
-`Shell/` 下只有五个层目录，编号越大越靠上，**依赖只能向下**；目录名即层，命名空间跟着目录走（REQ-UI-074、DEC-029）。
+`Shell/` 下只有五个层目录，编号越大越靠上，**依赖只能向下**；目录名即层，命名空间跟着目录走。
 
 | 目录 | 命名空间 | 内容 |
 | --- | --- | --- |
 | `0-Neutral/` | `HistoryAurora.Shell.Neutral` | 指令面、日志、纯工具 |
 | `1-Base/` | `.Base` | 页面外壳：停靠、顶栏、拖出拖入、页面合并、弹窗 |
-| `2-Components/` | `.Components` | 风格令牌、表格、控制面板、泳道、页面描述与渲染器 |
+| `2-Components/` | `.Components` | 风格令牌、表格、控制面板、泳道、页面描述与渲染器、组件目录（`Catalog/`） |
 | `3-HostedPages/` | `.HostedPages` | Aurora 自己托管的页面，与模块页同一条路 |
 | `4-Composition/` | `.Composition` | 装配根：`ShellWindow` 与内置指令组 |
 

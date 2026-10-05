@@ -79,6 +79,7 @@ internal static partial class BuiltinCommands
         RegisterLayout(r, s);
         RegisterScenes(r, s);
         RegisterDialog(r, s);
+        RegisterComponents(r);
         // 组件测试页的取数指令必须在这里就登记好。
         //
         // 界面总线默认把命令**发给宿主**（AuroraShellHost.WireBuses：只有本机已登记

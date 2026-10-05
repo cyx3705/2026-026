@@ -81,11 +81,11 @@ public sealed class AuroraTable : UserControl
 
     private ScrollViewer? _scrollHost;
 
-    /// <summary>列序记忆的落点；未接时列序只在本次可视树里有效。</summary>
-    private IColumnOrderStore? _orderStore;
+    /// <summary>列序与列宽记忆的落点；未接时两者都只在本次可视树里有效。</summary>
+    private IColumnLayoutStore? _layoutStore;
 
-    /// <summary>本表在列序台账里的身份，形如 <c>模块/页面/节点</c>。</summary>
-    private string? _orderKey;
+    /// <summary>本表在列布局台账里的身份，形如 <c>模块/页面/节点</c>。</summary>
+    private string? _layoutKey;
 
     /// <summary>正在由组件自己动列集合；期间不把变化当成用户拖动。</summary>
     private bool _reordering;
@@ -95,7 +95,7 @@ public sealed class AuroraTable : UserControl
 
     public AuroraTable()
     {
-        // 底色由窗格卡片提供；表格自己不再画一块白（UI 风格规范 §1）。
+        // 底色由窗格卡片提供；表格自己不再画一块白。
         Background = Brushes.Transparent;
 
         // 组件自带控件字典：被拖进浮动窗口后 Aurora.Table.* 仍要解析得到。
@@ -318,14 +318,14 @@ public sealed class AuroraTable : UserControl
     }
 
     /// <summary>
-    /// 接上列序记忆（REQ-UI-062）。<paramref name="key"/> 是这张表的身份，
+    /// 接上列序（REQ-UI-062）与列宽（REQ-UI-142）记忆。<paramref name="key"/> 是这张表的身份，
     /// 形如 <c>模块/页面/节点</c>；没有身份的表（描述里没写 id）不接，
     /// 那样的表拖完也认不出是哪一张，记下来只会张冠李戴。
     /// </summary>
-    public void UseColumnOrder(IColumnOrderStore? store, string? key)
+    public void UseColumnLayout(IColumnLayoutStore? store, string? key)
     {
-        _orderStore = string.IsNullOrWhiteSpace(key) ? null : store;
-        _orderKey = _orderStore == null ? null : key;
+        _layoutStore = string.IsNullOrWhiteSpace(key) ? null : store;
+        _layoutKey = _layoutStore == null ? null : key;
         RebuildColumns();
         RestartWidthLayout();
     }
@@ -340,7 +340,7 @@ public sealed class AuroraTable : UserControl
     private List<AuroraTableColumn> OrderedColumns()
     {
         var declared = _data.Columns.ToList();
-        var remembered = _orderStore?.Read(_orderKey ?? "") ?? [];
+        var remembered = _layoutStore?.ReadOrder(_layoutKey ?? "") ?? [];
         if (remembered.Count > 0)
         {
             var byKey = declared.ToDictionary(column => column.Key, StringComparer.Ordinal);
@@ -385,6 +385,7 @@ public sealed class AuroraTable : UserControl
         {
             _view.Columns.Clear();
 
+            var remembered = _layoutStore?.ReadWidths(_layoutKey ?? "");
             foreach (var column in OrderedColumns())
             {
                 var gridColumn = new GridViewColumn
@@ -397,7 +398,10 @@ public sealed class AuroraTable : UserControl
 
                 // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
                 // 各列按权重分摊。写 150 / 70 的那张表，比例仍是 150:70，只是随宽度缩放。
-                _weights[gridColumn] = column.FixedWidth ?? (column.IsStar ? StarWeight : AutoWeight);
+                // 用户拖过的列用拖出来的权重（REQ-UI-142）；新加的列没记过，按声明补上。
+                _weights[gridColumn] = remembered != null && remembered.TryGetValue(column.Key, out var dragged)
+                    ? dragged
+                    : column.FixedWidth ?? (column.IsStar ? StarWeight : AutoWeight);
                 _columnKeys[gridColumn] = column.Key;
                 if (column.IsStar)
                     _starColumn = gridColumn;
@@ -492,7 +496,7 @@ public sealed class AuroraTable : UserControl
     /// <summary>把当前列序记进台账。行操作列不记——它不是数据列，位置也不归用户管。</summary>
     private void SaveColumnOrder()
     {
-        if (_orderStore is not { } store || _orderKey is not { Length: > 0 } key)
+        if (_layoutStore is not { } store || _layoutKey is not { Length: > 0 } key)
             return;
 
         var keys = new List<string>(_view.Columns.Count);
@@ -502,7 +506,27 @@ public sealed class AuroraTable : UserControl
                 keys.Add(columnKey);
         }
 
-        store.Write(key, keys);
+        store.WriteOrder(key, keys);
+    }
+
+    /// <summary>
+    /// 把各数据列当前的权重记进台账（REQ-UI-142）。行操作列同样不记——它宽度固定、不参与分摊。
+    /// 记的是拖完那一刻的整套比例，不是被拖的那一列：右缘锁死时被拖列的差额由最后一列吸收，
+    /// 只记一列的话下次建表比例就对不上了。
+    /// </summary>
+    private void SaveColumnWidths()
+    {
+        if (_layoutStore is not { } store || _layoutKey is not { Length: > 0 } key || _weights.Count == 0)
+            return;
+
+        var weights = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var (column, weight) in _weights)
+        {
+            if (_columnKeys.TryGetValue(column, out var columnKey))
+                weights[columnKey] = weight;
+        }
+
+        store.WriteWidths(key, weights);
     }
 
     /// <summary>
@@ -1086,6 +1110,8 @@ public sealed class AuroraTable : UserControl
             // 普通 += 订阅因此一次都收不到。
             gripper.RemoveHandler(System.Windows.Controls.Primitives.Thumb.DragDeltaEvent, GripperDragDelta);
             gripper.AddHandler(System.Windows.Controls.Primitives.Thumb.DragDeltaEvent, GripperDragDelta, handledEventsToo: true);
+            gripper.RemoveHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent, GripperDragCompleted);
+            gripper.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent, GripperDragCompleted, handledEventsToo: true);
         }
     }
 
@@ -1095,12 +1121,24 @@ public sealed class AuroraTable : UserControl
     /// GridView 自己的处理器负责把那一列改宽；这里负责「右缘不动」：
     /// 差额全由最后一列数据列吸收，最后一列挤到下限时反过来收住被拖的那一列。
     /// 拖完把各列当前宽度记成新的权重——之后窗口缩放按用户拖出来的比例走，
-    /// 不会在下一次分摊时弹回声明比例。宽度不记进台账（REQ-UI-062 只记顺序）。
+    /// 不会在下一次分摊时弹回声明比例。松手时这套权重记进台账（REQ-UI-142），重启后还是这个比例。
     /// </summary>
     private System.Windows.Controls.Primitives.DragDeltaEventHandler GripperDragDelta
         => _gripperDragDelta ??= OnGripperDragDelta;
 
     private System.Windows.Controls.Primitives.DragDeltaEventHandler? _gripperDragDelta;
+
+    private System.Windows.Controls.Primitives.DragCompletedEventHandler GripperDragCompleted
+        => _gripperDragCompleted ??= OnGripperDragCompleted;
+
+    private System.Windows.Controls.Primitives.DragCompletedEventHandler? _gripperDragCompleted;
+
+    /// <summary>
+    /// 松手才记账，拖动途中不写：DragDelta 一秒几十次，每次都落一回设置文件不值当。
+    /// 排在 Background 上：最后一拍的 <see cref="KeepRightEdge"/> 排在 Render 上，此时已经把权重改完。
+    /// </summary>
+    private void OnGripperDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(SaveColumnWidths));
 
     private void OnGripperDragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
     {

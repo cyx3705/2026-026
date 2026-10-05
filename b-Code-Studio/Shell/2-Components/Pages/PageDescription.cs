@@ -5,7 +5,7 @@ namespace HistoryAurora.Shell.Components.Pages;
 
 /// <summary>
 /// 模块页面描述（协议 V1）。模块经指令总线返回本结构，Aurora 用自己的组件库渲染，
-/// 模块不再构造任何 WPF 对象——见 b-Office/history/页面注册协议方案V1.0.md。
+/// 模块不再构造任何 WPF 对象。
 ///
 /// 本结构是**数据**，不含任何外观信息：模块只能选语义档位（<see cref="PageNode.Style"/>），
 /// 具体长相由 Aurora 决定（DEC-005）。解析失败或版本不支持时整份描述作废，
@@ -67,7 +67,7 @@ public sealed class PageNode
 {
     public string Type { get; init; } = "";
 
-    /// <summary>节点在本页内的引用名，供 <see cref="PageInvoke"/> 取值与 enabledWhen 使用。</summary>
+    /// <summary>节点在本页内的引用名：取数刷新按它找节点，行操作的 args.from 按它找表。</summary>
     public string? Id { get; init; }
 
     public string? Text { get; init; }
@@ -104,12 +104,6 @@ public sealed class PageNode
     /// 页面作者不必在两种控件之间挑一个、挑完还要各写一遍参数。
     /// </summary>
     public IReadOnlyList<PageRowAction>? RowActions { get; init; }
-
-    /// <summary>
-    /// input 专用：候选来源。目前只支持 <c>commands</c>（指令名与参数分段补全）。
-    /// 声明了但当前拿不到补全会话时退回普通输入框，并记一条 Warn——不静默。
-    /// </summary>
-    public string? Suggest { get; init; }
 
     /// <summary>
     /// table 专用：把当前选中行发布到这个**选择通道**（REQ-UI-041）。
@@ -152,14 +146,6 @@ public sealed class PageNode
 
     /// <summary>表格数据源；组件按需回调模块取数，数据不内联进描述。</summary>
     public PageDataSource? DataSource { get; init; }
-
-    /// <summary>有外部副作用的动作。视图行为（筛选、排序、选中）由组件自理，不走这里。</summary>
-    public PageInvoke? Invoke { get; init; }
-
-    public PageViewOptions? View { get; init; }
-
-    /// <summary>启用条件；目前只支持 { "selected": "&lt;节点 id&gt;" }。</summary>
-    public PageEnabledWhen? EnabledWhen { get; init; }
 }
 
 /// <summary>
@@ -221,47 +207,12 @@ public sealed class PageDataSource
     public IReadOnlyDictionary<string, string>? Args { get; init; }
 }
 
-/// <summary>
-/// 按钮的落点。二选一：
-/// <list type="bullet">
-///   <item><see cref="Action"/>——模块声明的动作 id，**推荐**。指令改名不影响按钮；</item>
-///   <item><see cref="Command"/>——直接写指令名。模块改名时这里会静默失效，
-///         因此渲染器会记一条 Warn，让"哪些按钮还没换成动作"是可查的。</item>
-/// </list>
-/// </summary>
-public sealed class PageInvoke
-{
-    /// <summary>动作 id（见 <c>&lt;域&gt;.ui.actions</c>）。与 <see cref="Command"/> 同时给出时以本项为准。</summary>
-    public string? Action { get; init; }
-
-    public string Command { get; init; } = "";
-
-    public IReadOnlyDictionary<string, PageArgument>? Args { get; init; }
-}
-
 public sealed class PageArgument
 {
     public string? Value { get; init; }
 
     /// <summary>形如 "commands.selected.name"：取 id 为 commands 的节点当前选中行的 name 列。</summary>
     public string? From { get; init; }
-}
-
-/// <summary>视图行为开关。这些**不产生命令**——组件自理。</summary>
-public sealed class PageViewOptions
-{
-    public bool Filterable { get; init; }
-
-    public bool Sortable { get; init; }
-
-    /// <summary>none / single；V1 不支持多选。</summary>
-    public string Selection { get; init; } = "none";
-}
-
-public sealed class PageEnabledWhen
-{
-    /// <summary>指定节点必须有选中行。</summary>
-    public string? Selected { get; init; }
 }
 
 /// <summary>解析结果：成功带描述，失败带可直接写进日志的原因。</summary>
