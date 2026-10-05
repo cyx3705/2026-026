@@ -1870,6 +1870,116 @@ public sealed class DockingContractTests
         });
     }
 
+    /// <summary>
+    /// REQ-UI-143：退出时浮着的页，下次启动在原位重新浮出；人亲手还原过的，下次不再浮。
+    /// 退出收回停靠区是为了关得掉进程，不是人要还原——账上仍记「浮着」。
+    /// </summary>
+    [Fact]
+    public void FloatingPageAndItsPositionSurviveARestart()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var settings = new MemorySettings();
+            IReadOnlyList<ToolWindowDescriptor> tools =
+            [
+                Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                Tool("page", DockSide.Right, 0.3),
+            ];
+
+            var window = ShowHost(tools, new MemoryLayoutStore(), out var host, settings);
+            try
+            {
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+                var floating = host.FloatWindowOf("page")!;
+                floating.Left = 123;
+                floating.Top = 145;
+                floating.Width = 500;
+                floating.Height = 300;
+                UiTestHost.Pump();
+            }
+            finally
+            {
+                // 等同退出：ShellWindow 关窗前就是这一句。
+                host.RestoreAllFloats();
+                window.Close();
+            }
+
+            window = ShowHost(tools, new MemoryLayoutStore(), out host, settings);
+            try
+            {
+                UiTestHost.Pump();
+                Assert.True(host.IsPageFloating("page"), "重启后没有重新浮出");
+                var floating = host.FloatWindowOf("page")!;
+                Assert.Equal(123, floating.Left, 0.5);
+                Assert.Equal(145, floating.Top, 0.5);
+                Assert.Equal(500, floating.Width, 0.5);
+                Assert.Equal(300, floating.Height, 0.5);
+
+                // 人亲手还原：账改成「不浮」。
+                host.SetPageFloating("page", false);
+                UiTestHost.Pump();
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+
+            window = ShowHost(tools, new MemoryLayoutStore(), out host, settings);
+            try
+            {
+                UiTestHost.Pump();
+                Assert.False(host.IsPageFloating("page"), "人还原过的页重启后又浮出来了");
+
+                // 再浮出时仍落在上次的位置。
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+                Assert.Equal(123, host.FloatWindowOf("page")!.Left, 0.5);
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
+    /// REQ-UI-143：模块卸载时浮窗随页面关掉，但账上仍记「浮着」；这一页再登记进来（模块重新载入）就浮回去。
+    /// </summary>
+    [Fact]
+    public void FloatingPageRefloatsWhenItsModuleRegistersAgain()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var window = ShowHost(
+                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
+                new MemoryLayoutStore(),
+                out var host,
+                new MemorySettings());
+            try
+            {
+                host.RegisterWindow(Tool("page", DockSide.Right, 0.3), "HistoryDemo");
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+
+                host.UnregisterOwner("HistoryDemo");
+                UiTestHost.Pump();
+                Assert.False(host.IsPageFloating("page"));
+
+                host.RegisterWindow(Tool("page", DockSide.Right, 0.3), "HistoryDemo");
+                UiTestHost.Pump();
+                Assert.True(host.IsPageFloating("page"), "模块重新载入后没有浮回去");
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+        });
+    }
+
     private static LayoutAnchorable AnchorableOf(Window window, string id)
         => ((DockingManager)window.Content).Layout.Descendents().OfType<LayoutAnchorable>()
             .Concat(((DockingManager)window.Content).Layout.Hidden)
@@ -1878,10 +1988,11 @@ public sealed class DockingContractTests
     private static Window ShowHost(
         IReadOnlyList<ToolWindowDescriptor> tools,
         MemoryLayoutStore store,
-        out DockingHost host)
+        out DockingHost host,
+        ISettingsService? settings = null)
     {
         var manager = new DockingManager();
-        host = new DockingHost(manager, tools, store, new NullLog());
+        host = new DockingHost(manager, tools, store, new NullLog(), settings);
         host.Initialize();
         var window = new Window
         {

@@ -230,6 +230,8 @@ internal sealed partial class DockingHost : IDockingService
         EvictExtraPages();
         ScheduleReapplyRatios();
         RebaseSoon();
+        // 上次退出时浮着的框架页，原位浮回去（REQ-UI-143）；模块页登记时各自再排一次。
+        ScheduleRefloat();
     }
 
     /// <summary>退出时调用:自动保存当前布局(W-07)。</summary>
@@ -521,6 +523,7 @@ internal sealed partial class DockingHost : IDockingService
 
         ScheduleReapplyRatios();
         WindowsChanged?.Invoke(this, EventArgs.Empty);
+        ScheduleRefloat();
     }
 
     /// <summary>热重载只换内容，保留停靠节点、隐藏、分栏与页面浮窗。</summary>

@@ -162,7 +162,7 @@ public sealed class AuroraTableContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var store = new MemoryColumnOrder();
+            var store = new MemoryColumnLayout();
             var table = new AuroraTable();
             table.SetData(AuroraTableData.Create(
                 [
@@ -171,7 +171,7 @@ public sealed class AuroraTableContractTests
                     new AuroraTableColumn("c", "丙", "*"),
                 ],
                 [new Dictionary<string, string> { ["a"] = "1", ["b"] = "2", ["c"] = "3" }]));
-            table.UseColumnOrder(store, "demo/page/table");
+            table.UseColumnLayout(store, "demo/page/table");
 
             var view = GridView(table);
             Assert.True(view.AllowsColumnReorder, "列拖不动");
@@ -180,7 +180,7 @@ public sealed class AuroraTableContractTests
             view.Columns.Move(1, 0);
             UiTestHost.Pump();
             Assert.Equal(["乙", "甲", "丙"], Headers(view));
-            Assert.Equal(["b", "a", "c"], store.Read("demo/page/table"));
+            Assert.Equal(["b", "a", "c"], store.ReadOrder("demo/page/table"));
 
             // 把星号列拖到最前：它会被拨回最右。
             view.Columns.Move(2, 0);
@@ -200,11 +200,11 @@ public sealed class AuroraTableContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var store = new MemoryColumnOrder();
-            store.Write("demo/page/table", ["c", "b", "gone"]);
+            var store = new MemoryColumnLayout();
+            store.WriteOrder("demo/page/table", ["c", "b", "gone"]);
 
             var table = new AuroraTable();
-            table.UseColumnOrder(store, "demo/page/table");
+            table.UseColumnLayout(store, "demo/page/table");
             table.SetData(AuroraTableData.Create(
                 [
                     new AuroraTableColumn("a", "甲"),
@@ -224,12 +224,12 @@ public sealed class AuroraTableContractTests
     {
         UiTestHost.RunSta(() =>
         {
-            var store = new MemoryColumnOrder();
+            var store = new MemoryColumnLayout();
             var table = new AuroraTable();
             table.SetData(AuroraTableData.Create(
                 [new AuroraTableColumn("a", "甲"), new AuroraTableColumn("b", "乙")],
                 []));
-            table.UseColumnOrder(store, null);
+            table.UseColumnLayout(store, null);
 
             GridView(table).Columns.Move(1, 0);
             UiTestHost.Pump();
@@ -295,15 +295,145 @@ public sealed class AuroraTableContractTests
     private static string[] Headers(System.Windows.Controls.GridView view)
         => view.Columns.Select(column => column.Header as string ?? "").ToArray();
 
-    /// <summary>内存里的列序台账。落盘那一路归设置服务，这里只验规则。</summary>
-    private sealed class MemoryColumnOrder : IColumnOrderStore
+    /// <summary>
+    /// 拖完列宽线松手，整套比例记进台账；下次建同一张表按记住的比例分摊（REQ-UI-142）。
+    /// 记的是权重不是像素：换一个更宽的窗口，比例不变、照样铺满。
+    /// </summary>
+    [Fact]
+    public void ColumnWidths_AreRememberedOnReleaseAndRestoredAsProportions()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var store = new MemoryColumnLayout();
+            IReadOnlyList<AuroraTableColumn> columns =
+            [
+                new AuroraTableColumn("file", "文件", "220"),
+                new AuroraTableColumn("status", "状态", "90"),
+                new AuroraTableColumn("detail", "详情", "*"),
+            ];
+
+            var (first, firstHost) = ShowTable(store, columns, 680);
+            try
+            {
+                var file = GridView(first).Columns[0];
+                var gripper = Gripper(first, file);
+                gripper.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(0, 0));
+                gripper.RaiseEvent(new System.Windows.Controls.Primitives.DragDeltaEventArgs(80, 0));
+                gripper.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(80, 0, false));
+                UiTestHost.Pump();
+
+                var saved = store.ReadWidths("demo/page/table");
+                Assert.Equal(["detail", "file", "status"], saved.Keys.Order(StringComparer.Ordinal).ToArray());
+                var view = GridView(first);
+                foreach (var (column, key) in view.Columns.Zip(new[] { "file", "status", "detail" }))
+                    Assert.InRange(saved[key], column.ActualWidth - 2, column.ActualWidth + 2);
+            }
+            finally
+            {
+                firstHost.Close();
+            }
+
+            // 换一个宽得多的窗口重建：比例照记住的走，不回到声明的 220:90。
+            var remembered = store.ReadWidths("demo/page/table");
+            var (second, secondHost) = ShowTable(store, columns, 1100);
+            try
+            {
+                var view = GridView(second);
+                var expected = remembered["file"] / remembered["status"];
+                var actual = view.Columns[0].ActualWidth / view.Columns[1].ActualWidth;
+                Assert.InRange(actual, expected * 0.95, expected * 1.05);
+                Assert.True(Math.Abs(actual - 220d / 90d) > 0.1, "列宽回到了声明比例");
+            }
+            finally
+            {
+                secondHost.Close();
+            }
+        });
+    }
+
+    /// <summary>落盘的那一本：列序沿用旧键、列宽单独一个键，读坏了当没记过。</summary>
+    [Fact]
+    public void ColumnLayoutStore_RoundTripsThroughSettings()
+    {
+        var settings = new MemorySettings();
+        var store = new ColumnLayoutStore(settings);
+        store.WriteOrder("m/p/t", ["b", "a"]);
+        store.WriteWidths("m/p/t", new Dictionary<string, double> { ["a"] = 120.04, ["b"] = double.NaN });
+
+        var reread = new ColumnLayoutStore(settings);
+        Assert.Equal(["b", "a"], reread.ReadOrder("m/p/t"));
+        Assert.Equal(new Dictionary<string, double> { ["a"] = 120 }, reread.ReadWidths("m/p/t"));
+        Assert.Empty(reread.ReadWidths("m/p/other"));
+
+        settings.Set(ColumnLayoutStore.WidthSettingKey, "{broken");
+        Assert.Empty(new ColumnLayoutStore(settings).ReadWidths("m/p/t"));
+    }
+
+    private static (AuroraTable Table, System.Windows.Window Host) ShowTable(
+        IColumnLayoutStore store, IReadOnlyList<AuroraTableColumn> columns, double width)
+    {
+        var table = new AuroraTable();
+        var host = new System.Windows.Window
+        {
+            Content = table,
+            Width = width,
+            Height = 320,
+            ShowInTaskbar = false,
+            WindowStyle = System.Windows.WindowStyle.None,
+        };
+        host.Show();
+        table.UseColumnLayout(store, "demo/page/table");
+        table.SetData(AuroraTableData.Create(
+            columns,
+            [new Dictionary<string, string> { ["file"] = "a.par", ["status"] = "就绪", ["detail"] = "ok" }]));
+        UiTestHost.Pump();
+        return (table, host);
+    }
+
+    private static System.Windows.Controls.Primitives.Thumb Gripper(AuroraTable table, System.Windows.Controls.GridViewColumn column)
+    {
+        var pending = new Stack<System.Windows.DependencyObject>([table]);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            if (node is System.Windows.Controls.GridViewColumnHeader header && header.Column == column
+                && header.Template?.FindName("PART_HeaderGripper", header) is System.Windows.Controls.Primitives.Thumb gripper)
+                return gripper;
+            for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(node); index++)
+                pending.Push(System.Windows.Media.VisualTreeHelper.GetChild(node, index));
+        }
+
+        throw new Xunit.Sdk.XunitException("找不到列头拖拽线");
+    }
+
+    /// <summary>内存里的列布局台账。落盘那一路归设置服务，这里只验规则。</summary>
+    private sealed class MemoryColumnLayout : IColumnLayoutStore
     {
         public Dictionary<string, List<string>> Entries { get; } = new(StringComparer.Ordinal);
 
-        public IReadOnlyList<string> Read(string key)
+        public Dictionary<string, Dictionary<string, double>> Widths { get; } = new(StringComparer.Ordinal);
+
+        public IReadOnlyList<string> ReadOrder(string key)
             => Entries.TryGetValue(key, out var order) ? order : [];
 
-        public void Write(string key, IReadOnlyList<string> columnKeys)
+        public void WriteOrder(string key, IReadOnlyList<string> columnKeys)
             => Entries[key] = columnKeys.ToList();
+
+        public IReadOnlyDictionary<string, double> ReadWidths(string key)
+            => Widths.TryGetValue(key, out var weights) ? weights : new Dictionary<string, double>();
+
+        public void WriteWidths(string key, IReadOnlyDictionary<string, double> weights)
+            => Widths[key] = new Dictionary<string, double>(weights);
+    }
+
+    private sealed class MemorySettings : HistoryAurora.Shell.Neutral.Storage.ISettingsService
+    {
+        private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
+
+        public string? Get(string key) => _values.GetValueOrDefault(key);
+        public int GetInt(string key, int fallback)
+            => int.TryParse(Get(key), out var value) ? value : fallback;
+        public void Set(string key, string value) => _values[key] = value;
+        public IReadOnlyList<KeyValuePair<string, string>> All() => _values.ToList();
     }
 }

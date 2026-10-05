@@ -94,7 +94,7 @@ internal static partial class BuiltinCommands
             Name = "aurora.ui.float",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "把一页浮成置顶小窗（操作别的程序时也够得着），或还原回停靠区；不写 on 时切换",
+            Summary = "把一页浮成置顶小窗（操作别的程序时也够得着），或还原回停靠区；不写 on 时切换。浮着的状态与位置跨重启保留",
             Example = "aurora.ui.float name=powersw",
             RequiresUiThread = true,
             Parameters =

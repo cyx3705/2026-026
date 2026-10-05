@@ -59,8 +59,8 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
     /// <summary>自持页面的渲染器。没有停靠层——注册走 TakeOverDescriptor（REQ-UI-052）。</summary>
     private readonly Components.Pages.PageRegistrar _hostedPages;
 
-    /// <summary>列序台账（REQ-UI-062）；自持页与模块页共用一本。</summary>
-    private readonly Components.Table.ColumnOrderStore _columnOrder;
+    /// <summary>列布局台账（列序 REQ-UI-062、列宽 REQ-UI-142）；自持页与模块页共用一本。</summary>
+    private readonly Components.Table.ColumnLayoutStore _columnLayout;
 
     /// <summary>场景（REQ-UI-084）与使用频次台账（REQ-UI-089），导航器与场景指令共用。</summary>
     private readonly Components.Scenes.SceneManager _scenes;
@@ -211,9 +211,9 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
 
         _componentRequests = new Components.Pages.ComponentRequestStore(settings, log);
 
-        // 列序台账（REQ-UI-062）。落在设置里，因此跨重启还在；
+        // 列布局台账（REQ-UI-062/142）。落在设置里，因此跨重启还在；
         // 自持页与模块页共用同一本账，两条通道不各记各的。
-        _columnOrder = new Components.Table.ColumnOrderStore(settings);
+        _columnLayout = new Components.Table.ColumnLayoutStore(settings);
 
         // 自持页面（命令集 / 指令详情 / 模块管理 / 组件测试）由描述建出来，
         // 与模块页共用渲染、包边与裁切（REQ-UI-051/052）。
@@ -228,7 +228,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         DeclareHostedPageActions();
         _hostedPages = new Components.Pages.PageRegistrar(
             _bus, log, docking: null, _actions, _catalog.CompleteAsync, _channels, _dataRefresher,
-            _columnOrder);
+            _columnLayout);
         RegisterHostedPages();
 
         // 控制窗口群:JSON + C# 通道合并,每个面板一个可停靠窗口
@@ -311,7 +311,7 @@ internal partial class ShellWindow : Window, IShellCommandWorkbenchHost, IThemed
         // 首次拉取不在这里做——那时模块还没装载，问谁都是空。见下方 ReloadCompleted。
         _pageLoader = new Components.Pages.ModulePageLoader(
             _bus, _docking, log, _componentRequests, _actions, _catalog.CompleteAsync,
-            _channels, _dataRefresher, _columnOrder);
+            _channels, _dataRefresher, _columnLayout);
 
         BuiltinCommands.Register(registry, new ShellCommandServices
         {
