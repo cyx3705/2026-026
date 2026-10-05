@@ -104,6 +104,34 @@ public static class AuroraComponentResources
         element.Resources.MergedDictionaries.Add(theme);
     }
 
+    /// <summary>
+    /// 主题与控件字典里的全部 <c>Aurora.*</c> 键，排序去重。
+    /// <c>aurora.component.show name=xaml</c> 现取它：键清单只有字典这一份，不在别处另抄。
+    /// </summary>
+    public static IReadOnlyList<string> PublicKeys()
+    {
+        var keys = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var dictionary in new[] { LoadTheme(), Load() })
+        {
+            if (dictionary != null)
+                CollectKeys(dictionary, keys);
+        }
+
+        return keys.ToList();
+    }
+
+    private static void CollectKeys(ResourceDictionary dictionary, SortedSet<string> keys)
+    {
+        foreach (var key in dictionary.Keys)
+        {
+            if (key is string name && name.StartsWith("Aurora.", StringComparison.Ordinal))
+                keys.Add(name);
+        }
+
+        foreach (var merged in dictionary.MergedDictionaries)
+            CollectKeys(merged, keys);
+    }
+
     private static ResourceDictionary? LoadTheme()
     {
         if (_theme != null || _failure != null)

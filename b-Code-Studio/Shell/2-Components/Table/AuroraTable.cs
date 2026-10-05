@@ -95,7 +95,7 @@ public sealed class AuroraTable : UserControl
 
     public AuroraTable()
     {
-        // 底色由窗格卡片提供；表格自己不再画一块白（UI 风格规范 §1）。
+        // 底色由窗格卡片提供；表格自己不再画一块白。
         Background = Brushes.Transparent;
 
         // 组件自带控件字典：被拖进浮动窗口后 Aurora.Table.* 仍要解析得到。

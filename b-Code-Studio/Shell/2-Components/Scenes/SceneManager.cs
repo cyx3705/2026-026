@@ -8,7 +8,7 @@ using HistoryAurora.Shell.Neutral.Logging;
 
 namespace HistoryAurora.Shell.Components.Scenes;
 
-/// <summary>场景从哪里来（场景与导航方案 V1.0 §1.1，已归档于 b-Office/history）。</summary>
+/// <summary>场景从哪里来。</summary>
 internal enum SceneSource
 {
     // 1.30.0 删除内置场景「全部」（REQ-UI-134）：每个场景都是一个模块的或另存的。

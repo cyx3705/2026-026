@@ -90,7 +90,7 @@ public sealed partial class PanelView : UserControl
         _pageId = pageId;
         _owner = string.IsNullOrWhiteSpace(owner) ? ShellOwner : owner;
         _definition = definition;
-        // 底色由窗格卡片提供，面板自身不再画一块白（UI 风格规范 §1）。
+        // 底色由窗格卡片提供，面板自身不再画一块白。
         Background = Brushes.Transparent;
         AuroraComponentResources.Ensure(this);
 
