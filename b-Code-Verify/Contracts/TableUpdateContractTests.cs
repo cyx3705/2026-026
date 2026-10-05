@@ -73,13 +73,12 @@ public sealed class TableUpdateContractTests
                 Assert.True(UiTestHost.PumpUntil(() => Volatile.Read(ref calls) == 1));
                 for (var i = 0; i < 20; i++) refresher.Refresh("test", "rows");
                 Assert.Equal("old", table.Data.Rows[0]["note"]);
-                Assert.Contains(Descendants<TextBlock>(table), text => text.Text.Contains("正在刷新"));
                 release.Set();
                 Assert.True(UiTestHost.PumpUntil(() => table.Data.Rows[0]["note"] == "new", 10000), string.Join(" | ", Descendants<TextBlock>(table).Select(text => text.Text)) + " calls=" + calls);
                 Assert.Equal(2, calls);
                 Assert.Equal("r1", seenRevision);
                 refresher.Refresh("test", "rows");
-                Assert.True(UiTestHost.PumpUntil(() => Descendants<TextBlock>(table).Any(text => text.Text.Contains("刷新失败"))));
+                Assert.True(UiTestHost.PumpUntil(() => log.Snapshot().Any(entry => entry.Message.Contains("表格刷新失败"))));
                 Assert.Equal("r2", seenRevision);
                 Assert.Equal("new", table.Data.Rows[0]["note"]);
             }
@@ -112,8 +111,7 @@ public sealed class TableUpdateContractTests
             var before = table.Data;
             Assert.Throws<ArgumentException>(() => table.ApplyDelta("id", [Row("b", "bad"), Row("b", "duplicate")]));
             Assert.Same(before, table.Data);
-            table.ShowStatus("正在刷新");
-            Assert.Contains("正在刷新 · 3 条 · 更新时间：", grid.Children.OfType<TextBlock>().Last().Text);
+            Assert.DoesNotContain(grid.Children.OfType<TextBlock>(), text => text.Visibility == Visibility.Visible);
             Assert.Equal("changed", table.SelectedRow["note"]);
         });
     }

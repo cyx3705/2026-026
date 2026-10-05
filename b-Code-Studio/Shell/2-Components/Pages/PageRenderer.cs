@@ -987,7 +987,6 @@ public static partial class PageRenderer
                     {
                         table.EmptyText = reason;
                         table.SetData(AuroraTableData.Create(columns, []));
-                        table.ShowStatus(reason);
                         previousText = null;
                         revision = null;
                         continue;
@@ -997,7 +996,6 @@ public static partial class PageRenderer
                     var command = delta
                         ? source.DeltaCommand + text[source.Command.Length..] + " since=" + CommandParser.QuoteArg(revision!)
                         : text;
-                    table.ShowStatus(sameQuery ? "正在刷新" : "正在加载（显示上次内容）");
                     try
                     {
                         var result = await Task.Run(async () =>
@@ -1029,7 +1027,7 @@ public static partial class PageRenderer
                     catch (Exception ex)
                     {
                         if (generation == requested)
-                            table.ShowStatus("刷新失败，保留原内容：" + ex.Message);
+                            context.Log.Log(ShellLogLevel.Warn, "page", context.Owner + ": 表格刷新失败，保留原内容：" + ex.Message);
                     }
                 } while (generation != requested);
 

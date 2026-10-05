@@ -10,7 +10,8 @@ namespace HistoryAurora.Shell.Base;
 /// 页面浮窗（REQ-UI-138，1.30.1）：把一整页从停靠区搬进一张**置顶**的圆角卡片里，
 /// 让人在操作别的程序（SolidWorks）时也够得着它。由 <c>aurora.ui.float</c> 浮出 / 还原。
 ///
-/// 长相与嵌入弹窗同一张卡片（<c>Aurora.Dialog.Card</c>：Surface 底、页面圆角、阴影），没有标题栏与关闭键；
+/// 长相与嵌入弹窗同一张卡片（<c>Aurora.Dialog.Card</c>：Surface 底、页面圆角），但**不带阴影**（1.30.3）——
+/// 分层窗口里的投影糊在别的程序上只显得脏；卡片的细线边框足够把它和背后分开。没有标题栏与关闭键；
 /// 按住卡片空白处拖动整窗（控件自己吃掉的按下不算空白），四边可拉伸。
 ///
 /// 它**不是** AvalonDock 的浮窗：停靠层的浮窗只给页面拖动当载体（REQ-UI-120），
@@ -19,8 +20,8 @@ namespace HistoryAurora.Shell.Base;
 /// </summary>
 internal sealed class PageFloatWindow : Window
 {
-    /// <summary>卡片四周给阴影与拉伸边留的透明边。</summary>
-    internal const double Gutter = 12;
+    /// <summary>卡片四周给拉伸边留的透明边（不再留阴影的位置）。</summary>
+    internal const double Gutter = 6;
 
     internal const double MinimumWidth = 360;
 
@@ -50,15 +51,16 @@ internal sealed class PageFloatWindow : Window
         {
             CaptionHeight = 0,
             GlassFrameThickness = new Thickness(0),
-            ResizeBorderThickness = new Thickness(Gutter / 2),
+            ResizeBorderThickness = new Thickness(Gutter),
             CornerRadius = new CornerRadius(0),
             UseAeroCaptionButtons = false,
         });
 
         var card = new Border { Child = _host, Margin = new Thickness(Gutter) };
         card.SetResourceReference(StyleProperty, "Aurora.Dialog.Card");
-        // 页面自带 12 的内边距（PageRegistrar.Inset），卡片不再叠一层。
+        // 页面自带 12 的内边距（PageRegistrar.Inset），卡片不再叠一层；嵌入弹窗的阴影浮窗不要。
         card.Padding = new Thickness(0);
+        card.Effect = null;
 
         // 透明像素在分层窗口里点不中：卡片下面垫一层几乎看不见的画布色，四周那圈才拖得动、拉得动。
         // 用令牌而不是字面颜色（ColorLiteralContractTests），透明度压在元素上。
