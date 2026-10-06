@@ -5,7 +5,7 @@
 ## 启动读取顺序
 
 1. 读取根目录 `project.manifest.json`，确认项目身份、状态、活动目录和可用命令。
-2. 读取根目录 `README.md` 和 `b-Office/current/现行约定.md`（本仓唯一的长期文档）。
+2. 读取根目录 `README.md` 和 `b-Office/现行约定.md`（本仓唯一的长期文档）。
 3. 写页面描述或改组件层时，用 `aurora.component.list` / `aurora.component.show name=<名>` 读组件自描述；
    新增或改动组件必须同步 `Shell/2-Components/Catalog/` 里的规格，`ComponentCatalogContractTests` 会拦。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
