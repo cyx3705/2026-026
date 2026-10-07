@@ -36,6 +36,15 @@ public sealed class SwimlaneDescription
     public IReadOnlyList<SwimlaneEdge>? Edges { get; init; }
 
     /// <summary>
+    /// 是否在左侧留泳道标题栏（1.33.0）。缺省 true。
+    ///
+    /// 标题栏宽度是组件定的，一份泳道很少的图（多数项目只有 main 一条）会被它占掉一截可视宽度，
+    /// 标题本身又跟节点挨着、挡住泳道起点。模块觉得标题没信息量时传 false，整栏不占位；
+    /// 泳道标题仍留在描述里，只是不画。
+    /// </summary>
+    public bool LaneTitles { get; init; } = true;
+
+    /// <summary>
     /// 点击节点时执行的动作 id（见 <see cref="HistoryAurora.Shell.Components.Actions.ActionRegistry"/>）。
     /// Aurora 以 <c>{node}</c> 提供被点节点的 id 供动作参数取值。
     /// 这里同样**不接受指令名**：理由与面板按钮一致。

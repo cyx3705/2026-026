@@ -36,6 +36,8 @@ public sealed class AuroraSwimlane : UserControl
     private readonly ScrollViewer _viewport;
     private readonly Canvas _canvas;
     private readonly Canvas _gutter;
+    private readonly Grid _gutterHost;
+    private readonly ColumnDefinition _gutterColumn;
     private readonly TranslateTransform _gutterOffset = new();
     private readonly DoubleCollection _dash = new() { 4, 3 };
 
@@ -89,16 +91,17 @@ public sealed class AuroraSwimlane : UserControl
         };
 
         var body = new Grid();
-        body.ColumnDefinitions.Add(new ColumnDefinition
+        _gutterColumn = new ColumnDefinition
         {
             Width = new GridLength(SwimlaneLayout.LaneTitleWidth),
-        });
+        };
+        body.ColumnDefinitions.Add(_gutterColumn);
         body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var gutterHost = new Grid { ClipToBounds = true, Children = { _gutter } };
-        Grid.SetColumn(gutterHost, 0);
+        _gutterHost = new Grid { ClipToBounds = true, Children = { _gutter } };
+        Grid.SetColumn(_gutterHost, 0);
         Grid.SetColumn(_viewport, 1);
-        body.Children.Add(gutterHost);
+        body.Children.Add(_gutterHost);
         body.Children.Add(_viewport);
 
         var root = new Grid();
@@ -132,6 +135,7 @@ public sealed class AuroraSwimlane : UserControl
         }
 
         _selectAction = description.SelectAction;
+        ShowLaneTitles(description.LaneTitles);
         _layout = SwimlaneLayout.Arrange(description);
         _caption.SetText(description.Title);
         _canvas.Width = Math.Max(1, _layout.Width);
@@ -142,6 +146,13 @@ public sealed class AuroraSwimlane : UserControl
         RenderGutter();
         RenderVisible();
         ScrollToBranchHeads();
+    }
+
+    /// <summary>laneTitles=false 时标题栏连同列宽一起收掉，泳道从左边缘画起。</summary>
+    private void ShowLaneTitles(bool visible)
+    {
+        _gutterColumn.Width = new GridLength(visible ? SwimlaneLayout.LaneTitleWidth : 0);
+        _gutterHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>

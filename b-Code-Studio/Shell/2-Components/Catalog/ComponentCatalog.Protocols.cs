@@ -161,6 +161,7 @@ public static partial class ComponentCatalog
                 new("edges.to", "string", "终点节点 id"),
                 new("edges.dashed", "bool", "虚线") { Default = "false" },
                 new("selectAction", "string", "点击节点执行的动作 id，动作里用 {node} 取被点节点 id"),
+                new("laneTitles", "bool", "是否在左侧画泳道标题栏；false 时整栏不占位，泳道从左边缘画起") { Default = "true" },
             ],
             Example = """
                 { "schemaVersion": 1, "title": "4 个节点",

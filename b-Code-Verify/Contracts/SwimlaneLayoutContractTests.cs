@@ -151,6 +151,20 @@ public sealed class SwimlaneLayoutContractTests
         Assert.False(SwimlaneLayout.Intersects(0, 0, 10, 10, 100, 100, 20, 20));
     }
 
+    [Fact]
+    public void LaneTitles_DefaultsOnAndCanBeTurnedOff()
+    {
+        Assert.True(Linear().LaneTitles);
+
+        var parsed = SwimlaneReader.Read("""
+            { "schemaVersion": 1, "laneTitles": false,
+              "lanes": [ { "id": "main", "title": "main", "tip": "c1" } ],
+              "nodes": [ { "id": "c1", "parents": [] } ] }
+            """);
+        Assert.True(parsed.Ok, parsed.Error);
+        Assert.False(parsed.Value!.LaneTitles);
+    }
+
     private static SwimlaneDescription Linear()
     {
         var parsed = SwimlaneReader.Read("""
