@@ -141,8 +141,11 @@ internal static partial class BuiltinCommands
                 var control = ctx.RequireString("control");
                 var value = ctx.RequireString("value");
 
-                // 面板窗口可能尚未实例化(隐藏且从未显示):先确保内容创建
-                s.Docking.Show(panel);
+                // 停靠面板的窗口可能尚未实例化(隐藏且从未显示):先确保内容创建。
+                // 页面里嵌的面板没有停靠窗口，对它调 Show 会抛「未注册的窗口」——
+                // 1.33.0 及以前 Minerva 每次回写属性整备那排框都是这样失败的。
+                if (panels.IsDockedPanel(panel))
+                    s.Docking.Show(panel);
                 return panels.TrySetValue(panel, control, value, out var error)
                     ? CommandResult.Ok($"{panel}.{control} = {value}")
                     : CommandResult.Fail(error);

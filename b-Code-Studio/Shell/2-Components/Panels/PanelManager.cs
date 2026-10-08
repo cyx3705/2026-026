@@ -98,20 +98,33 @@ internal sealed class PanelManager
         }
     }
 
-    /// <summary>aurora.ui.panelset 落点。</summary>
+    /// <summary>这个 id 是不是一块停靠面板（有自己的工具窗口）。页面里嵌的面板不是。</summary>
+    public bool IsDockedPanel(string panelId)
+        => _definitions.Any(d => d.Id.Equals(panelId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// aurora.ui.panelset 落点。先找停靠面板；不是停靠面板就找页面里嵌的同 id 面板，
+    /// 同一个 id 嵌在几页里就每一块都写（它们显示的是同一份模块状态）。
+    /// </summary>
     public bool TrySetValue(string panelId, string controlId, string value, out string error)
     {
         error = "";
-        if (!_views.TryGetValue(panelId, out var view))
+        IReadOnlyList<PanelView> targets = _views.TryGetValue(panelId, out var docked)
+            ? [docked]
+            : PanelView.LiveWithId(panelId);
+        if (targets.Count == 0)
         {
             var known = string.Join(" / ", _definitions.Select(d => d.Id));
-            error = $"没有名为 {panelId} 的面板。已定义: {(known.Length > 0 ? known : "(无)")}";
+            error = $"没有名为 {panelId} 的面板（停靠面板与已渲染的页面面板里都没有）。"
+                    + $"已定义的停靠面板: {(known.Length > 0 ? known : "(无)")}";
             return false;
         }
 
-        if (!view.TrySetValue(controlId, value))
+        // 不能用 Any：它见到第一个成功就停，后面那几块同 id 面板就漏写了。
+        var written = targets.Count(view => view.TrySetValue(controlId, value));
+        if (written == 0)
         {
-            error = $"面板 {panelId} 没有可写控件 {controlId}。可用: {string.Join(" / ", view.ControlIds)}";
+            error = $"面板 {panelId} 没有可写控件 {controlId}。可用: {string.Join(" / ", targets[0].ControlIds)}";
             return false;
         }
 

@@ -205,6 +205,44 @@ public sealed class PanelComponentContractTests
         });
     }
 
+    /// <summary>
+    /// aurora.ui.panelset 必须够得着**页面里嵌的面板**（1.33.1）。
+    /// 之前它只认停靠面板，Minerva 回写属性整备那排框时每次都抛 ArgumentException。
+    /// </summary>
+    [Fact]
+    public void PanelSet_ReachesPanelsEmbeddedInPages()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var embedded = new PanelView(Parse("""
+                {
+                  "id": "page-embedded-options", "title": "选项",
+                  "rows": [{ "widgets": [
+                    { "kind": "textbox", "id": "prefix" },
+                    { "kind": "textbox", "id": "kind", "mode": "select", "options": [ "件别", "外购件" ] }
+                  ] }]
+                }
+                """), bus, log, actions, owner: "HistoryDemo", pageId: "demo");
+            var panels = new PanelManager();
+
+            Assert.False(panels.IsDockedPanel("page-embedded-options"), "页面面板不是停靠面板，不得去显示停靠窗口");
+            Assert.True(panels.TrySetValue("page-embedded-options", "prefix", "XJ05A", out var error), error);
+            Assert.True(panels.TrySetValue("page-embedded-options", "kind", "外购件", out error), error);
+            Assert.True(panels.TrySetValue("page-embedded-options", "prefix", "", out error), "空值也是合法回写：" + error);
+
+            var textBox = Assert.Single(Elements(embedded).OfType<TextBox>());
+            Assert.Equal("", textBox.Text);
+            Assert.Equal("外购件", Assert.Single(Elements(embedded).OfType<AuroraOptionBox>()).SelectedItem);
+
+            Assert.False(panels.TrySetValue("page-embedded-options", "missing", "x", out error));
+            Assert.Contains("prefix", error);
+            Assert.False(panels.TrySetValue("no-such-panel", "prefix", "x", out error));
+            Assert.Contains("no-such-panel", error);
+            GC.KeepAlive(embedded);
+        });
+    }
+
     [Fact]
     public void Button_RendersControlledRefreshIconWithoutChangingLegacyButtons()
     {

@@ -100,6 +100,35 @@ public sealed partial class PanelView : UserControl
             _channels.Changed += OnSelectionChanged;
 
         Rebuild(definition);
+        Live.Add(new WeakReference<PanelView>(this));
+    }
+
+    /// <summary>
+    /// 活着的面板实例，**弱引用**。只给 <c>aurora.ui.panelset</c> 找页面里嵌的面板用。
+    ///
+    /// 停靠面板由 <see cref="PanelManager"/> 按 id 持有，页面里嵌的面板（模块页面的
+    /// <c>panel</c> / <c>popup</c> 节点）却没有任何人按 id 记着它——1.33.1 之前 panelset 因此
+    /// 只够得着停靠面板，Minerva 回写属性整备那一排框时每次都抛 ArgumentException。
+    /// 弱引用而不是撤页时注销：页面重渲染不经过任何一个「这块面板没了」的回调，
+    /// 撤掉的实例只要没人再引用就自己消失，写到一块还没被回收的旧面板上也无害。
+    /// </summary>
+    private static readonly List<WeakReference<PanelView>> Live = [];
+
+    /// <summary>当前活着、id 为 <paramref name="panelId"/> 的面板实例。顺手清掉已回收的弱引用。</summary>
+    internal static IReadOnlyList<PanelView> LiveWithId(string panelId)
+    {
+        Live.RemoveAll(reference => !reference.TryGetTarget(out _));
+        var found = new List<PanelView>();
+        foreach (var reference in Live)
+        {
+            if (reference.TryGetTarget(out var view)
+                && string.Equals(view.PanelId, panelId, StringComparison.OrdinalIgnoreCase))
+            {
+                found.Add(view);
+            }
+        }
+
+        return found;
     }
 
     /// <summary>
