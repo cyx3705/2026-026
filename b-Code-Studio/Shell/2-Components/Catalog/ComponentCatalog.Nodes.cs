@@ -34,7 +34,7 @@ public static partial class ComponentCatalog
                 new("dataSource.command", "string", "取数指令") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符；无法解析时不请求")],
             Example = """{ "type": "chatTimeline", "id": "messages", "text": "消息" }""",
-            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送"],
+            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送", "气泡直接铺在页面背景上，消息区不套额外圆角底板"],
         },
         new()
         {
