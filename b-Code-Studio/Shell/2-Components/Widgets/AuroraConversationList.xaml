@@ -11,8 +11,8 @@
      <Setter Property="Padding" Value="0"/>
      <Setter Property="Template">
       <Setter.Value><ControlTemplate TargetType="ListBoxItem">
-       <Border x:Name="Card" Background="{DynamicResource Aurora.Brush.Surface}" Padding="10,12"
-        CornerRadius="{DynamicResource Aurora.Radius.Inner}" Margin="0,0,0,3">
+       <Border x:Name="Card" Background="{DynamicResource Aurora.Brush.Surface}" Padding="8,7"
+        CornerRadius="{DynamicResource Aurora.Radius.Inner}" Margin="0,0,0,2">
         <ContentPresenter HorizontalAlignment="Stretch"/>
        </Border>
        <ControlTemplate.Triggers>
@@ -26,18 +26,18 @@
    <ListBox.ItemTemplate>
     <DataTemplate>
      <Grid ToolTip="{Binding Title}">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Border Width="38" Height="38" VerticalAlignment="Top" Background="{DynamicResource Aurora.Brush.SurfaceAlt}" CornerRadius="{DynamicResource Aurora.Radius.Inner}">
        <TextBlock Text="{Binding Avatar}" Style="{DynamicResource Aurora.Text.Body}" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
       </Border>
-      <StackPanel Grid.Column="1" Margin="6,0,8,0">
+      <StackPanel Grid.Column="1" Margin="4,0,6,0">
        <TextBlock Text="{Binding Title}" Style="{DynamicResource Aurora.Text.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-       <TextBlock Text="{Binding Preview}" Style="{DynamicResource Aurora.Text.Secondary}" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
-       <TextBlock Text="{Binding Source}" Style="{DynamicResource Aurora.Text.Caption}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+       <TextBlock Text="{Binding Preview}" Style="{DynamicResource Aurora.Text.Secondary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+       <TextBlock Text="{Binding Source}" Style="{DynamicResource Aurora.Text.Caption}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
       </StackPanel>
       <StackPanel Grid.Column="2" HorizontalAlignment="Right">
        <TextBlock Text="{Binding When}" Style="{DynamicResource Aurora.Text.Caption}" HorizontalAlignment="Right"/>
-       <Border Background="{DynamicResource Aurora.Brush.Danger}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="6,1" Margin="0,7,0,0" HorizontalAlignment="Right">
+       <Border Background="{DynamicResource Aurora.Brush.Danger}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="6,1" Margin="0,4,0,0" HorizontalAlignment="Right">
         <Border.Style><Style TargetType="Border"><Style.Triggers><DataTrigger Binding="{Binding Unread}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Border.Style>
         <TextBlock Text="{Binding Unread}" FontSize="{DynamicResource Aurora.Font.Small}" FontFamily="{DynamicResource Aurora.Font.Family}" Foreground="{DynamicResource Aurora.Brush.TextOnAccent}"/>
        </Border>
