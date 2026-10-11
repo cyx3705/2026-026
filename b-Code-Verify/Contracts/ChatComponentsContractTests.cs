@@ -20,6 +20,35 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class ChatComponentsContractTests
 {
+    /// <summary>REQ-UI-149：新消息使会话升到首位时，列表必须露出它，不能因为保留选中而仍停在旧位置。</summary>
+    [Fact]
+    public void PromotedConversationBecomesVisibleWithoutChangingSelection()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var list = new AuroraConversationList();
+            var rows = Enumerable.Range(0, 30).Select(i => (IReadOnlyDictionary<string, string>)Row(i.ToString(), $"会话 {i}")).ToList();
+            void Layout()
+            {
+                list.Measure(new Size(300, 300)); list.Arrange(new Rect(0, 0, 300, 300)); list.UpdateLayout();
+                UiTestHost.Pump(); list.UpdateLayout();
+            }
+            list.SetRows(rows); Layout();
+            var selector = (ListBox)list.FindName("Conversations");
+            selector.SelectedIndex = 15;
+            var viewport = Descendants<ScrollViewer>(list).Single();
+            viewport.ScrollToVerticalOffset(10); Layout();
+            Assert.True(viewport.VerticalOffset > 0);
+            list.SetRows(rows); Layout();
+            Assert.Equal(10, viewport.VerticalOffset);
+            var promoted = rows[^1]; rows.RemoveAt(rows.Count - 1); rows.Insert(0, promoted);
+            list.SetRows(rows); Layout();
+            Assert.Equal("15", list.SelectedRow!["id"]);
+            Assert.Equal("29", Assert.IsType<ConversationCard>(selector.Items[0]).Row["id"]);
+            Assert.InRange(viewport.VerticalOffset, 0, 0.1);
+        });
+    }
+
     [Fact]
     public void RefreshPreservesSelectedIdentityAndPublishesTheFreshRow()
     {

@@ -21,7 +21,7 @@ public static partial class ComponentCatalog
                 new("dataSource.command", "string", "取数指令") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符，变化时自动重取")],
             Example = """{ "type": "conversationList", "id": "conversations", "channel": "mymodule.conversation" }""",
-            Rules = ["掉线清空并提示；完整刷新按 id 保留选中，选中行消失时清空通道", "只接收完整数组或 snapshot；不使用 deltaCommand，不自动选中或标记已读", "自己滚动并占容器剩余高度，外观封在 Aurora 中", "保留头像和三行信息，以紧凑留白提高通讯录密度"],
+            Rules = ["掉线清空并提示；完整刷新按 id 保留选中，选中行消失时清空通道", "只接收完整数组或 snapshot；不使用 deltaCommand，不自动选中或标记已读", "自己滚动并占容器剩余高度，外观封在 Aurora 中", "保留头像和三行信息，以紧凑留白提高通讯录密度", "遵循数据源行序；首行身份变化时回到顶部露出新会话，当前选择不变"],
         },
         new()
         {

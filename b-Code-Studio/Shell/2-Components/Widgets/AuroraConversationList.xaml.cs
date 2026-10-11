@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
 using HistoryAurora.Shell.Components.Themes;
 
 namespace HistoryAurora.Shell.Components.Widgets;
@@ -22,6 +24,7 @@ public partial class AuroraConversationList : UserControl
     public void SetRows(IReadOnlyList<IReadOnlyDictionary<string, string>> rows, string emptyText = "暂时没有会话")
     {
         var selected = SelectedRow?.GetValueOrDefault("id");
+        var previousFirst = (Conversations.Items.Cast<ConversationCard>().FirstOrDefault())?.Row.GetValueOrDefault("id");
         var cards = rows.Select(row => new ConversationCard(row)).ToList();
         _updating = true;
         try
@@ -33,6 +36,21 @@ public partial class AuroraConversationList : UserControl
         }
         finally { _updating = false; }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
+        // REQ-UI-149：数据源把新消息会话排到首位后，露出首行但不改变聊天目标。
+        if (cards.Count > 0 && previousFirst != cards[0].Row.GetValueOrDefault("id"))
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (ReferenceEquals(Conversations.ItemsSource, cards))
+                    FindViewport(Conversations)?.ScrollToTop();
+            }));
+    }
+
+    private static ScrollViewer? FindViewport(DependencyObject parent)
+    {
+        if (parent is ScrollViewer viewport) return viewport;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindViewport(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+        return null;
     }
 }
 
