@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Globalization;
+using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryAurora.Shell.Components.Table;
 using HistoryAurora.Shell.Components.Widgets;
@@ -20,6 +22,8 @@ public static partial class PageRenderer
     private static FrameworkElement BuildChatTimeline(PageNode node, RenderState state)
     {
         var timeline = new AuroraChatTimeline();
+        if (node.ReadAction is { Length: > 0 } readAction)
+            state.BindReadAction(timeline, readAction);
         if (node.Source is { Length: > 0 })
             state.FollowConversation(timeline, node);
         if (node.DataSource is { } source)
@@ -29,6 +33,30 @@ public static partial class PageRenderer
 
     private sealed partial class RenderState
     {
+        public void BindReadAction(AuroraChatTimeline timeline, string actionId)
+        {
+            var binding = ResolveAction(actionId);
+            if (!binding.Ok)
+            {
+                timeline.ToolTip = binding.Error;
+                WarnUnbound(binding.Error!);
+                return;
+            }
+            timeline.ReadRequested += async through =>
+            {
+                // 先固定动作参数，等待总线期间切会话不会把旧消息的已读水位写给新目标。
+                var command = ActionRegistry.BuildCommandText(binding.Action!,
+                    SelectionChannels.Chain(Channels, name => name == "readThrough" ? through.ToString(CultureInfo.InvariantCulture) : null), out var error);
+                if (command == null) { WarnUnbound(error); return; }
+                try
+                {
+                    var result = await Task.Run(() => Bus.InvokeAsync(command, "UI"));
+                    if (!result.Success) { timeline.ToolTip = result.Message; WarnUnbound(result.Message); }
+                }
+                catch (Exception ex) { timeline.ToolTip = ex.Message; WarnUnbound(ex.Message); }
+            };
+        }
+
         public void PublishConversation(AuroraConversationList list, string channel, string? nodeId)
         {
             if (Channels is not { } channels)

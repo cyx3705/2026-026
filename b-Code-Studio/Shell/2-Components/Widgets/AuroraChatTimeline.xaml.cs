@@ -11,12 +11,20 @@ public partial class AuroraChatTimeline : UserControl
     private string? _conversation;
     private bool _hasRows;
     private int _version;
+    private long _readThrough;
+    private long _notifiedThrough;
+    public event Action<long>? ReadRequested;
     public AuroraChatTimeline()
     {
         AuroraComponentResources.Ensure(this);
         InitializeComponent();
         Latest.Click += (_, _) => Viewport.ScrollToEnd();
-        Viewport.ScrollChanged += (_, _) => Latest.Visibility = Viewport.ScrollableHeight - Viewport.VerticalOffset > 24 ? Visibility.Visible : Visibility.Collapsed;
+        Viewport.ScrollChanged += (_, _) =>
+        {
+            Latest.Visibility = Viewport.ScrollableHeight - Viewport.VerticalOffset > 24 ? Visibility.Visible : Visibility.Collapsed;
+            NotifyRead();
+        };
+        IsVisibleChanged += (_, _) => NotifyRead();
     }
 
     public void SetConversation(string? identity, string title, string subtitle)
@@ -25,6 +33,7 @@ public partial class AuroraChatTimeline : UserControl
         Subtitle.Text = subtitle;
         if (_conversation == identity) return;
         _conversation = identity;
+        _notifiedThrough = 0;
         _hasRows = false;
         SetRows([], identity == null ? "选择左侧会话开始聊天" : "正在读取消息…");
     }
@@ -34,6 +43,8 @@ public partial class AuroraChatTimeline : UserControl
         var bottom = !_hasRows || Viewport.ScrollableHeight - Viewport.VerticalOffset < 24;
         var offset = Viewport.VerticalOffset;
         var version = ++_version;
+        _readThrough = 0;
+        _notifiedThrough = 0;
         Messages.ItemsSource = rows.Select(row => new ChatMessageCard(row)).ToList();
         Empty.Text = emptyText;
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -42,7 +53,22 @@ public partial class AuroraChatTimeline : UserControl
         {
             if (version != _version) return;
             if (bottom) Viewport.ScrollToEnd(); else Viewport.ScrollToVerticalOffset(offset);
+            // 等滚动布局真正落定后再确认已读；失败/空载荷不清红点。
+            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+            {
+                if (version != _version) return;
+                _readThrough = rows.Select(row => long.TryParse(row.GetValueOrDefault("ts_ms"), out var ts) ? ts : 0).DefaultIfEmpty().Max();
+                NotifyRead();
+            }));
         }));
+    }
+
+    private void NotifyRead()
+    {
+        if (!IsVisible || !_hasRows || _readThrough <= 0 || _readThrough == _notifiedThrough
+            || Viewport.ScrollableHeight - Viewport.VerticalOffset > 24) return;
+        _notifiedThrough = _readThrough;
+        ReadRequested?.Invoke(_readThrough);
     }
 }
 

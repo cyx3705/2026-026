@@ -20,6 +20,62 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class ChatComponentsContractTests
 {
+    /// <summary>REQ-UI-150：只有可见且已经读到最新的消息才能确认本地已读；隐藏、失败和阅读历史均不能吞未读。</summary>
+    [Fact]
+    public void ReadActionRequiresVisibleLatestMessagesAndUsesSelectedIdentity()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var reads = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var registry = new CommandTable();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.conv.read", Domain = "demo", CommandClass = "conv", Summary = "本地已读",
+                AllowUnspecifiedParameters = true,
+                Handler = CommandDescriptor.Sync(c => { reads.Enqueue(c.RequireString("conversation") + ":" + c.RequireString("through")); return CommandResult.Ok("ok"); }),
+            });
+            var channels = new SelectionChannels();
+            channels.TryDeclare("demo.conversation", "HistoryDemo", "contacts", out _);
+            channels.Publish("demo.conversation", Row("a", "Alice"));
+            var context = Context(channels, registry);
+            context.Actions!.DeclareLocal("HistoryDemo", [new ActionDeclaration
+            {
+                Id = "read", Title = "已读", Command = "demo.conv.read",
+                Args = new Dictionary<string, string> { ["conversation"] = "{selection.demo.conversation.id}", ["through"] = "{readThrough}" },
+            }]);
+            var timeline = Assert.IsType<AuroraChatTimeline>(PageRenderer.Render(Page("messages", new PageNode
+            {
+                Type = "chatTimeline", Source = "{selection.demo.conversation.title}", ReadAction = "read",
+            }), context).Root);
+            var host = new Window { Content = timeline, Width = 400, Height = 300, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+            var rows = Enumerable.Range(1, 40).Select(i => (IReadOnlyDictionary<string, string>)new Dictionary<string, string>(Message(i.ToString(), "消息", "in")) { ["ts_ms"] = i.ToString() }).ToList();
+            try
+            {
+                timeline.SetRows(rows); UiTestHost.Pump();
+                Assert.Empty(reads);
+                host.Show(); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => reads.Count == 1));
+                Assert.Equal("a:40", reads.Single());
+                var viewport = (ScrollViewer)timeline.FindName("Viewport");
+                viewport.ScrollToVerticalOffset(100); UiTestHost.Pump();
+                rows.Add(new Dictionary<string, string>(Message("41", "新消息", "in")) { ["ts_ms"] = "41" });
+                timeline.SetRows(rows); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.Single(reads);
+                viewport.ScrollToEnd(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => reads.Count == 2));
+                Assert.Equal("a:41", reads.Last());
+                channels.Publish("demo.conversation", Row("b", "Bob"));
+                timeline.SetRows([], "读取失败"); UiTestHost.Pump();
+                Assert.Equal(2, reads.Count);
+                timeline.SetRows([new Dictionary<string, string>(Message("b1", "Bob 内容", "in")) { ["ts_ms"] = "50" }]);
+                host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => reads.Count == 3));
+                Assert.Equal("b:50", reads.Last());
+            }
+            finally { host.Close(); }
+        });
+    }
+
     /// <summary>REQ-UI-149：新消息使会话升到首位时，列表必须露出它，不能因为保留选中而仍停在旧位置。</summary>
     [Fact]
     public void PromotedConversationBecomesVisibleWithoutChangingSelection()
