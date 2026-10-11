@@ -94,6 +94,7 @@ public static partial class ComponentCatalog
             Fields =
             [
                 new("table.channel", "string", "表格把选中行发布到通道"),
+                new("conversationList.channel", "string", "会话卡片把选中原始行发布到通道，刷新按 id 保留选中"),
                 new("panel.textbox.channel", "string", "文本框把当前值发布到通道，列名固定 value"),
                 new("panel.textbox.follows", "string", "<通道>.<列>：选中行一变就改写本框"),
                 new("panel.button.enabledWhen.selected", "string", "<通道>：有选中行时按钮才可用"),

@@ -119,6 +119,8 @@ public static partial class PageRenderer
             ["stack"] = BuildStack,
             ["text"] = (node, _) => BuildText(node),
             ["table"] = BuildTable,
+            ["conversationList"] = BuildConversationList,
+            ["chatTimeline"] = BuildChatTimeline,
             ["panel"] = BuildPanel,
             ["swimlane"] = BuildSwimlane,
             ["grid"] = BuildGrid,
@@ -256,7 +258,7 @@ public static partial class PageRenderer
     private static bool ScrollsInside(PageNode node)
     {
         var type = (node.Type ?? "").ToLowerInvariant();
-        if (type is "table" or "swimlane")
+        if (type is "table" or "swimlane" or "conversationlist" or "chattimeline")
             return true;
 
         // 容器跟着里面走：栅格里放了表格，那一格照样得拿到高度。
@@ -271,8 +273,8 @@ public static partial class PageRenderer
         if (RetiredComponents.TryGetValue(type, out var label))
             return Retired(type, label, state);
 
-        if (node.Channel is { Length: > 0 } && type != "table")
-            state.WarnUnbound($"只有表格能声明选择通道，{type} 上的 channel={node.Channel} 已忽略");
+        if (node.Channel is { Length: > 0 } && type is not ("table" or "conversationlist"))
+            state.WarnUnbound($"只有表格和会话列表能发布选择通道，{type} 上的 channel={node.Channel} 已忽略");
 
         return Builders.TryGetValue(type, out var build)
             ? build(node, state)
@@ -701,7 +703,7 @@ public static partial class PageRenderer
     }
 
     /// <summary>一次渲染的可变状态：节点表、缺件表与待连线的启用条件。</summary>
-    private sealed class RenderState(PageRenderContext context, string pageId)
+    private sealed partial class RenderState(PageRenderContext context, string pageId)
     {
         private readonly Dictionary<string, AuroraTable> _nodes = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<AuroraTable, Dictionary<string, PageRowAction>> _rowActions = [];

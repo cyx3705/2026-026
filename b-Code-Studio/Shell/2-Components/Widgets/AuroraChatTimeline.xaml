@@ -1,0 +1,49 @@
+<UserControl x:Class="HistoryAurora.Shell.Components.Widgets.AuroraChatTimeline"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Grid>
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <Border Background="{DynamicResource Aurora.Brush.SurfaceAlt}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="16,12" Margin="0,0,0,8">
+   <StackPanel>
+    <TextBlock x:Name="Heading" Text="消息" Style="{DynamicResource Aurora.Text.Body}" FontSize="{DynamicResource Aurora.Font.ChatHeading}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+    <TextBlock x:Name="Subtitle" Text="选择左侧会话开始聊天" Style="{DynamicResource Aurora.Text.Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+   </StackPanel>
+  </Border>
+  <Border Grid.Row="1" Background="{DynamicResource Aurora.Brush.SurfaceAlt}" CornerRadius="{DynamicResource Aurora.Radius.Inner}">
+   <Grid>
+    <ScrollViewer x:Name="Viewport" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="16">
+     <ItemsControl x:Name="Messages">
+      <ItemsControl.ItemTemplate>
+       <DataTemplate>
+        <Grid Margin="0,0,0,16">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <StackPanel x:Name="Message" Grid.ColumnSpan="3" HorizontalAlignment="Left">
+          <TextBlock x:Name="Meta" Text="{Binding Meta}" Style="{DynamicResource Aurora.Text.Caption}" Margin="2,0,2,5"/>
+          <Border x:Name="Bubble" Background="{DynamicResource Aurora.Brush.Canvas}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="12,9">
+           <TextBox x:Name="Body" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
+            FontSize="{DynamicResource Aurora.Font.Body}" FontFamily="{DynamicResource Aurora.Font.Family}"
+            Background="{DynamicResource Aurora.Brush.Canvas}" Foreground="{DynamicResource Aurora.Brush.TextPrimary}">
+            <TextBox.Template><ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost" Background="{TemplateBinding Background}" Focusable="False"/></ControlTemplate></TextBox.Template>
+           </TextBox>
+          </Border>
+         </StackPanel>
+         <Grid.Style><Style TargetType="Grid"><Setter Property="HorizontalAlignment" Value="Stretch"/></Style></Grid.Style>
+        </Grid>
+        <DataTemplate.Triggers>
+         <DataTrigger Binding="{Binding Outgoing}" Value="True">
+          <Setter TargetName="Message" Property="Grid.Column" Value="1"/>
+          <Setter TargetName="Message" Property="HorizontalAlignment" Value="Right"/>
+          <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Right"/>
+          <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource Aurora.Brush.AccentSoft}"/>
+          <Setter TargetName="Body" Property="Background" Value="{DynamicResource Aurora.Brush.AccentSoft}"/>
+         </DataTrigger>
+        </DataTemplate.Triggers>
+       </DataTemplate>
+      </ItemsControl.ItemTemplate>
+     </ItemsControl>
+    </ScrollViewer>
+    <TextBlock x:Name="Empty" Text="选择左侧会话开始聊天" Style="{DynamicResource Aurora.Text.Secondary}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" IsHitTestVisible="False"/>
+    <Button x:Name="Latest" Content="回到最新 ↓" Style="{DynamicResource Aurora.Button.Ghost}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" Visibility="Collapsed"/>
+   </Grid>
+  </Border>
+ </Grid>
+</UserControl>

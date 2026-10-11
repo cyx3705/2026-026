@@ -13,6 +13,31 @@ public static partial class ComponentCatalog
     [
         new()
         {
+            Name = "conversationList", Layer = ComponentLayer.Node, Model = typeof(PageNode),
+            Summary = "会话卡片列表：头像首字、标题、最近消息、来源、时间与未读徽标；按 id 保留选中",
+            Fields = [NodeType, NodeId,
+                new("channel", "string", "把选中原始行发布到选择通道；与 table 同一台账"),
+                new("dataSource", "object", "只读完整行集，行字段 id/title/last/source/kind/when/unread；id 必须唯一非空"),
+                new("dataSource.command", "string", "取数指令") { Required = true },
+                new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符，变化时自动重取")],
+            Example = """{ "type": "conversationList", "id": "conversations", "channel": "mymodule.conversation" }""",
+            Rules = ["掉线清空并提示；完整刷新按 id 保留选中，选中行消失时清空通道", "只接收完整数组或 snapshot；不使用 deltaCommand，不自动选中或标记已读", "自己滚动并占容器剩余高度，外观封在 Aurora 中"],
+        },
+        new()
+        {
+            Name = "chatTimeline", Layer = ComponentLayer.Node, Model = typeof(PageNode),
+            Summary = "聊天时间线：会话标题、入站左气泡、出站右气泡与可复制的多行正文；阅读历史时不抢滚动",
+            Fields = [NodeType, NodeId,
+                new("source", "string", "标题选择引用 {selection.<通道>.<列>}；该行 id 标识会话，subtitle 是副标题"),
+                new("text", "string", "未选会话时的标题，缺省消息"),
+                new("dataSource", "object", "只读完整行集，行字段 id/who/time/text/direction；direction=out 在右，其余在左"),
+                new("dataSource.command", "string", "取数指令") { Required = true },
+                new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符；无法解析时不请求")],
+            Example = """{ "type": "chatTimeline", "id": "messages", "text": "消息" }""",
+            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送"],
+        },
+        new()
+        {
             Name = "stack",
             Layer = ComponentLayer.Node,
             Model = typeof(PageNode),
@@ -74,7 +99,7 @@ public static partial class ComponentCatalog
                 new("dataSource.args", "map<string,string>", "固定参数；值里可写 {selection.<通道>.<列>}，通道一变自动重取，取不到值时不发指令"),
                 new("dataSource.deltaCommand", "string", "增量指令；拿到首份快照后改调它并自动追加 since=<revision>"),
                 new("dataSource.rowKey", "string", "增量合并用的唯一行键；声明了 deltaCommand 就必须给"),
-                new("channel", "string", "把选中行发布到这个选择通道（见 selection）；只有表格能声明"),
+                new("channel", "string", "把选中行发布到这个选择通道（见 selection）；table / conversationList 能发布"),
                 new("rowActions", "rowAction[]", "行操作：一份声明同时给出行内按钮与右键菜单"),
                 new("rowActions.action", "string", "动作 id；占位符 {列名} 默认取被点那一行的同名列") { Required = true },
                 new("rowActions.title", "string", "按钮与菜单项文字"),

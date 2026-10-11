@@ -328,6 +328,13 @@ internal static class HostedPageDescriptions
                       }
                     ]
                   },
+                  { "type": "text", "style": "secondary", "text": "会话卡片与气泡消息（点击会话查看标题联动）" },
+                  { "type": "grid", "min": 260, "children": [
+                    { "type": "conversationList", "id": "demo-conversations", "channel": "aurora.chat-gallery",
+                      "dataSource": { "command": "aurora.preview.chat", "args": { "view": "conversation" } } },
+                    { "type": "chatTimeline", "id": "demo-chat", "source": "{selection.aurora.chat-gallery.title}",
+                      "dataSource": { "command": "aurora.preview.chat", "args": { "view": "message", "conversation": "{selection.aurora.chat-gallery.id}" } } }
+                  ] },
                   { "type": "text", "style": "secondary", "text": "响应式栅格与泳道图" },
                   {
                     "type": "swimlane",

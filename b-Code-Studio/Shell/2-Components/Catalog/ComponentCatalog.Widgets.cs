@@ -39,6 +39,7 @@ public static partial class ComponentCatalog
                 new("optionsSource.command", "string", "只读指令名") { Required = true },
                 new("optionsSource.args", "map<string,string>", "固定参数；值里可写 {selection.<通道>.<列>}，通道一变就重取候选"),
                 new("value", "string", "初值；select 时不在候选内则退回第一项"),
+                new("multiline", "bool", "input 模式的多行正文输入，回车换行；启用后不执行 commitAction，须用显式按钮提交") { Default = "false" },
                 new("commitAction", "string", "值提交时执行的动作 id，动作里用 {value} 取值：input 在回车或失焦时，select 选项一变就提交"),
                 new("follows", "string", "跟随选择通道的某一列，写法 <通道>.<列>；选中行一变就整体改写本框"),
                 new("channel", "string", "把本框当前值发布到这个选择通道，列名固定 value；switch 节点与取数参数可以引用它"),

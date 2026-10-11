@@ -30,6 +30,24 @@ internal static class ComponentGalleryCommands
 
         Add(registry, new CommandDescriptor
         {
+            Name = "aurora.preview.chat", RequiresUiThread = true, HiddenReason = "组件测试页内部指令",
+            Domain = "aurora", CommandClass = "preview", Summary = "组件测试页会话卡片与气泡消息演示数据",
+            Example = "aurora.preview.chat view=conversation", Readonly = true,
+            Parameters =
+            [
+                new() { Name = "view", Description = "演示视图：conversation 会话或 message 消息", Default = "conversation", AllowedValues = ["conversation", "message"] },
+                new() { Name = "conversation", Description = "演示会话行 id，消息视图使用；省略时取示例会话", Required = false },
+            ],
+            Handler = CommandDescriptor.Sync(c => CommandResult.Ok(c.GetString("view") == "message" ? """
+                [{"id":"m1","who":"同事","time":"09:40","text":"气泡正文保留换行。\n也可以选中复制。","direction":"in"},
+                 {"id":"m2","who":"我","time":"09:41","text":"收到，出站消息显示在右侧。","direction":"out"}]
+                """ : """
+                [{"id":"chat-demo","title":"演示会话","subtitle":"示例 · 群聊","last":"气泡消息示例","source":"示例","kind":"群聊","when":"09:41","unread":"3"}]
+                """)),
+        });
+
+        Add(registry, new CommandDescriptor
+        {
             Name = "aurora.preview.echo",
             RequiresUiThread = true,
             HiddenReason = "组件测试页内部指令",

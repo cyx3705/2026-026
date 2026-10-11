@@ -70,6 +70,7 @@ public sealed class PanelRow
     /// <summary>flex（缺省）或 even。大小写不敏感；无法识别时整个面板作废。</summary>
     public string? Mode { get; set; }
 
+
     public List<PanelWidget> Widgets { get; set; } = new();
 
     /// <summary>解析后的分配方式；无法识别时为 null。</summary>
@@ -146,6 +147,9 @@ public sealed class PanelWidget
 
     /// <summary>textbox 专用：input（缺省）或 select。</summary>
     public string? Mode { get; set; }
+
+    /// <summary>REQ-UI-146：多行自由输入；回车换行，不触发提交或失焦发送。</summary>
+    public bool Multiline { get; set; }
 
     /// <summary>textbox 且 mode=select 时的候选项。与 <see cref="OptionsSource"/> 二选一。</summary>
     public List<string>? Options { get; set; }

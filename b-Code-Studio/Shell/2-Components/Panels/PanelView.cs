@@ -357,14 +357,19 @@ public sealed partial class PanelView : UserControl
         var box = new TextBox
         {
             Text = widget.Value ?? "",
-            VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = widget.Multiline ? VerticalAlignment.Top : VerticalAlignment.Center,
+            AcceptsReturn = widget.Multiline,
+            TextWrapping = widget.Multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
+            MinHeight = widget.Multiline ? 88 : 0,
+            MaxHeight = widget.Multiline ? 180 : double.PositiveInfinity,
+            VerticalScrollBarVisibility = widget.Multiline ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden,
         };
         box.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
         _getters[id] = () => box.Text;
         _setters[id] = value => box.Text = value;
         if (publish != null)
             box.TextChanged += (_, _) => PublishIfDeclared(publish, id);
-        if (!string.IsNullOrWhiteSpace(widget.CommitAction))
+        if (!widget.Multiline && !string.IsNullOrWhiteSpace(widget.CommitAction))
         {
             box.KeyDown += (_, e) =>
             {

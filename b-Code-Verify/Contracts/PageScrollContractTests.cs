@@ -7,6 +7,7 @@ using HistoryAurora.Shell.Neutral.Logging;
 using HistoryAurora.Shell.Components.Pages;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryAurora.Shell.Components.Table;
+using HistoryAurora.Shell.Components.Widgets;
 using HistoryAurora.Shell.HostedPages.Views;
 using HistoryVulcan.Core.Commands;
 using Xunit;
@@ -131,7 +132,8 @@ public sealed class PageScrollContractTests
         for (var current = VisualTreeHelper.GetParent(scroll); current != null;
              current = VisualTreeHelper.GetParent(current))
         {
-            if (current is AuroraTable or AuroraSwimlane)
+            // REQ-UI-143/144：会话卡片和气泡时间线各自拥有视口，不能把聊天区判成页面级滚动。
+            if (current is AuroraTable or AuroraSwimlane or AuroraConversationList or AuroraChatTimeline)
                 return false;
         }
 

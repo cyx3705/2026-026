@@ -106,7 +106,7 @@ public sealed class PageNode
     public IReadOnlyList<PageRowAction>? RowActions { get; init; }
 
     /// <summary>
-    /// table 专用：把当前选中行发布到这个**选择通道**（REQ-UI-041）。
+    /// table / conversationList：把当前选中行发布到这个**选择通道**（REQ-UI-041/143）。
     ///
     /// 通道名是界面级的，因此别的页面上的控制面板也能按它取值——
     /// 「选中一行 → 另一页的按钮变可用」只能这样表达，页内节点 id 出不了这一页。
@@ -115,7 +115,8 @@ public sealed class PageNode
     public string? Channel { get; init; }
 
     /// <summary>
-    /// switch 专用：按哪个值决定显示哪一支，写法 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c>
+    /// switch：按哪个值决定显示哪一支；chatTimeline：会话标题引用。
+    /// 写法 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c>
     /// （REQ-UI-046）。通常指向控制面板里一个声明了 <c>channel</c> 的轮换选项框。
     ///
     /// 通道当前没有值时显示第一支——页面一打开就得有东西可看，
