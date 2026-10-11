@@ -162,8 +162,8 @@ internal static class HostedPageDescriptions
                       {
                         "mode": "even",
                         "widgets": [
-                          { "kind": "button", "action": "modules.reload", "text": "刷新模块" },
-                          { "kind": "button", "action": "modules.hotreload", "text": "热重载" },
+                          { "kind": "button", "action": "modules.reload", "text": "刷新设备以及模块" },
+                          { "kind": "button", "action": "modules.refreshdevices", "text": "刷新设备" },
                           { "kind": "button", "action": "modules.opendir", "text": "打开发现根" }
                         ]
                       }
@@ -177,8 +177,8 @@ internal static class HostedPageDescriptions
                     "columns": [
                       { "key": "module", "title": "模块", "width": "116" },
                       { "key": "version", "title": "版本", "width": "66" },
-                      { "key": "load", "title": "装载", "width": "70",
-                        "cellAction": "modules.toggle", "cellStyle": "button" },
+                      { "key": "load", "title": "装载", "width": "88",
+                        "cellAction": "modules.place", "cellStyle": "button" },
                       { "key": "description", "title": "描述", "width": "*" }
                     ]
                   }
