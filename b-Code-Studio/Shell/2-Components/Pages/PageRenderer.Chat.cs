@@ -1,5 +1,8 @@
 using System.Windows;
 using System.Globalization;
+using System.Text.Json;
+using HistoryVulcan.Core.Commands;
+using HistoryAurora.Shell.Neutral;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryAurora.Shell.Components.Table;
@@ -27,12 +30,48 @@ public static partial class PageRenderer
         if (node.Source is { Length: > 0 })
             state.FollowConversation(timeline, node);
         if (node.DataSource is { } source)
-            state.BindChatRows(timeline, source, node.Id, timeline.SetRows);
+            state.BindChatRows(timeline, source, node.Id, (rows, empty) =>
+            {
+                timeline.ImageLoader = state.ImageLoader(node.ImageSource);
+                timeline.SetRows(rows, empty);
+            });
         return timeline;
     }
 
     private sealed partial class RenderState
     {
+        public Func<string, CancellationToken, Task<byte[]>>? ImageLoader(PageDataSource? source)
+        {
+            if (source == null) return null;
+            if (!Bus.Registry.TryGet(source.Command, out var descriptor) || !descriptor.Readonly)
+            {
+                WarnUnbound("chatTimeline.imageSource 必须指向已注册的只读指令");
+                return null;
+            }
+            // 在行集被接受时固定选择参数；迟到的图片绝不借用后来选中的桥。
+            var missing = new List<string>();
+            var args = (source.Args ?? new Dictionary<string, string>()).ToDictionary(p => p.Key,
+                p => ActionRegistry.ExpandPlaceholders(p.Value, name => name == "image.path" ? "{image.path}" : Channels?.Resolve(name), missing));
+            if (missing.Count > 0) return null;
+            return async (path, cancellation) =>
+            {
+                // 只替换声明里的图片占位符，选择值里出现的花括号不再当模板解析。
+                var text = source.Command;
+                foreach (var pair in args)
+                    text += " " + pair.Key + "=" + CommandParser.QuoteArg(pair.Value.Replace("{image.path}", path, StringComparison.Ordinal));
+                var result = await Bus.InvokeAsync(text, "UI", cancellation).ConfigureAwait(false);
+                if (!result.Success) throw new InvalidOperationException(result.Message);
+                if (!CommandResultData.TryGetJsonText(result.Data, result.Message, out var payload))
+                    throw new InvalidOperationException("图片源未返回有效数据");
+                using var json = JsonDocument.Parse(payload);
+                var encoded = json.RootElement.GetProperty("base64").GetString() ?? "";
+                if (encoded.Length > 11184812) throw new InvalidOperationException("图片超过 8 MB");
+                var bytes = Convert.FromBase64String(encoded);
+                if (bytes.Length == 0 || bytes.Length > 8 * 1024 * 1024) throw new InvalidOperationException("图片大小无效或超过 8 MB");
+                return bytes;
+            };
+        }
+
         public void BindReadAction(AuroraChatTimeline timeline, string actionId)
         {
             var binding = ResolveAction(actionId);

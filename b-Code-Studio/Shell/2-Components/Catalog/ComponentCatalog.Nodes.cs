@@ -29,13 +29,16 @@ public static partial class ComponentCatalog
             Summary = "聊天时间线：会话标题、入站左气泡、出站右气泡与可复制的多行正文；阅读历史时不抢滚动",
             Fields = [NodeType, NodeId,
                 new("readAction", "string", "可选本地已读动作 id；最新消息成功显示、可见且滚至底部时调用；{readThrough} 取消息行最大 ts_ms，缺时间戳不调用"),
+                new("imageSource", "object", "可选图片只读源，返回 {base64:字符串}；凭据由提供方持有，图片不直接请求网络 URL"),
+                new("imageSource.command", "string", "已注册的只读图片指令") { Required = true },
+                new("imageSource.args", "map<string,string>", "固定参数、选择通道与 {image.path}；行集接受时固定选择快照"),
                 new("source", "string", "标题选择引用 {selection.<通道>.<列>}；该行 id 标识会话，subtitle 是副标题"),
                 new("text", "string", "未选会话时的标题，缺省消息"),
-                new("dataSource", "object", "只读完整行集，行字段 id/who/time/text/direction/ts_ms；direction=out 在右，其余在左；ts_ms 是供本地已读动作使用的毫秒时间戳"),
+                new("dataSource", "object", "只读完整行集，行字段 id/who/time/text/direction/ts_ms；direction=out 在右，其余在左；ts_ms 为已读时间戳；images 是 JSON 数组字符串 [{name,path}]；attachment_summary 附件摘要、media_hint 原件缺失说明"),
                 new("dataSource.command", "string", "取数指令") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符；无法解析时不请求")],
             Example = """{ "type": "chatTimeline", "id": "messages", "text": "消息" }""",
-            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送", "气泡直接铺在页面背景上，消息区不套额外圆角底板"],
+            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送", "气泡直接铺在页面背景上，消息区不套额外圆角底板", "每条最多预览 16 张图片；按可见区域加载，点击放大在页内展示，关闭或 Escape 返回；失败可重试，path 空值表示原件不可用", "图片上限 8 MiB、4000 万像素；缩略图最长边 360、大图 1600；动画显示静态首帧，不支持的编码显示失败提示"],
         },
         new()
         {

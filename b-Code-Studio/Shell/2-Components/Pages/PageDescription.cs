@@ -117,6 +117,9 @@ public sealed class PageNode
     /// <summary>chatTimeline：最新消息成功显示且可见时执行的本地已读动作；{readThrough} 为已显示的最大 ts_ms。</summary>
     public string? ReadAction { get; init; }
 
+    /// <summary>chatTimeline：只读图片源，返回 {base64}；参数支持 {image.path} 与选择通道。</summary>
+    public PageDataSource? ImageSource { get; init; }
+
     /// <summary>
     /// switch：按哪个值决定显示哪一支；chatTimeline：会话标题引用。
     /// 写法 <c>{selection.&lt;通道&gt;.&lt;列&gt;}</c>

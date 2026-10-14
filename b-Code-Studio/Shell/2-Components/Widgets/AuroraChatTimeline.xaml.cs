@@ -18,11 +18,14 @@ public partial class AuroraChatTimeline : UserControl
     {
         AuroraComponentResources.Ensure(this);
         InitializeComponent();
+        Loaded += (_, _) => UpdateVisibleImages();
+        Unloaded += (_, _) => ResetImages();
         Latest.Click += (_, _) => Viewport.ScrollToEnd();
         Viewport.ScrollChanged += (_, _) =>
         {
             Latest.Visibility = Viewport.ScrollableHeight - Viewport.VerticalOffset > 24 ? Visibility.Visible : Visibility.Collapsed;
             NotifyRead();
+            UpdateVisibleImages();
         };
         IsVisibleChanged += (_, _) => NotifyRead();
     }
@@ -32,6 +35,7 @@ public partial class AuroraChatTimeline : UserControl
         Heading.Text = title;
         Subtitle.Text = subtitle;
         if (_conversation == identity) return;
+        ResetImages();
         _conversation = identity;
         _notifiedThrough = 0;
         _hasRows = false;
@@ -45,6 +49,7 @@ public partial class AuroraChatTimeline : UserControl
         var version = ++_version;
         _readThrough = 0;
         _notifiedThrough = 0;
+        if (rows.Count == 0) ResetImages();
         Messages.ItemsSource = rows.Select(row => new ChatMessageCard(row)).ToList();
         Empty.Text = emptyText;
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -53,6 +58,7 @@ public partial class AuroraChatTimeline : UserControl
         {
             if (version != _version) return;
             if (bottom) Viewport.ScrollToEnd(); else Viewport.ScrollToVerticalOffset(offset);
+            UpdateVisibleImages();
             // 等滚动布局真正落定后再确认已读；失败/空载荷不清红点。
             Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
             {
@@ -74,6 +80,9 @@ public partial class AuroraChatTimeline : UserControl
 
 internal sealed class ChatMessageCard(IReadOnlyDictionary<string, string> row)
 {
+    public IReadOnlyList<ChatImageCard> Images { get; } = ChatImageCard.Parse(row.GetValueOrDefault("images"));
+    public string AttachmentSummary => row.GetValueOrDefault("attachment_summary") ?? "";
+    public string MediaHint => row.GetValueOrDefault("media_hint") ?? "";
     public string Text => row.GetValueOrDefault("text") ?? "";
     public bool Outgoing => string.Equals(row.GetValueOrDefault("direction"), "out", StringComparison.OrdinalIgnoreCase);
     public string Meta => string.Join(" · ", new[] { row.GetValueOrDefault("who"), row.GetValueOrDefault("time") }.Where(s => !string.IsNullOrEmpty(s)));

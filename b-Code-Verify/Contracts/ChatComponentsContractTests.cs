@@ -20,6 +20,108 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class ChatComponentsContractTests
 {
+    /// <summary>REQ-UI-151：图片加载必须守住桥快照、只读边界和离开会话后的取消；预览不能另开窗口。</summary>
+    [Fact]
+    public void ImagesLoadPreviewRetryAndCancelWithoutCrossingConversations()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var bytes = ImageBytes(900, 450);
+            var calls = new List<string>();
+            var cancelled = new TaskCompletionSource();
+            var registry = new CommandTable();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.ui.image", Domain = "demo", CommandClass = "ui", Summary = "图片", Readonly = true,
+                AllowUnspecifiedParameters = true, Handler = async c =>
+                {
+                    var path = c.RequireString("path");
+                    lock (calls) calls.Add(c.RequireString("bridge") + ":" + path);
+                    if (path == "slow")
+                    {
+                        using var registration = c.Cancellation.Register(() => cancelled.TrySetResult());
+                        await Task.Delay(30000, c.Cancellation);
+                    }
+                    return CommandResult.Ok("图片", new Dictionary<string, string> { ["base64"] = Convert.ToBase64String(bytes) });
+                },
+            });
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.ui.data", Domain = "demo", CommandClass = "ui", Summary = "消息", Readonly = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("消息", new[] { ImageMessage("1", "first") })),
+            });
+            var channels = new SelectionChannels();
+            channels.TryDeclare("demo.conversation", "HistoryDemo", "contacts", out _);
+            channels.Publish("demo.conversation", new Dictionary<string, string>(Row("a", "Alice")) { ["bridge"] = "original" });
+            var context = Context(channels, registry);
+            var timeline = Assert.IsType<AuroraChatTimeline>(PageRenderer.Render(Page("images", new PageNode
+            {
+                Type = "chatTimeline", Id = "images", Source = "{selection.demo.conversation.title}",
+                DataSource = new() { Command = "demo.ui.data" },
+                ImageSource = new() { Command = "demo.ui.image", Args = new Dictionary<string, string>
+                { ["bridge"] = "{selection.demo.conversation.bridge}", ["path"] = "{image.path}" } },
+            }), context).Root);
+            var host = new Window { Width = 720, Height = 540, Content = timeline, ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000 };
+            try
+            {
+                host.Show();
+                var refresh = context.Refresher!.RefreshAsync(null, "images");
+                Assert.True(UiTestHost.PumpUntil(() => refresh.IsCompleted));
+                host.UpdateLayout(); UiTestHost.Pump();
+                ChatImageCard Card() => ((ChatMessageCard)((ItemsControl)timeline.FindName("Messages")).Items[0]).Images[0];
+                Assert.True(UiTestHost.PumpUntil(() => Card().Source != null));
+                Assert.InRange(Card().Source!.PixelWidth, 1, 360);
+                var button = Descendants<Button>(timeline).Single(b => b.DataContext == Card());
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(Visibility.Visible, ((Border)timeline.FindName("ImageOverlay")).Visibility);
+                Assert.True(UiTestHost.PumpUntil(() => ((Image)timeline.FindName("PreviewImage")).Source is BitmapSource bitmap && bitmap.PixelWidth == 900));
+                ((Button)timeline.FindName("CloseImage")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(Visibility.Collapsed, ((Border)timeline.FindName("ImageOverlay")).Visibility);
+                Assert.Null(((Image)timeline.FindName("PreviewImage")).Source);
+                var count = calls.Count;
+                timeline.SetRows([ImageMessage("1", "first")]); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => Card().Source != null));
+                Assert.Equal(count, calls.Count); // 普通消息刷新复用缩略图。
+                timeline.SetRows([ImageMessage("2", "slow")]); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => { lock (calls) return calls.Contains("original:slow"); }));
+                channels.Publish("demo.conversation", new Dictionary<string, string>(Row("b", "Bob")) { ["bridge"] = "other" });
+                Assert.True(UiTestHost.PumpUntil(() => cancelled.Task.IsCompleted));
+                Assert.Empty(((ItemsControl)timeline.FindName("Messages")).Items);
+                Assert.DoesNotContain("other:slow", calls);
+            }
+            finally { host.Close(); }
+        });
+    }
+
+    /// <summary>REQ-UI-151：纵图按长边缩放，损坏和超限数据不能进入位图；未保存原件时仍有可读提示。</summary>
+    [Fact]
+    public void ImageDecoderBoundsMemoryAndMissingOriginalsRemainExplicit()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var portrait = AuroraChatTimeline.DecodeImage(ImageBytes(300, 1200), 360);
+            Assert.Equal(360, portrait.PixelHeight);
+            Assert.Equal(90, portrait.PixelWidth);
+            Assert.ThrowsAny<Exception>(() => AuroraChatTimeline.DecodeImage([1, 2, 3], 360));
+            Assert.Throws<InvalidDataException>(() => AuroraChatTimeline.DecodeImage(new byte[8 * 1024 * 1024 + 1], 360));
+            var unavailable = ChatImageCard.Parse("[{\"name\":\"图片\",\"path\":\"\"}]").Single();
+            Assert.Equal("图片原件暂不可用", unavailable.Status);
+            Assert.Single(ChatImageCard.Parse("broken"));
+        });
+    }
+
+    private static Dictionary<string, string> ImageMessage(string id, string path)
+        => new(Message(id, "查看图片", "in")) { ["images"] = System.Text.Json.JsonSerializer.Serialize(new[] { new { name = "示例图片.png", path } }) };
+
+    private static byte[] ImageBytes(int width, int height)
+    {
+        var pixels = new byte[width * height * 4];
+        for (var i = 0; i < pixels.Length; i += 4) { pixels[i] = 190; pixels[i + 1] = (byte)(100 + i / 4 / width % 100); pixels[i + 2] = 50; pixels[i + 3] = 255; }
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
+    }
+
     /// <summary>REQ-UI-150：只有可见且已经读到最新的消息才能确认本地已读；隐藏、失败和阅读历史均不能吞未读。</summary>
     [Fact]
     public void ReadActionRequiresVisibleLatestMessagesAndUsesSelectedIdentity()
