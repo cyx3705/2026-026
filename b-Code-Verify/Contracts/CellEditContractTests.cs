@@ -6,7 +6,7 @@ using Xunit;
 
 namespace HistoryAurora.Verify;
 
-/// <summary>REQ-UI-151：保存必须使用正在编辑的行，刷新或选择变化不能触发另一项目的写入。</summary>
+/// <summary>REQ-UI-157：保存必须使用正在编辑的行，刷新或选择变化不能触发另一项目的写入。</summary>
 [Collection(TestCollections.Ui)]
 public sealed class CellEditContractTests
 {
