@@ -17,7 +17,9 @@ public sealed record AuroraTableColumn(
     string Key,
     string Title,
     string? Width = null,
-    AuroraCellAction? CellAction = null)
+    AuroraCellAction? CellAction = null,
+    AuroraCellAction? CellEditAction = null,
+    string? EditableWhen = null)
 {
     /// <summary>占满剩余宽度的记号。</summary>
     public const string Star = "*";

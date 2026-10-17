@@ -415,7 +415,7 @@ public sealed partial class PanelView : UserControl
         picker.SetResourceReference(StyleProperty, "Aurora.Panel.Input");
         _getters[widget.Id!] = () => picker.Text;
         _setters[widget.Id!] = value => picker.Text = value;
-        picker.CommitAsync = value =>
+        if (!string.IsNullOrWhiteSpace(widget.CommitAction)) picker.CommitAsync = value =>
         {
             Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = value });
             return Task.CompletedTask;
@@ -642,13 +642,23 @@ public sealed partial class PanelView : UserControl
             return Task.FromResult(false);
         }
 
+        var action = binding.Action!;
+        string? Resolve(string control) => overrides != null && overrides.TryGetValue(control, out var value)
+            ? value : _getters.TryGetValue(control, out var getter) ? getter() : null;
+        var resolve = SelectionChannels.Chain(_channels, Resolve);
+        var clear = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in action.ClearOnSuccess)
+        {
+            if (!_getters.TryGetValue(id, out var getter) || !_setters.ContainsKey(id))
+            {
+                _log.Error("panel", $"面板 {_definition.Id}: clearOnSuccess 引用了不存在的控件 {id}");
+                return Task.FromResult(false);
+            }
+            clear[id] = getter();
+        }
+        var definition = _definition;
         var text = ActionRegistry.BuildCommandText(
-            binding.Action!,
-            SelectionChannels.Chain(
-                _channels,
-                control => overrides != null && overrides.TryGetValue(control, out var value)
-                    ? value
-                    : _getters.TryGetValue(control, out var getter) ? getter() : null),
+            action, resolve,
             out var error);
         if (text == null)
         {
@@ -656,16 +666,24 @@ public sealed partial class PanelView : UserControl
             return Task.FromResult(false);
         }
 
-        return RunAndRefreshAsync(text);
+        return RunAndRefreshAsync(text, () =>
+        {
+            // 成功回执只清理本次提交；后来编辑的内容、切换的目标和重建的面板都不能被旧回执擦掉。
+            if (!ReferenceEquals(definition, _definition) || clear.Count == 0
+                || clear.Any(pair => _getters[pair.Key]() != pair.Value)
+                || ActionRegistry.BuildCommandText(action, resolve, out _) != text) return;
+            WriteBack(() => { foreach (var id in clear.Keys) _setters[id](""); });
+        });
     }
 
     /// <summary>
     /// 面板动作成功后必须把本页表格再取一遍。Minerva 选完来源文件后零件已经进了
     /// 模块内存，但表只在 Loaded 取过一次空结果——不刷新就会一直空着，整页像死了。
     /// </summary>
-    private async Task<bool> RunAndRefreshAsync(string text)
+    private async Task<bool> RunAndRefreshAsync(string text, Action? onSuccess = null)
     {
         var result = await Task.Run(() => _bus.ExecuteAsync(text, "UI")).ConfigureAwait(true);
+        if (result.Success) onSuccess?.Invoke();
         if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
             return result.Success;
         // 选完文件后同一帧刷新表格会叠在对话框关闭的布局上，列宽空转把主进程打满。

@@ -21,7 +21,7 @@ public static partial class ComponentCatalog
                 new("dataSource.command", "string", "取数指令") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符，变化时自动重取")],
             Example = """{ "type": "conversationList", "id": "conversations", "channel": "mymodule.conversation" }""",
-            Rules = ["掉线清空并提示；完整刷新按 id 保留选中，选中行消失时清空通道", "只接收完整数组或 snapshot；不使用 deltaCommand，不自动选中或标记已读", "自己滚动并占容器剩余高度，外观封在 Aurora 中", "保留头像和三行信息，以紧凑留白提高通讯录密度", "遵循数据源行序；首行身份变化时回到顶部露出新会话，当前选择不变"],
+            Rules = ["掉线清空并提示；完整刷新按 id 保留选中，选中行消失时清空通道", "只接收完整数组或 snapshot；不使用 deltaCommand，不自动选中或标记已读", "自己滚动并占容器剩余高度，外观封在 Aurora 中", "保留头像，标题与摘要两行；来源与单聊/群聊置于时间下方，与未读徽标同行", "遵循数据源行序；首行身份变化时回到顶部露出新会话，当前选择不变"],
         },
         new()
         {
@@ -29,13 +29,16 @@ public static partial class ComponentCatalog
             Summary = "聊天时间线：会话标题、入站左气泡、出站右气泡与可复制的多行正文；阅读历史时不抢滚动",
             Fields = [NodeType, NodeId,
                 new("readAction", "string", "可选本地已读动作 id；最新消息成功显示、可见且滚至底部时调用；{readThrough} 取消息行最大 ts_ms，缺时间戳不调用"),
+                new("imageSource", "object", "可选图片只读源，返回 {base64:字符串}；凭据由提供方持有，图片不直接请求网络 URL"),
+                new("imageSource.command", "string", "已注册的只读图片指令") { Required = true },
+                new("imageSource.args", "map<string,string>", "固定参数、选择通道与 {image.path}；行集接受时固定选择快照"),
                 new("source", "string", "标题选择引用 {selection.<通道>.<列>}；该行 id 标识会话，subtitle 是副标题"),
                 new("text", "string", "未选会话时的标题，缺省消息"),
-                new("dataSource", "object", "只读完整行集，行字段 id/who/time/text/direction/ts_ms；direction=out 在右，其余在左；ts_ms 是供本地已读动作使用的毫秒时间戳"),
+                new("dataSource", "object", "只读完整行集，行字段 id/who/time/text/direction/ts_ms；direction=out 在右，其余在左；ts_ms 为已读时间戳；images 是 JSON 数组字符串 [{name,path}]；attachment_summary 附件摘要、media_hint 原件缺失说明"),
                 new("dataSource.command", "string", "取数指令") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数与选择通道占位符；无法解析时不请求")],
             Example = """{ "type": "chatTimeline", "id": "messages", "text": "消息" }""",
-            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送", "气泡直接铺在页面背景上，消息区不套额外圆角底板"],
+            Rules = ["行 id 唯一非空；只收完整数组或 snapshot，不使用 deltaCommand", "切会话立即清掉旧消息，迟到结果丢弃；失败清空并提示", "默认滚到最新；向上读历史时刷新保留位置，按回到最新继续跟随", "发送另用 panel 的 multiline 文本框与动作按钮，组件不自动发送", "气泡直接铺在页面背景上，消息区不套额外圆角底板", "图片保持比例并贴满气泡，气泡尺寸跟随图片；空正文不留文字区域，非空正文作为图片说明保留", "每条最多预览 16 张图片；按可见区域加载，点击放大在页内展示，关闭或 Escape 返回；失败可重试，path 空值表示原件不可用", "图片上限 8 MiB、4000 万像素；缩略图最长边 360、大图 1600；动画显示静态首帧，不支持的编码显示失败提示"],
         },
         new()
         {
@@ -93,6 +96,8 @@ public static partial class ComponentCatalog
                 new("columns.key", "string", "取值键，对应行数据的字段名") { Required = true },
                 new("columns.title", "string", "表头文字"),
                 new("columns.width", "string", "列宽**权重**，不是像素：\"150\" 与 \"70\" 两列按 150:70 随页面缩放；\"*\" 相当于 200，不写相当于 120"),
+                new("columns.cellEditAction", "string", "行内编辑动作 id（与 cellAction 互斥）；Enter 保存、Escape 还原，失焦不提交；参数取开始编辑时的行快照，同名列为新值；失败还原，刷新不触发保存"),
+                new("columns.editableWhen", "string", "可选行字段名，值为 true 才可编辑；省略则整列可编辑；只与 cellEditAction 配套"),
                 new("columns.cellAction", "string", "点击本列非空单元格执行的动作 id；参数里的 {列名} 取被点那一行"),
                 new("columns.cellStyle", "string", "带 cellAction 的格画成什么：缺省链接（墨色字），button 画成行内小按钮，按钮上的字就是格里的值") { Values = ["button"] },
                 new("dataSource", "object", "取数：组件按需调这条只读指令，数据不内联进描述"),

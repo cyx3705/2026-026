@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HistoryAurora.Shell.Components.Actions;
 using HistoryAurora.Shell.Components.Pages;
+using HistoryAurora.Shell.Components.Panels;
 using HistoryAurora.Shell.Components.Selection;
 using HistoryAurora.Shell.Components.Widgets;
 using HistoryAurora.Shell.Neutral.Commands;
@@ -20,6 +21,215 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class ChatComponentsContractTests
 {
+    /// <summary>REQ-UI-154：回执成功才清空；网络等待期间的新草稿、切换目标和重建面板必须保留。</summary>
+    [Theory]
+    [InlineData(true, "none")]
+    [InlineData(false, "none")]
+    [InlineData(true, "edit")]
+    [InlineData(true, "target")]
+    [InlineData(true, "rebuild")]
+    public void ComposerClearsOnlySuccessfulUnchangedSubmission(bool success, string change)
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var response = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var registry = new CommandTable();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.msg.send", Domain = "demo", CommandClass = "msg", Summary = "发送", AllowUnspecifiedParameters = true,
+                Handler = _ => { started.SetResult(true); return response.Task; },
+            });
+            var channels = new SelectionChannels();
+            channels.TryDeclare("demo.conversation", "HistoryDemo", "contacts", out _);
+            channels.Publish("demo.conversation", Row("a", "Alice"));
+            var context = Context(channels, registry);
+            context.Actions!.DeclareLocal("HistoryDemo", [new ActionDeclaration
+            {
+                Id = "send", Command = "demo.msg.send", ClearOnSuccess = ["text", "attachment"],
+                Args = new Dictionary<string, string> { ["text"] = "{text}", ["file"] = "{attachment}", ["conversation"] = "{selection.demo.conversation.id}" },
+            }]);
+            PanelDefinition Definition() => new()
+            {
+                Id = "composer", Title = "写消息", Rows = [new() { Widgets =
+                [
+                    new() { Kind = "textbox", Id = "text", Multiline = true, Value = "待发送" },
+                    new() { Kind = "sourcePicker", Id = "attachment", SelectCommand = "aurora.ui.selectfile", Value = "photo.png" },
+                    new() { Kind = "button", Action = "send", Text = "发送" },
+                ] }],
+            };
+            var definition = Definition();
+            Assert.True(PanelDefinitionValidator.Validate(definition).Ok);
+            var panel = new PanelView(definition, context.Bus, context.Log, context.Actions, channels);
+            void Layout() { panel.Measure(new Size(700, 250)); panel.Arrange(new Rect(0, 0, 700, 250)); panel.UpdateLayout(); }
+            Layout();
+            var button = Descendants<Button>(panel).Single();
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(panel.Dispatcher));
+            button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.True(UiTestHost.PumpUntil(() => started.Task.IsCompleted));
+            if (change == "edit") panel.TrySetValue("text", "下一条草稿");
+            if (change == "target") channels.Publish("demo.conversation", Row("b", "Bob"));
+            if (change == "rebuild") panel.Rebuild(Definition());
+            response.SetResult(success ? CommandResult.Ok("已发送") : CommandResult.Fail("发送失败"));
+            Assert.True(UiTestHost.PumpUntil(() => AuroraCommandActivity.GetActivity(button)?.IsRunning == false));
+            Layout();
+            var boxes = Descendants<TextBox>(panel).ToList();
+            Assert.Equal(success && change == "none" ? "" : change == "edit" ? "下一条草稿" : "待发送", boxes.Single(b => b is not AuroraSourcePicker).Text);
+            Assert.Equal(success && change == "none" ? "" : "photo.png", boxes.OfType<AuroraSourcePicker>().Single().Text);
+        });
+    }
+
+    /// <summary>REQ-UI-155：横竖图片与窄窗口都不能出现宽气泡留白、变形或空正文高度。</summary>
+    [Theory]
+    [InlineData(640, 160, 800, false)]
+    [InlineData(180, 540, 420, false)]
+    [InlineData(180, 540, 800, true)]
+    public void ImageBubbleFollowsImageAspectRatio(int imageWidth, int imageHeight, int width, bool dark)
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var bytes = ImageBytes(imageWidth, imageHeight);
+            var timeline = new AuroraChatTimeline { ImageLoader = (_, _) => Task.FromResult(bytes) };
+            timeline.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri(dark ? "/HistoryAurora;component/Themes/AuroraTokens.Dark.xaml" : "/HistoryAurora;component/Themes/AuroraTokens.xaml", UriKind.Relative),
+            });
+            timeline.SetResourceReference(Panel.BackgroundProperty, "Aurora.Brush.Canvas");
+            var row = new Dictionary<string, string>(Message("image", "", "out", "很长的发送者名字", "2026-10-16 09:42:00"))
+            {
+                ["images"] = "[{\"name\":\"photo.png\",\"path\":\"image\"}]",
+            };
+            timeline.SetRows([row]);
+            var host = new Window { Width = width, Height = 600, Content = timeline, ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000 };
+            try
+            {
+                host.Show(); host.UpdateLayout();
+                var card = ((ChatMessageCard)((ItemsControl)timeline.FindName("Messages")).Items[0]).Images[0];
+                Assert.True(UiTestHost.PumpUntil(() => card.Source != null));
+                host.UpdateLayout(); UiTestHost.Pump(); host.UpdateLayout();
+                var image = Descendants<Image>(timeline).Single(i => i.DataContext == card);
+                Assert.True(image.ActualWidth > 0 && image.ActualHeight > 0);
+                Assert.InRange(Math.Abs(image.ActualWidth / image.ActualHeight - (double)imageWidth / imageHeight), 0, 0.01);
+                var bubble = Descendants<Border>(timeline).Single(b => b.Name == "Bubble");
+                Assert.Equal(new Thickness(0), bubble.Padding);
+                Assert.InRange(Math.Abs(bubble.ActualWidth - image.ActualWidth), 0, 0.1);
+                Assert.InRange(Math.Abs(bubble.ActualHeight - image.ActualHeight), 0, 0.1);
+                Assert.Equal(Visibility.Collapsed, Descendants<TextBox>(timeline).Single().Visibility);
+                var directory = Environment.GetEnvironmentVariable("AURORA_CHAT_PREVIEW_DIRECTORY");
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                    var bitmap = new RenderTargetBitmap((int)timeline.ActualWidth, (int)timeline.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(timeline);
+                    var preview = new PngBitmapEncoder(); preview.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var output = File.Create(Path.Combine(directory, $"fama-image-{imageWidth}x{imageHeight}-{width}-{dark}.png")); preview.Save(output);
+                }
+            }
+            finally { host.Close(); }
+        });
+    }
+
+    /// <summary>REQ-UI-151：图片加载必须守住桥快照、只读边界和离开会话后的取消；预览不能另开窗口。</summary>
+    [Fact]
+    public void ImagesLoadPreviewRetryAndCancelWithoutCrossingConversations()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var bytes = ImageBytes(900, 450);
+            var calls = new List<string>();
+            var cancelled = new TaskCompletionSource();
+            var registry = new CommandTable();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.ui.image", Domain = "demo", CommandClass = "ui", Summary = "图片", Readonly = true,
+                AllowUnspecifiedParameters = true, Handler = async c =>
+                {
+                    var path = c.RequireString("path");
+                    lock (calls) calls.Add(c.RequireString("bridge") + ":" + path);
+                    if (path == "slow")
+                    {
+                        using var registration = c.Cancellation.Register(() => cancelled.TrySetResult());
+                        await Task.Delay(30000, c.Cancellation);
+                    }
+                    return CommandResult.Ok("图片", new Dictionary<string, string> { ["base64"] = Convert.ToBase64String(bytes) });
+                },
+            });
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.ui.data", Domain = "demo", CommandClass = "ui", Summary = "消息", Readonly = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("消息", new[] { ImageMessage("1", "first") })),
+            });
+            var channels = new SelectionChannels();
+            channels.TryDeclare("demo.conversation", "HistoryDemo", "contacts", out _);
+            channels.Publish("demo.conversation", new Dictionary<string, string>(Row("a", "Alice")) { ["bridge"] = "original" });
+            var context = Context(channels, registry);
+            var timeline = Assert.IsType<AuroraChatTimeline>(PageRenderer.Render(Page("images", new PageNode
+            {
+                Type = "chatTimeline", Id = "images", Source = "{selection.demo.conversation.title}",
+                DataSource = new() { Command = "demo.ui.data" },
+                ImageSource = new() { Command = "demo.ui.image", Args = new Dictionary<string, string>
+                { ["bridge"] = "{selection.demo.conversation.bridge}", ["path"] = "{image.path}" } },
+            }), context).Root);
+            var host = new Window { Width = 720, Height = 540, Content = timeline, ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000 };
+            try
+            {
+                host.Show();
+                var refresh = context.Refresher!.RefreshAsync(null, "images");
+                Assert.True(UiTestHost.PumpUntil(() => refresh.IsCompleted));
+                host.UpdateLayout(); UiTestHost.Pump();
+                ChatImageCard Card() => ((ChatMessageCard)((ItemsControl)timeline.FindName("Messages")).Items[0]).Images[0];
+                Assert.True(UiTestHost.PumpUntil(() => Card().Source != null));
+                Assert.InRange(Card().Source!.PixelWidth, 1, 360);
+                var button = Descendants<Button>(timeline).Single(b => b.DataContext == Card());
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(Visibility.Visible, ((Border)timeline.FindName("ImageOverlay")).Visibility);
+                Assert.True(UiTestHost.PumpUntil(() => ((Image)timeline.FindName("PreviewImage")).Source is BitmapSource bitmap && bitmap.PixelWidth == 900));
+                ((Button)timeline.FindName("CloseImage")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(Visibility.Collapsed, ((Border)timeline.FindName("ImageOverlay")).Visibility);
+                Assert.Null(((Image)timeline.FindName("PreviewImage")).Source);
+                var count = calls.Count;
+                timeline.SetRows([ImageMessage("1", "first")]); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => Card().Source != null));
+                Assert.Equal(count, calls.Count); // 普通消息刷新复用缩略图。
+                timeline.SetRows([ImageMessage("2", "slow")]); host.UpdateLayout(); UiTestHost.Pump();
+                Assert.True(UiTestHost.PumpUntil(() => { lock (calls) return calls.Contains("original:slow"); }));
+                channels.Publish("demo.conversation", new Dictionary<string, string>(Row("b", "Bob")) { ["bridge"] = "other" });
+                Assert.True(UiTestHost.PumpUntil(() => cancelled.Task.IsCompleted));
+                Assert.Empty(((ItemsControl)timeline.FindName("Messages")).Items);
+                Assert.DoesNotContain("other:slow", calls);
+            }
+            finally { host.Close(); }
+        });
+    }
+
+    /// <summary>REQ-UI-151：纵图按长边缩放，损坏和超限数据不能进入位图；未保存原件时仍有可读提示。</summary>
+    [Fact]
+    public void ImageDecoderBoundsMemoryAndMissingOriginalsRemainExplicit()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var portrait = AuroraChatTimeline.DecodeImage(ImageBytes(300, 1200), 360);
+            Assert.Equal(360, portrait.PixelHeight);
+            Assert.Equal(90, portrait.PixelWidth);
+            Assert.ThrowsAny<Exception>(() => AuroraChatTimeline.DecodeImage([1, 2, 3], 360));
+            Assert.Throws<InvalidDataException>(() => AuroraChatTimeline.DecodeImage(new byte[8 * 1024 * 1024 + 1], 360));
+            var unavailable = ChatImageCard.Parse("[{\"name\":\"图片\",\"path\":\"\"}]").Single();
+            Assert.Equal("图片原件暂不可用", unavailable.Status);
+            Assert.Single(ChatImageCard.Parse("broken"));
+        });
+    }
+
+    private static Dictionary<string, string> ImageMessage(string id, string path)
+        => new(Message(id, "查看图片", "in")) { ["images"] = System.Text.Json.JsonSerializer.Serialize(new[] { new { name = "示例图片.png", path } }) };
+
+    private static byte[] ImageBytes(int width, int height)
+    {
+        var pixels = new byte[width * height * 4];
+        for (var i = 0; i < pixels.Length; i += 4) { pixels[i] = 190; pixels[i + 1] = (byte)(100 + i / 4 / width % 100); pixels[i + 2] = 50; pixels[i + 3] = 255; }
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
+    }
+
     /// <summary>REQ-UI-150：只有可见且已经读到最新的消息才能确认本地已读；隐藏、失败和阅读历史均不能吞未读。</summary>
     [Fact]
     public void ReadActionRequiresVisibleLatestMessagesAndUsesSelectedIdentity()
@@ -271,7 +481,7 @@ public sealed class ChatComponentsContractTests
             [
                 new() { Type = "panel", Id = "receive", Text = "消息中心", Rows =
                 [
-                    new() { Widgets = [new() { Kind = "switch", Id = "auto", Label = "自动接收", Value = "true", CommitAction = "demo.auto" }, new() { Kind = "button", Action = "demo.refresh", Text = "刷新", Icon = "refresh-cw" }] },
+                    new() { Widgets = [new() { Kind = "textbox", Id = "source", Label = "来源", Mode = "select", Options = ["全部来源", "QQ", "飞书"], Value = "全部来源", MinWidth = 72, Flex = true }, new() { Kind = "switch", Id = "auto", Label = "自动接收", Value = "true", CommitAction = "demo.auto" }, new() { Kind = "button", Action = "demo.refresh", Text = "刷新", Icon = "refresh-cw" }] },
                     new() { Widgets = [new() { Kind = "textbox", Id = "search", Label = "搜索" }] },
                 ] },
                 new() { Type = "conversationList", Id = "contacts", Channel = "demo.conversation" },
@@ -282,7 +492,7 @@ public sealed class ChatComponentsContractTests
                 new() { Type = "panel", Id = "send", Text = "写消息", Rows =
                 [
                     new() { Widgets = [new() { Kind = "textbox", Id = "text", Label = "", Multiline = true, Flex = true }] },
-                    new() { Widgets = [new() { Kind = "text", Text = "Enter 换行 · 发送前确认收件人", Flex = true }, new() { Kind = "button", Action = "demo.send", Text = "发送", EnabledWhen = new() { Selected = "demo.conversation" } }] },
+                    new() { Widgets = [new() { Kind = "text", Text = "Enter 换行 · 点击发送", Flex = true }, new() { Kind = "button", Action = "demo.send", Text = "发送", EnabledWhen = new() { Selected = "demo.conversation" } }] },
                 ] },
             ] }), context).Root;
             contacts.Margin = new Thickness(12, 12, 6, 12); chat.Margin = new Thickness(6, 12, 12, 12);
@@ -307,6 +517,13 @@ public sealed class ChatComponentsContractTests
             root.UpdateLayout(); UiTestHost.Pump(); root.UpdateLayout();
             Assert.True(timeline.ActualHeight > 300);
             Assert.True(list.ActualHeight > 400);
+            var title = Descendants<TextBlock>(list).Single(t => t.Text == "产品讨论群");
+            var preview = Descendants<TextBlock>(list).Single(t => t.Text == "李明：界面这样调整可以吗？");
+            var source = Descendants<TextBlock>(list).First(t => t.Text == "QQ · 群聊");
+            var when = Descendants<TextBlock>(list).Single(t => t.Text == "09:42");
+            Assert.True(source.TranslatePoint(new Point(), list).Y > when.TranslatePoint(new Point(), list).Y);
+            Assert.True(source.TranslatePoint(new Point(), list).X > title.TranslatePoint(new Point(), list).X);
+            Assert.InRange(Math.Abs(source.TranslatePoint(new Point(), list).Y - preview.TranslatePoint(new Point(), list).Y), 0, 5);
             Assert.All(Descendants<ScrollViewer>(root), scroll => Assert.True(scroll.ScrollableWidth < 1, "聊天界面不能出现横向溢出"));
             var directory = Environment.GetEnvironmentVariable("AURORA_CHAT_PREVIEW_DIRECTORY");
             if (!string.IsNullOrEmpty(directory))

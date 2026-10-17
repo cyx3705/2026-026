@@ -114,7 +114,7 @@ public static partial class ComponentCatalog
                 new("label", "string", "左侧标签"),
                 new("value", "string", "初值"),
                 new("selectCommand", "string", "双击时执行的选择指令，如 aurora.ui.selectfile；会展开 {selection.<通道>.<列>} 与控件 id 占位符并按指令语法加引号") { Required = true },
-                new("commitAction", "string", "值提交时执行的动作 id") { Required = true },
+                new("commitAction", "string", "可选：值提交时执行的动作 id；省略时只选择和保存控件值，由另一个显式按钮提交"),
                 WidgetMinWidth,
                 WidgetFlex,
             ],

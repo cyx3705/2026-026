@@ -71,6 +71,7 @@ public static partial class ComponentCatalog
                 new("actions.args", "map<string,string>", "参数；值里的 {控件id} 取同面板控件当前值，{selection.<通道>.<列>} 取通道，{列名} 在行操作里取被点那一行，{value} 取提交值，{node} 取被点泳道节点"),
                 new("actions.danger", "bool", "危险档：按钮用 danger 样式；要不要再确认由指令自己经宿主 ConfirmPrompt 决定") { Default = "false" },
                 new("actions.summary", "string", "一句话说明，作为悬停提示"),
+                new("actions.clearOnSuccess", "string[]", "面板动作成功后清空这些控件 id；失败、输入或动作参数在等待期间改变、面板重建时保留草稿；不触发提交动作"),
             ],
             Example = """
                 { "schemaVersion": 1, "owner": "HistoryMymodule", "actions": [

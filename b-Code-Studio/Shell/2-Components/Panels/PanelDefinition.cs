@@ -168,7 +168,7 @@ public sealed class PanelWidget
     /// <summary>textbox / switch / sourcePicker 专用：值提交时绑定的动作 id。</summary>
     public string? CommitAction { get; set; }
 
-    /// <summary>sourcePicker 专用：双击时执行的选择指令名。</summary>
+    /// <summary>sourcePicker 专用：双击时执行的选择指令名；省略 CommitAction 时只选择，不自动提交。</summary>
     public string? SelectCommand { get; set; }
 
     /// <summary>
@@ -377,8 +377,6 @@ public static class PanelDefinitionValidator
                     return PanelDefinitionParse.Fail($"面板 {definition.Id} 的控件 id 重复: {widget.Id}");
                 if (string.IsNullOrWhiteSpace(widget.SelectCommand))
                     return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 缺少 selectCommand");
-                if (string.IsNullOrWhiteSpace(widget.CommitAction))
-                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 缺少 commitAction");
                 if (widget.Options != null || widget.OptionsSource != null || widget.Follows != null
                     || widget.Channel != null || widget.Action != null || widget.EnabledWhen != null)
                     return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 只支持 value / selectCommand / commitAction");

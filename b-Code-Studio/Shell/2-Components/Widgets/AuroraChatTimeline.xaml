@@ -17,21 +17,61 @@
          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
          <StackPanel x:Name="Message" Grid.ColumnSpan="3" HorizontalAlignment="Left">
           <TextBlock x:Name="Meta" Text="{Binding Meta}" Style="{DynamicResource Aurora.Text.Caption}" Margin="2,0,2,5"/>
-          <Border x:Name="Bubble" Background="{DynamicResource Aurora.Brush.SurfaceAlt}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="12,9">
+          <Border x:Name="Bubble" HorizontalAlignment="Left" Background="{DynamicResource Aurora.Brush.SurfaceAlt}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="12,9">
+           <StackPanel>
            <TextBox x:Name="Body" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
             FontSize="{DynamicResource Aurora.Font.Body}" FontFamily="{DynamicResource Aurora.Font.Family}"
             Background="{DynamicResource Aurora.Brush.SurfaceAlt}" Foreground="{DynamicResource Aurora.Brush.TextPrimary}">
             <TextBox.Template><ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost" Background="{TemplateBinding Background}" Focusable="False"/></ControlTemplate></TextBox.Template>
            </TextBox>
+           <ItemsControl ItemsSource="{Binding Images}">
+            <ItemsControl.ItemTemplate><DataTemplate>
+             <Button Padding="0" BorderThickness="0" HorizontalAlignment="Left" HorizontalContentAlignment="Left"
+              Click="ImageClick" Loaded="ImageLoaded" Unloaded="ImageUnloaded">
+              <Button.Template><ControlTemplate TargetType="Button"><ContentPresenter/></ControlTemplate></Button.Template>
+              <Grid x:Name="ImageFrame">
+               <Image Source="{Binding Source}" MaxWidth="360" MaxHeight="360" Stretch="Uniform" SizeChanged="OnImageSizeChanged"/>
+               <TextBlock x:Name="ImageStatus" Text="{Binding Status}" Visibility="Collapsed" Style="{DynamicResource Aurora.Text.Caption}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8"/>
+              </Grid>
+             </Button>
+             <DataTemplate.Triggers>
+              <DataTrigger Binding="{Binding Source}" Value="{x:Null}">
+               <Setter TargetName="ImageFrame" Property="Width" Value="200"/>
+               <Setter TargetName="ImageFrame" Property="Height" Value="150"/>
+               <Setter TargetName="ImageStatus" Property="Visibility" Value="Visible"/>
+              </DataTrigger>
+             </DataTemplate.Triggers>
+            </DataTemplate></ItemsControl.ItemTemplate>
+           </ItemsControl>
+           <TextBlock x:Name="AttachmentSummary" Text="{Binding AttachmentSummary}" Style="{DynamicResource Aurora.Text.Caption}" TextWrapping="Wrap"/>
+           <TextBlock x:Name="MediaHint" Text="{Binding MediaHint}" Style="{DynamicResource Aurora.Text.Caption}" TextWrapping="Wrap"/>
+           </StackPanel>
           </Border>
          </StackPanel>
          <Grid.Style><Style TargetType="Grid"><Setter Property="HorizontalAlignment" Value="Stretch"/></Style></Grid.Style>
         </Grid>
         <DataTemplate.Triggers>
+         <DataTrigger Binding="{Binding HasImage}" Value="True">
+          <Setter TargetName="Bubble" Property="Padding" Value="0"/>
+         </DataTrigger>
+         <DataTrigger Binding="{Binding HasText}" Value="False">
+          <Setter TargetName="Body" Property="Visibility" Value="Collapsed"/>
+         </DataTrigger>
+         <DataTrigger Binding="{Binding HasAttachmentSummary}" Value="False">
+          <Setter TargetName="AttachmentSummary" Property="Visibility" Value="Collapsed"/>
+         </DataTrigger>
+         <DataTrigger Binding="{Binding HasMediaHint}" Value="False">
+          <Setter TargetName="MediaHint" Property="Visibility" Value="Collapsed"/>
+         </DataTrigger>
+         <MultiDataTrigger>
+          <MultiDataTrigger.Conditions><Condition Binding="{Binding HasImage}" Value="True"/><Condition Binding="{Binding HasText}" Value="True"/></MultiDataTrigger.Conditions>
+          <Setter TargetName="Body" Property="Margin" Value="12,9"/>
+         </MultiDataTrigger>
          <DataTrigger Binding="{Binding Outgoing}" Value="True">
           <Setter TargetName="Message" Property="Grid.Column" Value="1"/>
           <Setter TargetName="Message" Property="HorizontalAlignment" Value="Right"/>
           <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Right"/>
+          <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
           <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource Aurora.Brush.AccentSoft}"/>
           <Setter TargetName="Body" Property="Background" Value="{DynamicResource Aurora.Brush.AccentSoft}"/>
          </DataTrigger>
@@ -43,5 +83,17 @@
     <TextBlock x:Name="Empty" Text="选择左侧会话开始聊天" Style="{DynamicResource Aurora.Text.Secondary}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" IsHitTestVisible="False"/>
     <Button x:Name="Latest" Content="回到最新 ↓" Style="{DynamicResource Aurora.Button.Ghost}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16" Visibility="Collapsed"/>
   </Grid>
+  <Border x:Name="ImageOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="{DynamicResource Aurora.Brush.Surface}" Padding="16"
+   CornerRadius="{DynamicResource Aurora.Radius.Inner}" Focusable="True" PreviewKeyDown="ImagePreviewKeyDown">
+   <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,12">
+     <Button x:Name="CloseImage" Content="关闭 ×" Style="{DynamicResource Aurora.Button.Ghost}" DockPanel.Dock="Right" Click="CloseImageClick"/>
+     <TextBlock x:Name="ImageTitle" Style="{DynamicResource Aurora.Text.Body}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+    </DockPanel>
+    <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform"/>
+    <TextBlock x:Name="PreviewStatus" Grid.Row="1" Style="{DynamicResource Aurora.Text.Secondary}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+   </Grid>
+  </Border>
  </Grid>
 </UserControl>

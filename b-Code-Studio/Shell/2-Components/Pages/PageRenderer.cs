@@ -358,31 +358,28 @@ public static partial class PageRenderer
         var columns = (node.Columns ?? [])
             .Select(column =>
             {
-                if (column.CellAction == null)
-                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
-                if (string.IsNullOrWhiteSpace(column.CellAction))
+                AuroraCellAction? ResolveCell(string? id, bool button = false)
                 {
-                    broken.Add($"列 {column.Title}：cellAction 为空");
-                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
-                }
-
-                var binding = state.ResolveAction(column.CellAction);
-                if (!binding.Ok)
-                {
-                    broken.Add($"列 {column.Title}：{binding.Error}");
-                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
-                }
-
-                var action = binding.Action!;
-                return new AuroraTableColumn(
-                    column.Key,
-                    column.Title,
-                    column.Width,
-                    new AuroraCellAction(
-                        column.CellAction,
+                    if (id == null) return null;
+                    var binding = state.ResolveAction(id);
+                    if (string.IsNullOrWhiteSpace(id) || !binding.Ok)
+                    {
+                        broken.Add($"列 {column.Title}：{binding.Error ?? "动作 id 为空"}");
+                        return null;
+                    }
+                    var action = binding.Action!;
+                    return new AuroraCellAction(id,
                         string.IsNullOrWhiteSpace(action.Summary) ? action.Title : action.Summary,
-                        action.Danger,
-                        string.Equals(column.CellStyle, "button", StringComparison.OrdinalIgnoreCase)));
+                        action.Danger, button);
+                }
+                if (column.CellAction != null && column.CellEditAction != null)
+                {
+                    broken.Add($"列 {column.Title}：cellAction 与 cellEditAction 不可同时声明");
+                    return new AuroraTableColumn(column.Key, column.Title, column.Width);
+                }
+                return new AuroraTableColumn(column.Key, column.Title, column.Width,
+                    ResolveCell(column.CellAction, string.Equals(column.CellStyle, "button", StringComparison.OrdinalIgnoreCase)),
+                    ResolveCell(column.CellEditAction), column.EditableWhen);
             })
             .ToList();
 
@@ -404,7 +401,7 @@ public static partial class PageRenderer
         if (node.DataSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
             state.BindRows(table, columns, source, node.Id);
 
-        if (columns.Any(column => column.CellAction != null))
+        if (columns.Any(column => column.CellAction != null || column.CellEditAction != null))
             state.BindCellActions(table);
 
         var declared = node.RowActions ?? [];

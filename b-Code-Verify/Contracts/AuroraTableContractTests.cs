@@ -30,7 +30,7 @@ public sealed class AuroraTableContractTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["CellAction", "Key", "Title", "Width"], names);
+        Assert.Equal(["CellAction", "CellEditAction", "EditableWhen", "Key", "Title", "Width"], names);
     }
 
     [Fact]

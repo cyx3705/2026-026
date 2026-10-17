@@ -151,6 +151,82 @@ public sealed class CellActionContractTests
     }
 
     [Fact]
+    public void PageCellEdit_ResolvesEditedValueAndCapturedRow()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var registry = new CommandTable();
+            var log = new MemoryLog();
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.open",
+                Domain = "demo",
+                CommandClass = "ui",
+                Summary = "打开",
+                AllowUnspecifiedParameters = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("ok")),
+            });
+            registry.Register(new CommandDescriptor
+            {
+                Name = "demo.rows",
+                Domain = "demo",
+                CommandClass = "ui",
+                Summary = "行",
+                Readonly = true,
+                Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(
+                    "ok",
+                    JsonDocument.Parse("""[{"project":"Janus","folder":"z-docs"}]""").RootElement.Clone())),
+            });
+            var bus = TestShell.Bus(registry);
+            var actions = new ActionRegistry(bus, log);
+            actions.DeclareLocal("HistoryDemo",
+            [
+                new ActionDeclaration
+                {
+                    Id = "demo.folder.open",
+                    Title = "打开",
+                    Command = "demo.open",
+                    Args = new Dictionary<string, string>
+                    {
+                        ["project"] = "{project}",
+                        ["folder"] = "{folder}",
+                    },
+                },
+            ]);
+            var executed = new List<string>();
+            bus.Executed += (text, _, _) => executed.Add(text);
+
+            var page = Page("""
+                {
+                  "type": "table",
+                  "dataSource": { "command": "demo.rows" },
+                  "columns": [
+                    { "key": "project", "title": "项目" },
+                    { "key": "folder", "title": "z 级文件夹", "cellEditAction": "demo.folder.open" }
+                  ]
+                }
+                """);
+            var rendered = PageRenderer.Render(page, new PageRenderContext
+            {
+                Bus = bus,
+                Log = log,
+                Owner = "HistoryDemo",
+                Actions = actions,
+            });
+            var table = Assert.IsType<AuroraTable>(rendered.Root);
+            table.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+            Assert.True(UiTestHost.PumpUntil(() => table.RowCount == 1));
+
+            var editing = table.CommitCellEditAsync(table.Data.Columns[1], table.Data.Rows[0], "changed");
+            Assert.True(UiTestHost.PumpUntil(() => editing.IsCompleted));
+            Assert.True(editing.Result);
+            // 只有单元格动作会回显；表格取数走安静通道，不进这份账。
+            Assert.True(UiTestHost.PumpUntil(() => executed.Count >= 1));
+            Assert.Contains("demo.open project=Janus folder=changed", executed);
+        });
+    }
+
+    [Fact]
     public void MissingCellAction_IsVisibleAndLogged()
     {
         UiTestHost.RunSta(() =>

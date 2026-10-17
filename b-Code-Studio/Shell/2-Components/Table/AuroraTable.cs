@@ -30,7 +30,7 @@ namespace HistoryAurora.Shell.Components.Table;
 /// 而漏掉的那一页在浅色下看不出来、深色下才露馅。把外观收进组件后，
 /// "只有这一页长得不一样"这种缺陷在结构上就不成立了。
 /// </summary>
-public sealed class AuroraTable : UserControl
+public sealed partial class AuroraTable : UserControl
 {
     /// <summary>
     /// 列宽下限：再窄也要看得见表头文字。**这是软下限**——列多到连下限都排不下时
@@ -391,9 +391,9 @@ public sealed class AuroraTable : UserControl
                 var gridColumn = new GridViewColumn
                 {
                     Header = column.Title,
-                    CellTemplate = column.CellAction == null
-                        ? CellTemplate(column.Key)
-                        : CellActionTemplate(column),
+                    CellTemplate = column.CellEditAction != null
+                        ? CellEditTemplate(column)
+                        : column.CellAction == null ? CellTemplate(column.Key) : CellActionTemplate(column),
                 };
 
                 // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，

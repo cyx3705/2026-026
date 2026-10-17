@@ -54,6 +54,9 @@ public sealed class ActionDeclaration
     /// <summary>一句话说明，作为按钮 ToolTip。</summary>
     public string? Summary { get; init; }
 
+    /// <summary>面板动作成功后清空的控件 id；失败或等待期间输入/目标已变时保留草稿（REQ-UI-154）。</summary>
+    public IReadOnlyList<string> ClearOnSuccess { get; init; } = [];
+
     /// <summary>声明方模块名，由 Aurora 在收下时填入，不由模块自报。</summary>
     [JsonIgnore]
     public string Owner { get; internal set; } = "";
