@@ -15,12 +15,10 @@ namespace HistoryAurora.Verify;
 /// 描述式的（REQ-UI-052），XAML 不存在了，但**它守的三件事一件没变**：
 ///
 /// <list type="number">
-///   <item>三个动作齐全：刷新模块 / 热重载 / 打开发现根；</item>
+///   <item>三个动作齐全：刷新设备以及模块 / 刷新设备 / 打开发现根；</item>
 ///   <item>页面上没有指令清单——那是命令集页的事，两页曾经混在一起过；</item>
-///   <item>选目录走 <c>aurora.ui.selectdirectory</c>，**不得**直接开 WPF 的
-///         <c>OpenFolderDialog</c> / <c>OpenFileDialog</c>。这一条尤其要守：
-///         直接开对话框的版本在宿主进程里能跑，装进模块之后就会因为线程与
-///         所有者窗口不对而挂住整个界面。</item>
+///   <item>装载列走选择弹窗和 <c>vulcan.node.place</c>，**不得**直接开 WPF 的
+///         <c>OpenFolderDialog</c> / <c>OpenFileDialog</c>。</item>
 /// </list>
 /// </summary>
 public sealed class ModulesPageContractTests
@@ -43,7 +41,7 @@ public sealed class ModulesPageContractTests
             .Select(widget => widget.GetProperty("action").GetString())
             .ToList();
 
-        Assert.Equal(["modules.reload", "modules.hotreload", "modules.opendir"], actions);
+        Assert.Equal(["modules.reload", "modules.refreshdevices", "modules.opendir"], actions);
 
         // 表只有一张，列里没有任何指令清单——指令归命令集页。
         var table = children.Single(child => child.GetProperty("type").GetString() == "table");
@@ -53,61 +51,75 @@ public sealed class ModulesPageContractTests
             .ToList();
         Assert.Equal(["module", "version", "load", "description"], columns);
 
-        // 1.30.0（REQ-UI-137）：第三列是载入载出按钮，替换原来的「域指令」条数。
         var load = table.GetProperty("columns").EnumerateArray()
             .Single(column => column.GetProperty("key").GetString() == "load");
-        Assert.Equal("modules.toggle", load.GetProperty("cellAction").GetString());
+        Assert.Equal("modules.place", load.GetProperty("cellAction").GetString());
         Assert.Equal("button", load.GetProperty("cellStyle").GetString());
-        Assert.Contains(HostedPageData.Actions, action => action.Id == "modules.toggle"
-                                                          && action.Command == "aurora.module.toggle"
+        Assert.Contains(HostedPageData.Actions, action => action.Id == "modules.place"
+                                                          && action.Command == "aurora.module.place"
                                                           && action.Args!["name"] == "{module}");
     }
 
     [Fact]
-    public void HotReloadGoesThroughTheShellDirectoryPickerNotAWpfDialog()
+    public void DeviceRefreshUsesTheLocalNodeCommandAndNotAWpfDialog()
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot(), "b-Code-Studio", "Shell", "3-HostedPages", "Views", "HostedPageData.cs"));
 
-        Assert.Contains("aurora.ui.selectdirectory", source, StringComparison.Ordinal);
-        Assert.Contains("vulcan.module.install path=", source, StringComparison.Ordinal);
+        Assert.Contains("vulcan.node.refresh", source, StringComparison.Ordinal);
+        Assert.Contains("aurora.ui.dialog kind=choice", source, StringComparison.Ordinal);
+        Assert.Contains("vulcan.node.place module=", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("aurora.module.hotreload", source, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenFolderDialog", source, StringComparison.Ordinal);
         Assert.DoesNotContain("OpenFileDialog", source, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// REQ-UI-137：装着的模块按钮写「载出」，Aurora 自己那一格是空的（界面不能载出自己）；
-    /// 载出过的模块留在表上写「载入」；它在宿主清单里重新出现时从台账划掉，不会出现两行。
+    /// 装着的模块按归属显示设备名；界面自己那一格是空的；
+    /// 归属里有、本机没装上的模块留在表上，写成不装载或对端。
     /// </summary>
     [Fact]
-    public void ModuleRowsCarryALoadToggleAndKeepUnloadedModules()
+    public void ModuleRowsNameTheDeviceOrStayUnloaded()
     {
-        var aurora = new ModuleMeta("HistoryAurora", "前端", "", "1.30.0", false, "HistoryAurora.dll", 63);
+        var aurora = new ModuleMeta("HistoryAurora", "前端", "", "1.35.1", false, "HistoryAurora.dll", 63);
         var janus = new ModuleMeta("HistoryJanus", "项目治理", "", "5.15.0", false, "HistoryJanus.dll", 54);
-        var juno = new ModuleMeta("HistoryJuno", "面板", "", "0.5.1", false, "HistoryJuno.dll", 10);
-        var ledger = new ModuleUnloadLedger();
-        ledger.Remember(juno);
+        var devices = new NodeDeviceInfo[]
+        {
+            new("local-id", "本机", "8.0.0", true, true),
+            new("peer-id", "对端", "8.0.0", true, false),
+        };
+        var placements = new ModulePlacement[]
+        {
+            new("HistoryJanus", "local-id", false),
+            new("HistoryJuno", null, false),
+        };
 
-        var rows = HostedPageData.ModuleRows([aurora, janus], ledger);
+        var rows = HostedPageData.ModuleRows([aurora, janus], placements, devices);
         Assert.Equal(["HistoryAurora", "HistoryJanus", "HistoryJuno"], rows.Select(row => row["module"]));
-        Assert.Equal(["", "载出", "载入"], rows.Select(row => row["load"]));
-        Assert.StartsWith("（已载出）", rows[2]["description"], StringComparison.Ordinal);
+        Assert.Equal(["", "本机", "不装载"], rows.Select(row => row["load"]));
+        Assert.StartsWith("（未在本机运行）", rows[2]["description"], StringComparison.Ordinal);
 
-        rows = HostedPageData.ModuleRows([aurora, janus, juno], ledger);
+        placements =
+        [
+            new ModulePlacement("HistoryJanus", "local-id", false),
+            new ModulePlacement("HistoryJuno", "peer-id", false),
+        ];
+        var juno = new ModuleMeta("HistoryJuno", "面板", "", "0.5.1", false, "HistoryJuno.dll", 10);
+        rows = HostedPageData.ModuleRows([aurora, janus, juno], placements, devices);
         Assert.Equal(3, rows.Count);
-        Assert.Equal("载出", rows.Single(row => row["module"] == "HistoryJuno")["load"]);
-        Assert.False(ledger.Contains("HistoryJuno"));
+        Assert.Equal("对端", rows.Single(row => row["module"] == "HistoryJuno")["load"]);
     }
 
     [Fact]
-    public void TheToggleUnloadsWithHostCommandsAndRefusesToUnloadAurora()
+    public void PlaceChoosesADeviceAndRefusesToMoveAurora()
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot(), "b-Code-Studio", "Shell", "3-HostedPages", "Views", "HostedPageData.cs"));
 
-        Assert.Contains("vulcan.module.unload name=", source, StringComparison.Ordinal);
-        Assert.Contains("vulcan.module.reload", source, StringComparison.Ordinal);
+        Assert.Contains("vulcan.node.devices", source, StringComparison.Ordinal);
+        Assert.Contains("value = \"none\"", source, StringComparison.Ordinal);
         Assert.Contains("name.Equals(SelfModule", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("vulcan.module.reload", source, StringComparison.Ordinal);
     }
 
     [Fact]

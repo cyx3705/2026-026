@@ -30,7 +30,7 @@ internal static class HostedPageData
 
         public Func<LocalCommandCatalogSession?>? Catalog { get; init; }
 
-        /// <summary>本次会话里从模块页载出的模块（REQ-UI-137）。宿主的模块清单只列装着的，载出的靠它留在表上。</summary>
+        /// <summary>旧的会话载出台账。装载列改读宿主归属后不再写入；字段留着，避免装配根还按这个形状构造。</summary>
         public ModuleUnloadLedger Unloaded { get; init; } = new();
     }
 
@@ -150,41 +150,36 @@ internal static class HostedPageData
             },
         });
 
-        // 「刷新模块」与「热重载」都是**两步**：先动模块，再让表格重取。
-        //
-        // 组合下沉成命令，而不是让页面描述学会「先做这个再做那个」。描述一旦有了顺序，
-        // 它就从「这一页长什么样」变成了一门脚本语言，而这套协议的全部价值恰恰在于
-        // 它**不是**脚本语言——模块交数据，界面画界面（DEC-005）。
+        // 页面上的按钮是组合：先问宿主，再让表格重取。
+        // 组合放在命令里，不放进页面描述。描述一旦有了顺序，就从「这一页长什么样」
+        // 变成了一门脚本语言（DEC-005）。
         Add(registry, new CommandDescriptor
         {
             Name = "aurora.module.reloadall",
             HiddenReason = "界面自持页面的组合指令",
             Domain = "aurora",
             CommandClass = "module",
-            Summary = "重载模块并刷新模块管理页",
+            Summary = "重新读取设备与模块清单并刷新模块管理页",
+            Example = "aurora.module.reloadall",
             RequiresUiThread = true,
             Handler = async context =>
             {
                 if (sources.Bus?.Invoke() is not { } bus)
                     return CommandResult.Fail("命令总线尚未就绪");
 
-                var reloaded = await bus.ExecuteAsync("vulcan.module.reload", "UI").ConfigureAwait(true);
-                if (!reloaded.Success)
-                    return CommandResult.Fail("模块重载失败: " + FirstLine(reloaded.Message));
-
                 await RefreshModulesAsync(bus).ConfigureAwait(true);
-                return CommandResult.Ok(FirstLine(reloaded.Message));
+                return CommandResult.Ok("已刷新设备与模块");
             },
         });
 
         Add(registry, new CommandDescriptor
         {
-            Name = "aurora.module.toggle",
+            Name = "aurora.module.place",
             HiddenReason = "界面自持页面的组合指令",
             Domain = "aurora",
             CommandClass = "module",
-            Summary = "模块页的载入载出按钮：装着的载出（卸下指令与界面，不改磁盘），载出的载入（重载装回），然后刷新模块页",
-            Example = "aurora.module.toggle name=HistoryJuno",
+            Summary = "选择把模块装到哪一台设备，或改为不装载",
+            Example = "aurora.module.place name=HistoryJuno",
             RequiresUiThread = true,
             Parameters =
             [
@@ -197,89 +192,77 @@ internal static class HostedPageData
                 var name = (context.GetString("name") ?? "").Trim();
                 if (name.Length == 0)
                     return CommandResult.Fail("缺少 name");
-                return await ToggleModuleAsync(bus, sources.Unloaded, name).ConfigureAwait(true);
+                return await PlaceModuleAsync(bus, name).ConfigureAwait(true);
             },
         });
 
         Add(registry, new CommandDescriptor
         {
-            Name = "aurora.module.hotreload",
+            Name = "aurora.module.refreshdevices",
             HiddenReason = "界面自持页面的组合指令",
             Domain = "aurora",
             CommandClass = "module",
-            Summary = "选一个目录安装为模块，然后刷新模块管理页",
+            Summary = "按本机最新的模块包对齐设备。命令在执行它的那台机器上生效",
+            Example = "aurora.module.refreshdevices",
             RequiresUiThread = true,
             Handler = async context =>
             {
                 if (sources.Bus?.Invoke() is not { } bus)
                     return CommandResult.Fail("命令总线尚未就绪");
 
-                var picked = await bus.ExecuteAsync("aurora.ui.selectdirectory", "UI").ConfigureAwait(true);
-                if (!picked.Success)
-                    return CommandResult.Fail(FirstLine(picked.Message));
-                if (!CommandResultData.TryRead<string>(picked.Data, out var path)
-                    || string.IsNullOrWhiteSpace(path))
-                    return CommandResult.Ok("已取消热重载");
-
-                var installed = await bus
-                    .ExecuteAsync($"vulcan.module.install path={CommandParser.QuoteArg(path)}", "UI")
-                    .ConfigureAwait(true);
-                if (!installed.Success)
-                {
-                    // 这条提示是 1.7 真机上攒出来的：装不上时人第一反应是「再选一次」，
-                    // 而正确的下一步是换一个候选目录，且**不会自动恢复**。
-                    return CommandResult.Fail(
-                        "热重载失败: " + FirstLine(installed.Message)
-                        + "。请再选主树候选或 z-Publish/history/HistoryX-vX.Y.Z，不会自动恢复。");
-                }
+                var refreshed = await bus.ExecuteAsync("vulcan.node.refresh", "UI").ConfigureAwait(true);
+                if (!refreshed.Success)
+                    return CommandResult.Fail("刷新设备失败: " + FirstLine(refreshed.Message));
 
                 await RefreshModulesAsync(bus).ConfigureAwait(true);
-                return CommandResult.Ok(FirstLine(installed.Message));
+                return CommandResult.Ok(FirstLine(refreshed.Message));
             },
         });
     }
 
     /// <summary>
-    /// 模块页「装载」一列的按钮（REQ-UI-137）：装着的写「载出」，点了 <c>vulcan.module.unload</c>
-    /// 卸下它的指令与界面（不动磁盘）；载出的写「载入」，点了 <c>vulcan.module.reload</c> 把它装回。
-    /// 宿主没有「只装回一个」的指令，重载是全量的——与「刷新模块」同一条路，装着的模块不受影响。
-    /// Aurora 自己那一行是空的：界面载出自己就没有界面来把它载回了。
+    /// 装载列：弹出本机、对端和「不装载」，再调用 <c>vulcan.node.place</c>。
+    /// 界面自己那一格是空的，不参与归属。另一台电脑打开这一页时，跑的仍是那台机器上的本机指令。
     /// </summary>
-    internal static async Task<CommandResult> ToggleModuleAsync(ShellBus bus, ModuleUnloadLedger unloaded, string name)
+    internal static async Task<CommandResult> PlaceModuleAsync(ShellBus bus, string name)
     {
         if (name.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
-            return CommandResult.Fail("HistoryAurora 是界面本身，不能从界面里载出");
+            return CommandResult.Fail("HistoryAurora 是界面本身，不在装载区改归属");
 
-        if (unloaded.Contains(name))
-        {
-            var reloaded = await bus.ExecuteAsync("vulcan.module.reload", "UI").ConfigureAwait(true);
-            if (!reloaded.Success)
-                return CommandResult.Fail("载入失败: " + FirstLine(reloaded.Message));
+        var listed = await bus.ExecuteAsync("vulcan.node.devices", "UI").ConfigureAwait(true);
+        if (!listed.Success)
+            return CommandResult.Fail("读取设备失败: " + FirstLine(listed.Message));
+        if (!CommandResultData.TryRead<NodeDeviceCatalog>(listed.Data, out var catalog)
+            || catalog.Devices.Count == 0)
+            return CommandResult.Fail("没有可选的设备");
 
-            var after = await ModuleCatalogReader.LoadModulesAsync(bus).ConfigureAwait(true);
-            if (after.Snapshot?.Modules.Any(module => module.ModuleName.Equals(name, StringComparison.OrdinalIgnoreCase)) == true)
-                unloaded.Forget(name);
-            await RefreshModulesAsync(bus).ConfigureAwait(true);
-            return unloaded.Contains(name)
-                ? CommandResult.Fail($"重载完成，但 {name} 没有装回来（宿主日志里有原因）")
-                : CommandResult.Ok($"已载入 {name}");
-        }
+        var choices = catalog.Devices
+            .Select(device => new { label = device.Label, value = device.Id })
+            .Append(new { label = "不装载", value = "none" })
+            .ToArray();
+        var picked = await bus.ExecuteAsync(
+            "aurora.ui.dialog kind=choice title=装载到 body="
+            + CommandParser.QuoteArg("选择 " + name + " 装到哪一台设备")
+            + " options=" + CommandParser.QuoteArg(JsonSerializer.Serialize(choices, Compact)),
+            "UI").ConfigureAwait(true);
+        if (!picked.Success)
+            return picked.Message.Contains("已取消", StringComparison.Ordinal)
+                ? CommandResult.Ok("已取消")
+                : CommandResult.Fail(FirstLine(picked.Message));
 
-        var before = await ModuleCatalogReader.LoadModulesAsync(bus).ConfigureAwait(true);
-        var meta = before.Snapshot?.Modules.FirstOrDefault(
-            module => module.ModuleName.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (meta == null)
-            return CommandResult.Fail($"模块 {name} 不在已装载清单里");
+        var target = picked.Data as string ?? picked.Message;
+        if (string.IsNullOrWhiteSpace(target))
+            return CommandResult.Fail("没有选中设备");
 
-        var result = await bus
-            .ExecuteAsync("vulcan.module.unload name=" + CommandParser.QuoteArg(meta.ModuleName), "UI")
-            .ConfigureAwait(true);
-        if (!result.Success)
-            return CommandResult.Fail("载出失败: " + FirstLine(result.Message));
+        var placed = await bus.ExecuteAsync(
+            "vulcan.node.place module=" + CommandParser.QuoteArg(name)
+            + " target=" + CommandParser.QuoteArg(target.Trim()),
+            "UI").ConfigureAwait(true);
+        if (!placed.Success)
+            return CommandResult.Fail(FirstLine(placed.Message));
 
-        unloaded.Remember(meta);
         await RefreshModulesAsync(bus).ConfigureAwait(true);
-        return CommandResult.Ok($"已载出 {meta.ModuleName}（不改磁盘，点「载入」或「刷新模块」装回）");
+        return CommandResult.Ok(FirstLine(placed.Message));
     }
 
     private const string SelfModule = "HistoryAurora";
@@ -294,24 +277,24 @@ internal static class HostedPageData
         new ActionDeclaration
         {
             Id = "modules.reload",
-            Title = "刷新模块",
+            Title = "刷新设备以及模块",
             Command = "aurora.module.reloadall",
-            Summary = "重新扫描运行区并刷新清单",
+            Summary = "重新读取设备与模块清单，不重载正在运行的模块",
         },
         new ActionDeclaration
         {
-            Id = "modules.toggle",
-            Title = "载入/载出",
-            Command = "aurora.module.toggle",
+            Id = "modules.place",
+            Title = "装载到",
+            Command = "aurora.module.place",
             Args = new Dictionary<string, string> { ["name"] = "{module}" },
-            Summary = "载出：卸下这个模块的指令与界面（不改磁盘）；载入：重载模块把它装回",
+            Summary = "选择装到本机、对端，或不装载",
         },
         new ActionDeclaration
         {
-            Id = "modules.hotreload",
-            Title = "热重载",
-            Command = "aurora.module.hotreload",
-            Summary = "选一个目录安装为模块",
+            Id = "modules.refreshdevices",
+            Title = "刷新设备",
+            Command = "aurora.module.refreshdevices",
+            Summary = "按本机最新模块包对齐已连接的设备",
         },
         new ActionDeclaration
         {
@@ -666,34 +649,68 @@ internal static class HostedPageData
         if (!result.Success || result.Snapshot is not { } snapshot)
             return CommandResult.Fail(result.Message);
 
-        return Rows(ModuleRows(snapshot.Modules, sources.Unloaded));
+        var devices = await bus.ExecuteAsync("vulcan.node.devices", "UI").ConfigureAwait(true);
+        var catalog = devices.Success && CommandResultData.TryRead<NodeDeviceCatalog>(devices.Data, out var parsed)
+            ? parsed
+            : new NodeDeviceCatalog([], []);
+        return Rows(ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices));
     }
 
     /// <summary>
-    /// 模块页的行（REQ-UI-137）：装着的模块按钮写「载出」，本次会话载出的模块留在表上、按钮写「载入」。
-    /// 1.30.0 前第四列是「域指令」条数；条数在命令集页按域筛选就看得到，这一格换成载入载出按钮。
-    /// 宿主清单里又出现了的（别处重载装回了），从载出台账里划掉。
+    /// 模块页的行。装载列写当前设备：本机、对端或不装载。界面自己那一格留空。
+    /// 没装在本机、但归属里还有的模块留在表上，方便改回本机或继续不装载。
     /// </summary>
     internal static List<Dictionary<string, string>> ModuleRows(
         IReadOnlyList<ModuleMeta> loaded,
-        ModuleUnloadLedger unloaded)
+        IReadOnlyList<ModulePlacement> placements,
+        IReadOnlyList<NodeDeviceInfo> devices)
     {
-        foreach (var module in loaded)
-            unloaded.Forget(module.ModuleName);
+        var placementByModule = placements
+            .GroupBy(item => item.Module, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var labelById = devices.ToDictionary(device => device.Id, device => device.Label, StringComparer.OrdinalIgnoreCase);
 
-        return loaded
-            .Select(module => (Module: module, Load: module.ModuleName.Equals(SelfModule, StringComparison.OrdinalIgnoreCase) ? "" : "载出"))
-            .Concat(unloaded.All.Select(module => (Module: module, Load: "载入")))
-            .OrderBy(row => row.Module.ModuleName, StringComparer.OrdinalIgnoreCase)
+        var rows = loaded
+            .Select(module => new ModuleRow(module.ModuleName, module.Version, module.Description, LoadLabel(module.ModuleName, true)))
+            .ToList();
+        var known = new HashSet<string>(rows.Select(row => row.Module), StringComparer.OrdinalIgnoreCase);
+        foreach (var placement in placements)
+        {
+            if (!known.Add(placement.Module) || placement.Module.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
+                continue;
+            rows.Add(new ModuleRow(placement.Module, "", "（未在本机运行）", LoadLabel(placement.Module, false)));
+        }
+
+        return rows
+            .OrderBy(row => row.Module, StringComparer.OrdinalIgnoreCase)
             .Select(row => new Dictionary<string, string>
             {
-                ["module"] = row.Module.ModuleName,
-                ["version"] = row.Module.Version,
+                ["module"] = row.Module,
+                ["version"] = row.Version,
                 ["load"] = row.Load,
-                ["description"] = row.Load == "载入" ? "（已载出）" + row.Module.Description : row.Module.Description,
+                ["description"] = row.Description,
             })
             .ToList();
+
+        string LoadLabel(string moduleName, bool loadedHere)
+        {
+            if (moduleName.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
+                return "";
+            if (!placementByModule.TryGetValue(moduleName, out var placement))
+                return loadedHere ? "本机" : "不装载";
+            if (placement.Conflict)
+                return "冲突";
+            if (string.IsNullOrEmpty(placement.OwnerNodeId))
+                return "不装载";
+            if (labelById.TryGetValue(placement.OwnerNodeId, out var label))
+                return label;
+            return string.Equals(placement.OwnerNodeId, "local", StringComparison.OrdinalIgnoreCase) || loadedHere
+                ? "本机"
+                : "对端";
+        }
     }
+
+    private readonly record struct ModuleRow(string Module, string Version, string Description, string Load);
 
     private static Dictionary<string, string> Pair(string key, string value)
         => new() { ["key"] = key, ["value"] = value };

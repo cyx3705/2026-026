@@ -53,6 +53,17 @@ public sealed record CommandCatalogDetail(
         = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
 
+/// <summary><c>vulcan.node.devices</c> 的一台设备。Id 是节点 GUID，未配对时本机为 local。</summary>
+public sealed record NodeDeviceInfo(string Id, string Label, string HostVersion, bool Connected, bool Self);
+
+/// <summary>模块当前装在哪一台。OwnerNodeId 为空表示不装载。</summary>
+public sealed record ModulePlacement(string Module, string? OwnerNodeId, bool Conflict);
+
+/// <summary><c>vulcan.node.devices</c> 的数据。</summary>
+public sealed record NodeDeviceCatalog(
+    IReadOnlyList<NodeDeviceInfo> Devices,
+    IReadOnlyList<ModulePlacement> Placements);
+
 /// <summary><c>vulcan.module.list</c> 的一项。</summary>
 public sealed record ModuleMeta(
     string ModuleName,
