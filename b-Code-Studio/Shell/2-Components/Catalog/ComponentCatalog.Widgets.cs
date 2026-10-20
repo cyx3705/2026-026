@@ -121,5 +121,43 @@ public static partial class ComponentCatalog
             Example = """{ "kind": "sourcePicker", "id": "source", "label": "来源", "selectCommand": "aurora.ui.selectdirectory", "commitAction": "mymodule.source.set" }""",
             Rules = ["kind 也接受 source-picker / source"],
         },
+        new()
+        {
+            Name = "panel.choices",
+            Layer = ComponentLayer.Widget,
+            Model = typeof(PanelWidget),
+            Summary = "选项条：候选一字排开、点一下选中（墨色块），右键某一项弹出声明的菜单；放不下就折行",
+            Fields =
+            [
+                WidgetKind,
+                new("id", "string", "控件 id，面板内唯一；动作参数里的 {id} 取当前选中的值") { Required = true },
+                new("label", "string", "左侧标签；写空串就不放这一格；不写退回 id"),
+                new("options", "string[]", "静态候选；与 optionsSource 二选一"),
+                new("optionsSource", "object", "动态候选：一条只读指令返回行集，value 列是值，可选 text 列是显示文字；与 options 二选一"),
+                new("optionsSource.command", "string", "只读指令名") { Required = true },
+                new("optionsSource.args", "map<string,string>", "固定参数；值里可写 {selection.<通道>.<列>}，通道一变就重取候选"),
+                new("value", "string", "初值；不在候选内则选第一项"),
+                new("channel", "string", "把选中的值发布到这个选择通道，列名固定 value；取数参数可以引用它"),
+                new("commitAction", "string", "人点选一项时执行的动作 id，动作里用 {value} 取值"),
+                new("menu", "object[]", "右键菜单项，自上而下"),
+                new("menu.action", "string", "动作 id；参数里的 {value} 取被右键的那一项，不一定是选中的那一项") { Required = true },
+                new("menu.title", "string", "菜单项文字；不写用动作声明的标题"),
+                new("menu.style", "string", "语义档位") { Values = ["danger"] },
+                WidgetMinWidth,
+                WidgetFlex,
+            ],
+            Example = """
+                { "kind": "choices", "id": "branch", "label": "分支", "flex": true,
+                  "channel": "mymodule.branch", "options": [ "main", "feature-x" ],
+                  "menu": [ { "action": "mymodule.branch.delete", "title": "删除", "style": "danger" } ] }
+                """,
+            Rules =
+            [
+                "与 select 选项框取数同形：重取候选尽量留住选中项，还在就留着，否则退到 value，再否则第一项；程序回写不触发 commitAction",
+                "面板上任何动作成功后会重取全部候选：菜单里删掉、新增一项后不必另外刷新",
+                "右键落在选项条上只开它自己的菜单，不再唤起页面的 context 弹出层",
+                "选项条不是表格：候选多到要滚动、要排序筛选时用 table",
+            ],
+        },
     ];
 }

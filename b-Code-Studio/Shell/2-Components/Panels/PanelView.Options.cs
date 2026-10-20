@@ -36,18 +36,28 @@ public sealed partial class PanelView
     [GeneratedRegex(@"\{(selection\.[^{}\s]+)\}", RegexOptions.IgnoreCase)]
     private static partial Regex SelectionPlaceholder();
 
-    /// <summary>一个候选项来自取数的选择框。</summary>
+    /// <summary>
+    /// 一个候选项来自取数的控件：选择框或选项条（REQ-UI-158）。
+    /// 两者只在「怎么读写选中项、显示文字放哪」上不同，由两个委托抹平。
+    /// </summary>
     private sealed class OptionFeed(
         string controlId,
-        AuroraOptionBox box,
+        Func<string?> getSelected,
+        Action<string?> setSelected,
         ObservableCollection<string> options,
         PanelOptionsSource source,
         IReadOnlyList<string> channels,
-        string? declaredValue)
+        string? declaredValue,
+        Action<IReadOnlyDictionary<string, string>>? setTexts = null)
     {
         public string ControlId { get; } = controlId;
 
-        public AuroraOptionBox Box { get; } = box;
+        public Func<string?> GetSelected { get; } = getSelected;
+
+        public Action<string?> SetSelected { get; } = setSelected;
+
+        /// <summary>行集里 text 列的去处；选择框不显示它，为 null。</summary>
+        public Action<IReadOnlyDictionary<string, string>>? SetTexts { get; } = setTexts;
 
         /// <summary>
         /// 候选集合本身。**是同一个实例，不换新的**：
@@ -99,11 +109,15 @@ public sealed partial class PanelView
             return;
         }
 
-        var values = await LoadAsync(text).ConfigureAwait(true);
-        if (values == null)
+        var rows = await LoadAsync(text).ConfigureAwait(true);
+        if (rows == null)
             return;
 
-        Apply(feed, values);
+        feed.SetTexts?.Invoke(rows
+            .Where(row => row.Text.Length > 0)
+            .GroupBy(row => row.Value, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Text, StringComparer.Ordinal));
+        Apply(feed, rows.Select(row => row.Value).ToList());
     }
 
     /// <summary>
@@ -134,7 +148,10 @@ public sealed partial class PanelView
         return unresolved ? null : text;
     }
 
-    private async Task<List<string>?> LoadAsync(string text)
+    /// <summary>候选行集里显示文字那一列（选项条用；选择框忽略）。</summary>
+    private const string OptionTextColumn = "text";
+
+    private async Task<List<(string Value, string Text)>?> LoadAsync(string text)
     {
         CommandResult result;
         try
@@ -176,9 +193,11 @@ public sealed partial class PanelView
             return null;
 
         return rows
-            .Select(row => row.TryGetValue(OptionColumn, out var value) ? value ?? "" : "")
-            .Where(value => value.Length > 0)
-            .Distinct(StringComparer.Ordinal)
+            .Select(row => (
+                Value: row.TryGetValue(OptionColumn, out var value) ? value ?? "" : "",
+                Text: row.TryGetValue(OptionTextColumn, out var shown) ? shown ?? "" : ""))
+            .Where(row => row.Value.Length > 0)
+            .DistinctBy(row => row.Value, StringComparer.Ordinal)
             .ToList();
     }
 
@@ -196,7 +215,7 @@ public sealed partial class PanelView
     /// </summary>
     private void Apply(OptionFeed feed, List<string> values)
     {
-        var previous = feed.Box.SelectedItem as string;
+        var previous = feed.GetSelected();
 
         // 换候选是程序行为，不是用户选了什么。不压住提交动作的话，重取一次候选就等于
         // 替用户点了一下——模块那边会当成一次真实选择去改数据。
@@ -208,15 +227,15 @@ public sealed partial class PanelView
 
             if (values.Count == 0)
             {
-                feed.Box.SelectedItem = null;
+                feed.SetSelected(null);
             }
             else
             {
-                feed.Box.SelectedItem =
+                feed.SetSelected(
                     values.FirstOrDefault(value => value.Equals(previous, StringComparison.Ordinal))
                     ?? values.FirstOrDefault(value =>
                         value.Equals(feed.DeclaredValue, StringComparison.Ordinal))
-                    ?? values[0];
+                    ?? values[0]);
             }
         });
 

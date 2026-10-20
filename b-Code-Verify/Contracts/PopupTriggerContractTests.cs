@@ -71,6 +71,10 @@ public sealed class PopupTriggerContractTests
             }
             finally
             {
+                // 先收起浮层再关窗：浮层开着时，RunSta 收尾关闭界面线程要销毁它的弹出窗口，
+                // 整套跑时会卡在那一步直到判挂死（单跑不复现）。实测本体全部跑完、挂在收尾。
+                flyout.Close();
+                UiTestHost.Pump();
                 window.Close();
             }
         });

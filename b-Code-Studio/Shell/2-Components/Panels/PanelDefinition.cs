@@ -99,6 +99,28 @@ public enum PanelWidgetKind
 
     /// <summary>可编辑、可双击打开文件或目录选择器的来源输入框。</summary>
     SourcePicker,
+
+    /// <summary>
+    /// 选项条（REQ-UI-158）：候选一字排开、点一下选中，右键弹出声明的菜单。
+    /// 与 select 选择框取数同形，区别在于候选全部摆在面上，而右键留给对某一项的操作。
+    /// </summary>
+    Choices,
+}
+
+/// <summary>
+/// 选项条右键菜单的一项（REQ-UI-158）。动作参数里的 <c>{value}</c> 取被右键的那一项，
+/// 其余占位符照面板按钮的规矩取（控件 id、选择通道）。
+/// </summary>
+public sealed class PanelMenuItem
+{
+    /// <summary>动作 id。</summary>
+    public string Action { get; set; } = "";
+
+    /// <summary>菜单项文字；不写用动作声明的标题。</summary>
+    public string? Title { get; set; }
+
+    /// <summary>语义档位：只有 danger。</summary>
+    public string? Style { get; set; }
 }
 
 /// <summary>文本框的两种形态。</summary>
@@ -224,6 +246,9 @@ public sealed class PanelWidget
     /// </summary>
     public PanelEnabledWhen? EnabledWhen { get; set; }
 
+    /// <summary>choices 专用：右键某一项时弹出的菜单（REQ-UI-158）。</summary>
+    public List<PanelMenuItem>? Menu { get; set; }
+
     /// <summary>解析后的种类；无法识别时为 null。</summary>
     public PanelWidgetKind? ResolvedKind => (Kind ?? "").ToLowerInvariant() switch
     {
@@ -232,6 +257,7 @@ public sealed class PanelWidget
         "button" => PanelWidgetKind.Button,
         "switch" => PanelWidgetKind.Switch,
         "sourcepicker" or "source-picker" or "source" => PanelWidgetKind.SourcePicker,
+        "choices" => PanelWidgetKind.Choices,
         _ => null,
     };
 
@@ -304,7 +330,11 @@ public static class PanelDefinitionValidator
     {
         if (widget.ResolvedKind is not { } kind)
             return PanelDefinitionParse.Fail(
-                $"面板 {definition.Id} 含无法识别的小组件 {widget.Kind}；只支持 text / textbox / button / switch / sourcePicker");
+                $"面板 {definition.Id} 含无法识别的小组件 {widget.Kind}；只支持 text / textbox / button / switch / sourcePicker / choices");
+
+        if (widget.Menu != null && kind != PanelWidgetKind.Choices)
+            return PanelDefinitionParse.Fail(
+                $"面板 {definition.Id} 的 {widget.Kind} 不支持 menu；右键菜单只属于选项条");
 
         // 最窄宽度是像素，负数与 0 都排不出东西来；这类值写错的症状是「那一格没了」。
         if (widget.MinWidth is { } min && (double.IsNaN(min) || min <= 0))
@@ -381,6 +411,36 @@ public static class PanelDefinitionValidator
                     || widget.Channel != null || widget.Action != null || widget.EnabledWhen != null)
                     return PanelDefinitionParse.Fail($"面板 {definition.Id} 的来源选择器 {widget.Id} 只支持 value / selectCommand / commitAction");
                 break;
+
+            case PanelWidgetKind.Choices:
+            {
+                if (string.IsNullOrWhiteSpace(widget.Id))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的选项条缺少 id");
+                if (!ids.Add(widget.Id!))
+                    return PanelDefinitionParse.Fail($"面板 {definition.Id} 的控件 id 重复: {widget.Id}");
+                var hasStatic = widget.Options is { Count: > 0 };
+                var hasSource = !string.IsNullOrWhiteSpace(widget.OptionsSource?.Command);
+                if (hasStatic == hasSource)
+                    return PanelDefinitionParse.Fail(
+                        $"面板 {definition.Id} 的选项条 {widget.Id} 必须且只能写 options 或 optionsSource 之一");
+                if (widget.Follows != null || widget.EnabledWhen != null || widget.SelectCommand != null
+                    || widget.Action != null || widget.Mode != null || widget.Multiline)
+                    return PanelDefinitionParse.Fail(
+                        $"面板 {definition.Id} 的选项条 {widget.Id} 只支持 label / options / optionsSource / value / channel / commitAction / menu");
+                if (widget.Channel is { } choiceChannel
+                    && (string.IsNullOrWhiteSpace(choiceChannel) || choiceChannel.Contains(' ')))
+                    return PanelDefinitionParse.Fail(
+                        $"面板 {definition.Id} 的选项条 {widget.Id} 的 channel 不能为空或含空格: {choiceChannel}");
+                foreach (var item in widget.Menu ?? [])
+                {
+                    if (item == null || string.IsNullOrWhiteSpace(item.Action))
+                        return PanelDefinitionParse.Fail($"面板 {definition.Id} 的选项条 {widget.Id} 有菜单项缺少 action");
+                    if (item.Style != null && !item.Style.Equals("danger", StringComparison.OrdinalIgnoreCase))
+                        return PanelDefinitionParse.Fail(
+                            $"面板 {definition.Id} 的选项条 {widget.Id} 的菜单项 style 只支持 danger: {item.Style}");
+                }
+                break;
+            }
 
             case PanelWidgetKind.Button:
                 if (string.IsNullOrWhiteSpace(widget.Action))

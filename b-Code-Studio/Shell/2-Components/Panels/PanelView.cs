@@ -279,6 +279,16 @@ public sealed partial class PanelView : UserControl
                 cells.Add(new BoardCell(BuildSourcePicker(widget), widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth, widget.Flex));
                 return;
 
+            case PanelWidgetKind.Choices:
+                if (Label(widget) is { Length: > 0 } choicesLabel)
+                    cells.Add(new BoardCell(BuildLabel(choicesLabel), null, false));
+                // 一排候选的宽度由项数决定，量不出最窄宽度；不写时同输入框，余量多半也该给它。
+                cells.Add(new BoardCell(
+                    BuildChoices(widget),
+                    widget.MinWidth ?? AuroraPanelBoard.DefaultInputMinWidth,
+                    widget.Flex));
+                return;
+
             default:
                 // 校验器本该已经拦下；真漏到这里也要看得见，不静默跳过一格。
                 cells.Add(new BoardCell(Warning("无法识别的小组件: " + widget.Kind), null, false));
@@ -349,7 +359,11 @@ public sealed partial class PanelView : UserControl
             }
 
             if (widget.OptionsSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
-                _feeds.Add(new OptionFeed(id, combo, options, source, ChannelsOf(source), widget.Value));
+                _feeds.Add(new OptionFeed(
+                    id,
+                    () => combo.SelectedItem as string,
+                    value => combo.SelectedItem = value,
+                    options, source, ChannelsOf(source), widget.Value));
 
             return combo;
         }
@@ -452,6 +466,78 @@ public sealed partial class PanelView : UserControl
         };
         return picker;
     }
+
+    /// <summary>
+    /// 选项条（REQ-UI-158）。取值、发布通道、提交动作与选择框同一套；多出来的是右键菜单：
+    /// 菜单项是声明的动作，<c>{value}</c> 取被右键的那一项（不一定是选中的那一项）。
+    /// </summary>
+    private FrameworkElement BuildChoices(PanelWidget widget)
+    {
+        var id = widget.Id!;
+        var publish = widget.Channel is { Length: > 0 } declared ? declared : null;
+        if (publish != null)
+            _publishers.Add((publish, id));
+
+        var options = new ObservableCollection<string>(widget.Options ?? []);
+        var strip = new AuroraChoiceStrip(options);
+        strip.SelectedValue = widget.Value;
+        _getters[id] = () => strip.SelectedValue ?? "";
+        _setters[id] = value => strip.SelectedValue = value;
+        strip.SelectionChanged += (_, _) =>
+        {
+            if (publish != null)
+                PublishIfDeclared(publish, id);
+            if (_writingBack || string.IsNullOrWhiteSpace(widget.CommitAction)
+                || strip.SelectedValue is not { Length: > 0 } selected)
+                return;
+            Fire(widget.CommitAction!, new Dictionary<string, string> { ["value"] = selected });
+        };
+
+        if (widget.Menu is { Count: > 0 } menu)
+            strip.ContextRequested = (value, target) => OpenChoiceMenu(menu, value, target);
+
+        if (widget.OptionsSource is { } source && !string.IsNullOrWhiteSpace(source.Command))
+            _feeds.Add(new OptionFeed(
+                id,
+                () => strip.SelectedValue,
+                value => strip.SelectedValue = value,
+                options, source, ChannelsOf(source), widget.Value,
+                strip.SetTexts));
+
+        return strip;
+    }
+
+    /// <summary>
+    /// 选项条的右键菜单。每次现建：动作声明可能随模块热重载变了，标题与危险档都按点开时的声明取。
+    /// 解析不到的动作照样列出、置灰并写明原因——菜单里少一项和「点了没反应」一样难查。
+    /// </summary>
+    private void OpenChoiceMenu(IReadOnlyList<PanelMenuItem> items, string value, FrameworkElement target)
+    {
+        var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, StaysOpen = false };
+        foreach (var item in items)
+        {
+            var binding = _actions.Resolve(item.Action);
+            var entry = new MenuItem
+            {
+                Header = item.Title ?? (binding.Ok && binding.Action!.Title.Length > 0 ? binding.Action.Title : item.Action),
+                IsEnabled = binding.Ok,
+                ToolTip = binding.Ok ? binding.Action!.Summary : binding.Error,
+            };
+            ToolTipService.SetShowOnDisabled(entry, true);
+            if (string.Equals(item.Style, "danger", StringComparison.OrdinalIgnoreCase)
+                || (binding.Ok && binding.Action!.Danger))
+                entry.SetResourceReference(ForegroundProperty, "Aurora.Brush.Danger");
+            var actionId = item.Action;
+            entry.Click += (_, _) => Fire(actionId, new Dictionary<string, string> { ["value"] = value });
+            menu.Items.Add(entry);
+        }
+
+        ChoiceMenu = menu;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>门禁用：最近一次打开的选项条右键菜单。</summary>
+    internal ContextMenu? ChoiceMenu { get; private set; }
 
     private static bool ParseBoolean(string? value)
         => value is not null && (value.Equals("true", StringComparison.OrdinalIgnoreCase)
@@ -684,6 +770,11 @@ public sealed partial class PanelView : UserControl
     {
         var result = await Task.Run(() => _bus.ExecuteAsync(text, "UI")).ConfigureAwait(true);
         if (result.Success) onSuccess?.Invoke();
+        // 成功的动作可能改了候选本身（REQ-UI-158：选项条右键删掉一项、分出一项）。
+        // 候选不是表格，页面刷新够不着它们，所以这里自己重取一遍；选中项照常尽量留住。
+        if (result.Success)
+            foreach (var feed in _feeds)
+                QueueReload(feed);
         if (!result.Success || _refresher == null || string.IsNullOrWhiteSpace(_pageId))
             return result.Success;
         // 选完文件后同一帧刷新表格会叠在对话框关闭的布局上，列宽空转把主进程打满。
