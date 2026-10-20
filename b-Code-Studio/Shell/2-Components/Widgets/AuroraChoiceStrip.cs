@@ -80,9 +80,12 @@ internal sealed class AuroraChoiceStrip : WrapPanel
         Children.Clear();
         foreach (var value in _values)
         {
+            var shown = _texts.TryGetValue(value, out var text) && text.Length > 0 ? text : value;
             var chip = new ToggleButton
             {
-                Content = _texts.TryGetValue(value, out var text) && text.Length > 0 ? text : value,
+                Content = shown,
+                // 显示文字是候选值的缩写（如截短的分支名）时，悬停看全名（1.38.1）。
+                ToolTip = shown == value ? null : value,
                 Tag = value,
                 Margin = new Thickness(0, 1, 4, 1),
                 MinWidth = 48,

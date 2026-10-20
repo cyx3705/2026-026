@@ -11,8 +11,10 @@ namespace HistoryAurora.Shell.Base;
 /// 让人在操作别的程序（SolidWorks）时也够得着它。由 <c>aurora.ui.float</c> 浮出 / 还原。
 ///
 /// 长相与嵌入弹窗同一张卡片（<c>Aurora.Dialog.Card</c>：Surface 底、页面圆角），但**不带阴影**（1.30.3）——
-/// 分层窗口里的投影糊在别的程序上只显得脏；卡片的细线边框足够把它和背后分开。没有标题栏与关闭键；
+/// 分层窗口里的投影糊在别的程序上只显得脏；卡片的细线边框足够把它和背后分开。没有标题栏；
 /// 按住卡片空白处拖动整窗（控件自己吃掉的按下不算空白），四边可拉伸。
+/// 1.38.1（REQ-UI-159）起卡片顶上有一条细窄的关闭行，右端一个叉：点了等于关窗，
+/// 停靠层收到 Closed 就把页面还原回原位（原本隐藏的页还原后照旧隐藏，看上去就是「关掉了」）。
 ///
 /// 它**不是** AvalonDock 的浮窗：停靠层的浮窗只给页面拖动当载体（REQ-UI-120），
 /// 这里不进布局树、不进场景快照，停靠区原位放一块「已浮出」占位，还原时页面对象原样搬回去。
@@ -26,6 +28,9 @@ internal sealed class PageFloatWindow : Window
     internal const double MinimumWidth = 360;
 
     internal const double MinimumHeight = 200;
+
+    /// <summary>卡片顶上关闭行的高度；页面自带 12 的内边距，这一行不必更高。</summary>
+    internal const double CloseRowHeight = 26;
 
     private readonly ContentPresenter _host = new();
 
@@ -56,7 +61,20 @@ internal sealed class PageFloatWindow : Window
             UseAeroCaptionButtons = false,
         });
 
-        var card = new Border { Child = _host, Margin = new Thickness(Gutter) };
+        CloseButton = BuildCloseButton();
+        var body = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = new GridLength(CloseRowHeight) },
+                new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
+            },
+        };
+        body.Children.Add(CloseButton);
+        Grid.SetRow(_host, 1);
+        body.Children.Add(_host);
+
+        var card = new Border { Child = body, Margin = new Thickness(Gutter) };
         card.SetResourceReference(StyleProperty, "Aurora.Dialog.Card");
         // 页面自带 12 的内边距（PageRegistrar.Inset），卡片不再叠一层；嵌入弹窗的阴影浮窗不要。
         card.Padding = new Thickness(0);
@@ -72,6 +90,9 @@ internal sealed class PageFloatWindow : Window
     }
 
     public string PageId { get; }
+
+    /// <summary>卡片右上角的叉（REQ-UI-159）。</summary>
+    internal Button CloseButton { get; }
 
     /// <summary>浮在窗里的那一页。换成 null 即把页面交还出去。</summary>
     public object? Page
@@ -97,6 +118,33 @@ internal sealed class PageFloatWindow : Window
         {
             // 按下与 DragMove 之间键已抬起：这一下不拖。
         }
+    }
+
+    /// <summary>
+    /// 关闭行右端的叉：与主窗体关闭键同一个样式（悬停整块变红），图标用 Path 画，不靠图标字体。
+    /// 卡片是圆角，叉往里收一点，红块不顶到圆角外面去。
+    /// </summary>
+    private Button BuildCloseButton()
+    {
+        var icon = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse("M 0,0 L 8,8 M 8,0 L 0,8"),
+            StrokeThickness = 1.2,
+        };
+        var button = new Button
+        {
+            Content = icon,
+            Width = 30,
+            Height = 22,
+            Margin = new Thickness(0, 4, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            ToolTip = "关闭",
+        };
+        button.SetResourceReference(StyleProperty, "Aurora.WindowButton.Close");
+        icon.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding(nameof(Foreground)) { Source = button });
+        button.Click += (_, _) => Close();
+        return button;
     }
 
     /// <summary>窗口外沿（含透明边）→ 卡片所在的矩形，与 <see cref="BoundsForCard"/> 互逆。</summary>

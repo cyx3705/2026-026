@@ -99,7 +99,7 @@ public static partial class ComponentCatalog
                 new("columns.cellEditAction", "string", "行内编辑动作 id（与 cellAction 互斥）；Enter 保存、Escape 还原，失焦不提交；参数取开始编辑时的行快照，同名列为新值；失败还原，刷新不触发保存"),
                 new("columns.editableWhen", "string", "可选行字段名，值为 true 才可编辑；省略则整列可编辑；只与 cellEditAction 配套"),
                 new("columns.cellAction", "string", "点击本列非空单元格执行的动作 id；参数里的 {列名} 取被点那一行"),
-                new("columns.cellStyle", "string", "带 cellAction 的格画成什么：缺省链接（墨色字），button 画成行内小按钮，按钮上的字就是格里的值") { Values = ["button"] },
+                new("columns.cellStyle", "string", "带 cellAction 的格画成什么：缺省链接（墨色字），单击执行；button 画成行内小按钮，按钮上的字就是格里的值；double 画成普通文字，单击只选中这一行、双击才执行") { Values = ["button", "double"] },
                 new("dataSource", "object", "取数：组件按需调这条只读指令，数据不内联进描述"),
                 new("dataSource.command", "string", "只读指令名，返回行集（字符串字典数组）或快照/增量载荷（见 table.data）") { Required = true },
                 new("dataSource.args", "map<string,string>", "固定参数；值里可写 {selection.<通道>.<列>}，通道一变自动重取，取不到值时不发指令"),

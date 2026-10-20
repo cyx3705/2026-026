@@ -393,7 +393,9 @@ public sealed partial class AuroraTable : UserControl
                     Header = column.Title,
                     CellTemplate = column.CellEditAction != null
                         ? CellEditTemplate(column)
-                        : column.CellAction == null ? CellTemplate(column.Key) : CellActionTemplate(column),
+                        : column.CellAction == null ? CellTemplate(column.Key)
+                        : column.CellAction.DoubleClick ? CellDoubleActionTemplate(column)
+                        : CellActionTemplate(column),
                 };
 
                 // 声明的数字是**权重**，不是像素（REQ-UI-039）：表格永远铺满可用宽度，
@@ -584,6 +586,32 @@ public sealed partial class AuroraTable : UserControl
         button.AppendChild(text);
 
         return new DataTemplate { VisualTree = button };
+    }
+
+    /// <summary>
+    /// 双击执行的格（REQ-UI-160）：长相就是普通格，单击照常落到行上选中它，只有双击才执行。
+    /// 格的透明底让整块文字区都接得住双击，不必正好点在字上。
+    /// </summary>
+    private DataTemplate CellDoubleActionTemplate(AuroraTableColumn column)
+    {
+        var template = CellTemplate(column.Key);
+        var cell = template.VisualTree;
+        cell.SetValue(TagProperty, new CellActionTag(column.CellAction!.Id, column.Key));
+        cell.SetValue(TextBlock.BackgroundProperty, Brushes.Transparent);
+        cell.AddHandler(MouseLeftButtonDownEvent, new MouseButtonEventHandler(OnCellDoubleClick));
+        return template;
+    }
+
+    private void OnCellDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2)
+            return;
+        if (sender is not FrameworkElement { Tag: CellActionTag tag } element)
+            return;
+        if (element.DataContext is not IReadOnlyDictionary<string, string> row)
+            return;
+        e.Handled = true;
+        FireCell(tag.ActionId, tag.ColumnKey, row);
     }
 
     private void OnCellActionClick(object sender, RoutedEventArgs e)

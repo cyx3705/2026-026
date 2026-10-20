@@ -358,7 +358,7 @@ public static partial class PageRenderer
         var columns = (node.Columns ?? [])
             .Select(column =>
             {
-                AuroraCellAction? ResolveCell(string? id, bool button = false)
+                AuroraCellAction? ResolveCell(string? id, bool button = false, bool doubleClick = false)
                 {
                     if (id == null) return null;
                     var binding = state.ResolveAction(id);
@@ -370,7 +370,7 @@ public static partial class PageRenderer
                     var action = binding.Action!;
                     return new AuroraCellAction(id,
                         string.IsNullOrWhiteSpace(action.Summary) ? action.Title : action.Summary,
-                        action.Danger, button);
+                        action.Danger, button, doubleClick);
                 }
                 if (column.CellAction != null && column.CellEditAction != null)
                 {
@@ -378,7 +378,10 @@ public static partial class PageRenderer
                     return new AuroraTableColumn(column.Key, column.Title, column.Width);
                 }
                 return new AuroraTableColumn(column.Key, column.Title, column.Width,
-                    ResolveCell(column.CellAction, string.Equals(column.CellStyle, "button", StringComparison.OrdinalIgnoreCase)),
+                    ResolveCell(
+                        column.CellAction,
+                        string.Equals(column.CellStyle, "button", StringComparison.OrdinalIgnoreCase),
+                        string.Equals(column.CellStyle, "double", StringComparison.OrdinalIgnoreCase)),
                     ResolveCell(column.CellEditAction), column.EditableWhen);
             })
             .ToList();

@@ -1871,6 +1871,44 @@ public sealed class DockingContractTests
     }
 
     /// <summary>
+    /// REQ-UI-159：浮窗右上角有叉，点了等于人亲手还原——页面回到停靠区原位，账上记「不浮」。
+    /// </summary>
+    [Fact]
+    public void FloatWindowCloseButtonRestoresThePage()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var window = ShowHost(
+                [
+                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
+                    Tool("page", DockSide.Right, 0.3),
+                ],
+                new MemoryLayoutStore(),
+                out var host);
+            try
+            {
+                host.SetPageFloating("page", true);
+                UiTestHost.Pump();
+                var floating = host.FloatWindowOf("page")!;
+                var page = floating.Page;
+                Assert.NotNull(page);
+
+                floating.CloseButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                UiTestHost.Pump();
+
+                Assert.False(host.IsPageFloating("page"));
+                Assert.False(floating.IsVisible);
+                Assert.Same(page, AnchorableOf(window, "page").Content);
+            }
+            finally
+            {
+                host.RestoreAllFloats();
+                window.Close();
+            }
+        });
+    }
+
+    /// <summary>
     /// REQ-UI-143：退出时浮着的页，下次启动在原位重新浮出；人亲手还原过的，下次不再浮。
     /// 退出收回停靠区是为了关得掉进程，不是人要还原——账上仍记「浮着」。
     /// </summary>

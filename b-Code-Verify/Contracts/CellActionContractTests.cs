@@ -57,6 +57,56 @@ public sealed class CellActionContractTests
         });
     }
 
+    /// <summary>REQ-UI-160：cellStyle=double 的格是普通文字，单击不执行（留给选行），双击才执行。</summary>
+    [Fact]
+    public void DoubleClickCell_FiresOnlyOnSecondClick()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var table = new AuroraTable();
+            table.SetData(AuroraTableData.Create(
+                [new AuroraTableColumn(
+                    "name", "名称", "*",
+                    new AuroraCellAction("demo.open", "打开文件夹", DoubleClick: true))],
+                [new Dictionary<string, string> { ["name"] = "Janus" }]));
+            var host = new Window { Content = table, Width = 500, Height = 240, ShowInTaskbar = false };
+            host.Show();
+            UiTestHost.Pump();
+            try
+            {
+                Assert.DoesNotContain(Descendants<Button>(table), item => Equals(item.ToolTip, "打开文件夹"));
+                var cell = Assert.Single(Descendants<TextBlock>(table), item => item.Text == "Janus");
+
+                var fired = 0;
+                table.CellActionInvoked += (_, _) => fired++;
+                cell.RaiseEvent(Press(1));
+                UiTestHost.Pump();
+                Assert.Equal(0, fired);
+
+                cell.RaiseEvent(Press(2));
+                Assert.True(UiTestHost.PumpUntil(() => fired == 1));
+            }
+            finally
+            {
+                host.Close();
+            }
+        });
+
+        static System.Windows.Input.MouseButtonEventArgs Press(int clicks)
+        {
+            var args = new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+            };
+            typeof(System.Windows.Input.MouseButtonEventArgs)
+                .GetProperty(nameof(args.ClickCount))!
+                .GetSetMethod(nonPublic: true)!
+                .Invoke(args, [clicks]);
+            return args;
+        }
+    }
+
     [Fact]
     public void CellAction_IgnoresEmptyCellsAndUnknownActions()
     {

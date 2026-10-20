@@ -39,8 +39,9 @@ public sealed record AuroraTableColumn(
 /// <summary>
 /// 一列的单元格动作。外观与触发方式由 <see cref="AuroraTable"/> 统一提供。
 /// <paramref name="Button"/>：画成行内小按钮而不是链接（REQ-UI-137）；空格不画。
+/// <paramref name="DoubleClick"/>：画成普通文字，单击只选行、双击才执行（REQ-UI-160，1.38.1）。
 /// </summary>
-public sealed record AuroraCellAction(string Id, string? Summary = null, bool Danger = false, bool Button = false);
+public sealed record AuroraCellAction(string Id, string? Summary = null, bool Danger = false, bool Button = false, bool DoubleClick = false);
 
 /// <summary>单元格动作触发事实：动作、列键与被操作行始终来自同一次点击。</summary>
 public sealed class AuroraCellActionEventArgs(

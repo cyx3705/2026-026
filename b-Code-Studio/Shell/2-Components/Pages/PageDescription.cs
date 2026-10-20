@@ -202,6 +202,7 @@ public sealed class PageColumn
     /// <summary>
     /// 带 <see cref="CellAction"/> 的格画成什么：缺省是链接（墨色字），<c>"button"</c> 画成行内小按钮（1.30.0，REQ-UI-137）。
     /// 格里的字就是按钮上的字，所以「载入 / 载出」这种随行变化的按钮靠数据就能写出来；空格不画按钮。
+    /// <c>"double"</c>（1.38.1，REQ-UI-160）画成普通文字：单击只选中这一行，双击才执行。
     /// </summary>
     public string? CellStyle { get; init; }
 }
