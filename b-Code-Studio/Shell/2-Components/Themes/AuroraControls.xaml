@@ -1351,8 +1351,10 @@
     </Style>
 
     <!--
-        行:固定 30px 高、无圆角、底部一条细线(1.28.0 起取 ControlBorder,即站点 hairline-2)。
-        选中(REQ-UI-132)是墨色块:行本身是「线」不带圆角,选中时在行里垫一块上下各让 1px 的圆角墨块。
+        行:固定 30px 高、无圆角。1.39.0 起不画行底横线,改画列之间的竖分隔线(ControlBorder,即站点 hairline-2):
+        每行在列交界处画一段贯穿行高的发丝线,上下行接起来就是一根到底的列线,与表头墨块上的列分隔线对齐
+        (表头行呈现器左移 2px、分隔线居中在右缘 8px 命中区里,这里取同一位置)。首列左侧不画。
+        选中(REQ-UI-132)是墨色块:行本身不带圆角,选中时在行里垫一块上下各让 1px 的圆角墨块,盖住这一行的竖线。
         不复用 Aurora.Item.Base —— 那条是列表项样式,每行自带 8px 圆角,
         连成表格后每一行都像一张卡片,列也就对不齐了。
     -->
@@ -1366,11 +1368,38 @@
                 <ControlTemplate TargetType="ListViewItem">
                     <Border x:Name="Bd"
                             Background="Transparent"
-                            BorderBrush="{DynamicResource Aurora.Brush.ControlBorder}"
-                            BorderThickness="0,0,0,1"
+                            BorderThickness="0"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <Grid>
+                            <ItemsControl x:Name="ColumnLines"
+                                          Margin="-2,0,0,0"
+                                          Focusable="False"
+                                          IsHitTestVisible="False"
+                                          ItemsSource="{Binding View.Columns,
+                                                        RelativeSource={RelativeSource AncestorType=ListView}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="{Binding ActualWidth}">
+                                            <Border x:Name="Line" Width="1" HorizontalAlignment="Left"
+                                                    Margin="-5,0,0,0"
+                                                    Background="{DynamicResource Aurora.Brush.ControlBorder}"
+                                                    SnapsToDevicePixels="True" />
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}"
+                                                         Value="{x:Null}">
+                                                <Setter TargetName="Line" Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <Border x:Name="Sel"
                                     Margin="0,1"
                                     Background="{DynamicResource Aurora.Brush.Ink}"

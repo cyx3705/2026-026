@@ -101,6 +101,15 @@ public sealed class ComponentGalleryContractTests
             };
             host.Show();
 
+            // 1.39.0 起这一页收进自带页签，没切到的页签不取数：逐页点一遍，每页的取数才会打出去。
+            var tabs = FindTabControl(host);
+            Assert.NotNull(tabs);
+            for (var index = 0; index < tabs!.Items.Count; index++)
+            {
+                tabs.SelectedIndex = index;
+                UiTestHost.Pump();
+            }
+
             // 取数走 Loaded → 后台派发 → 线程池，两条数据源都回来了才算画完。
             var loaded = UiTestHost.PumpUntil(() => log.Snapshot()
                 .Count(entry => entry.Message.Contains("aurora.preview.", StringComparison.Ordinal)) >= 2);
@@ -189,5 +198,17 @@ public sealed class ComponentGalleryContractTests
         await actions.ReloadAsync();
 
         Assert.True(actions.Resolve("preview.apply").Ok);
+    }
+
+    private static System.Windows.Controls.TabControl? FindTabControl(DependencyObject root)
+    {
+        if (root is System.Windows.Controls.TabControl tabs)
+            return tabs;
+
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+            if (FindTabControl(System.Windows.Media.VisualTreeHelper.GetChild(root, i)) is { } found)
+                return found;
+
+        return null;
     }
 }

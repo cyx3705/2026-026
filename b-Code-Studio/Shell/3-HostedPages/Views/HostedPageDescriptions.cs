@@ -195,151 +195,189 @@ internal static class HostedPageDescriptions
                 "gap": "normal",
                 "children": [
                   { "type": "text", "text": "Aurora 组件测试页" },
-                  { "type": "text", "style": "secondary", "text": "描述化页面、表格、面板和基础控件的统一视觉验收。" },
-                  { "type": "text", "style": "caption", "text": "浅色圆角只出现在控制面板；表格直接平铺。列可以拖着换顺序，占满剩余宽度的那一列除外。" },
-                  {
-                    "type": "grid",
-                    "min": 420,
-                    "gap": "normal",
-                    "children": [
-                      {
-                        "type": "table",
-                        "id": "demo-table",
-                        "channel": "aurora.preview.item",
-                        "dataSource": { "command": "aurora.preview.rows" },
-                        "columns": [
-                          { "key": "name", "title": "名称", "width": "150" },
-                          { "key": "kind", "title": "类别", "width": "70" },
-                          { "key": "state", "title": "状态", "width": "76" },
-                          { "key": "subject", "title": "最近提交", "width": "*" }
-                        ],
-                        "rowActions": [
-                          { "action": "preview.row", "title": "查看行" }
-                        ]
-                      },
-                      {
-                        "type": "panel",
-                        "id": "demo-panel",
-                        "text": "控制面板",
-                        "rows": [
-                          {
-                            "widgets": [
-                              { "kind": "text", "text": "第一行：可变宽度，最右边那个元素吃掉余量。" }
-                            ]
-                          },
-                          {
-                            "widgets": [
-                              { "kind": "textbox", "id": "picked", "label": "选中项",
-                                "follows": "aurora.preview.item.name" },
-                              { "kind": "button", "action": "preview.rename", "text": "跟随选中",
-                                "enabledWhen": { "selected": "aurora.preview.item" } }
-                            ]
-                          },
-                          {
-                            "widgets": [
-                              { "kind": "textbox", "id": "note", "label": "说明", "value": "组件演示",
-                                "flex": true },
-                              { "kind": "button", "action": "preview.apply", "text": "应用" }
-                            ]
-                          },
-                          {
-                            "mode": "even",
-                            "widgets": [
-                              { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
-                              { "kind": "button", "action": "preview.apply", "text": "强调按钮" },
-                              { "kind": "button", "action": "preview.apply", "text": "危险按钮" }
-                            ]
-                          },
-                          {
-                            "widgets": [
-                              { "kind": "textbox", "id": "option", "label": "选项", "mode": "select",
-                                "options": [ "浅色", "深色", "跟随系统" ], "value": "浅色" },
-                              { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select",
-                                "channel": "aurora.preview.section",
-                                "options": [ "第一项", "第二项", "第三项" ] }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  { "type": "text", "style": "secondary", "text": "「页面选项」发布到通道，下面这块跟着换一批组件" },
+                  { "type": "text", "style": "secondary", "text": "描述化页面、表格、面板和基础控件的统一视觉验收。下面每个页签是一组组件。" },
                   {
                     "type": "switch",
-                    "id": "demo-switch",
-                    "source": "{selection.aurora.preview.section.value}",
+                    "id": "demo-pages",
                     "children": [
                       {
                         "type": "stack",
-                        "case": "第一项",
-                        "gap": "tight",
+                        "case": "表格与面板",
+                        "gap": "normal",
                         "children": [
-                          { "type": "text", "style": "caption", "text": "第一支：只有一段文字。" }
-                        ]
-                      },
-                      {
-                        "type": "table",
-                        "case": "第二项",
-                        "id": "demo-switch-table",
-                        "dataSource": { "command": "aurora.preview.rows" },
-                        "columns": [
-                          { "key": "name", "title": "名称", "width": "150" },
-                          { "key": "subject", "title": "最近提交", "width": "*" }
-                        ]
-                      },
-                      {
-                        "type": "panel",
-                        "case": "第三项",
-                        "id": "demo-switch-panel",
-                        "text": "第三支",
-                        "rows": [
+                          { "type": "text", "style": "caption", "text": "浅色圆角只出现在控制面板；表格直接平铺，列之间用竖线分开。列可以拖着换顺序，占满剩余宽度的那一列除外。" },
                           {
-                            "widgets": [
-                              { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
-                              { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
+                            "type": "grid",
+                            "min": 420,
+                            "gap": "normal",
+                            "children": [
+                              {
+                                "type": "table",
+                                "id": "demo-table",
+                                "channel": "aurora.preview.item",
+                                "dataSource": { "command": "aurora.preview.rows" },
+                                "columns": [
+                                  { "key": "name", "title": "名称", "width": "150" },
+                                  { "key": "kind", "title": "类别", "width": "70" },
+                                  { "key": "state", "title": "状态", "width": "76" },
+                                  { "key": "subject", "title": "最近提交", "width": "*" }
+                                ],
+                                "rowActions": [
+                                  { "action": "preview.row", "title": "查看行" }
+                                ]
+                              },
+                              {
+                                "type": "panel",
+                                "id": "demo-panel",
+                                "text": "控制面板",
+                                "rows": [
+                                  {
+                                    "widgets": [
+                                      { "kind": "text", "text": "第一行：可变宽度，最右边那个元素吃掉余量。" }
+                                    ]
+                                  },
+                                  {
+                                    "widgets": [
+                                      { "kind": "textbox", "id": "picked", "label": "选中项",
+                                        "follows": "aurora.preview.item.name" },
+                                      { "kind": "button", "action": "preview.rename", "text": "跟随选中",
+                                        "enabledWhen": { "selected": "aurora.preview.item" } }
+                                    ]
+                                  },
+                                  {
+                                    "widgets": [
+                                      { "kind": "textbox", "id": "note", "label": "说明", "value": "组件演示",
+                                        "flex": true },
+                                      { "kind": "button", "action": "preview.apply", "text": "应用" }
+                                    ]
+                                  },
+                                  {
+                                    "mode": "even",
+                                    "widgets": [
+                                      { "kind": "button", "action": "preview.apply", "text": "普通按钮" },
+                                      { "kind": "button", "action": "preview.apply", "text": "强调按钮" },
+                                      { "kind": "button", "action": "preview.apply", "text": "危险按钮" }
+                                    ]
+                                  },
+                                  {
+                                    "widgets": [
+                                      { "kind": "textbox", "id": "option", "label": "选项", "mode": "select",
+                                        "options": [ "浅色", "深色", "跟随系统" ], "value": "浅色" }
+                                    ]
+                                  }
+                                ]
+                              }
                             ]
                           }
                         ]
-                      }
-                    ]
-                  },
-                  { "type": "text", "style": "secondary", "text": "弹出层内容继续复用控制面板控件" },
-                  {
-                    "type": "popup",
-                    "id": "demo-popup",
-                    "text": "打开弹出层",
-                    "rows": [
+                      },
                       {
-                        "widgets": [
-                          { "kind": "text", "text": "低频编辑内容放在这里。" }
+                        "type": "stack",
+                        "case": "切换与弹出",
+                        "gap": "normal",
+                        "children": [
+                          { "type": "text", "style": "caption", "text": "这一组页签本身就是不写 source 的切换容器；下面这块是写了 source 的，跟着「页面选项」换一批组件。" },
+                          {
+                            "type": "panel",
+                            "id": "demo-switch-options",
+                            "text": "切换来源",
+                            "rows": [
+                              {
+                                "widgets": [
+                                  { "kind": "textbox", "id": "page-option", "label": "页面选项", "mode": "select",
+                                    "channel": "aurora.preview.section",
+                                    "options": [ "第一项", "第二项", "第三项" ] }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "switch",
+                            "id": "demo-switch",
+                            "source": "{selection.aurora.preview.section.value}",
+                            "children": [
+                              {
+                                "type": "stack",
+                                "case": "第一项",
+                                "gap": "tight",
+                                "children": [
+                                  { "type": "text", "style": "caption", "text": "第一支：只有一段文字。" }
+                                ]
+                              },
+                              {
+                                "type": "table",
+                                "case": "第二项",
+                                "id": "demo-switch-table",
+                                "dataSource": { "command": "aurora.preview.rows" },
+                                "columns": [
+                                  { "key": "name", "title": "名称", "width": "150" },
+                                  { "key": "subject", "title": "最近提交", "width": "*" }
+                                ]
+                              },
+                              {
+                                "type": "panel",
+                                "case": "第三项",
+                                "id": "demo-switch-panel",
+                                "text": "第三支",
+                                "rows": [
+                                  {
+                                    "widgets": [
+                                      { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
+                                      { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          { "type": "text", "style": "secondary", "text": "弹出层内容继续复用控制面板控件" },
+                          {
+                            "type": "popup",
+                            "id": "demo-popup",
+                            "text": "打开弹出层",
+                            "rows": [
+                              {
+                                "widgets": [
+                                  { "kind": "text", "text": "低频编辑内容放在这里。" }
+                                ]
+                              },
+                              {
+                                "widgets": [
+                                  { "kind": "textbox", "id": "popup-option", "label": "模式", "mode": "select",
+                                    "options": [ "全部", "仅主线", "仅分支" ] }
+                                ]
+                              },
+                              {
+                                "mode": "even",
+                                "widgets": [
+                                  { "kind": "button", "action": "preview.apply", "text": "保存" }
+                                ]
+                              }
+                            ]
+                          }
                         ]
                       },
                       {
-                        "widgets": [
-                          { "kind": "textbox", "id": "popup-option", "label": "模式", "mode": "select",
-                            "options": [ "全部", "仅主线", "仅分支" ] }
+                        "type": "stack",
+                        "case": "会话",
+                        "gap": "normal",
+                        "children": [
+                          { "type": "text", "style": "caption", "text": "会话卡片与气泡消息（点击会话查看标题联动）" },
+                          { "type": "grid", "min": 260, "children": [
+                            { "type": "conversationList", "id": "demo-conversations", "channel": "aurora.chat-gallery",
+                              "dataSource": { "command": "aurora.preview.chat", "args": { "view": "conversation" } } },
+                            { "type": "chatTimeline", "id": "demo-chat", "source": "{selection.aurora.chat-gallery.title}",
+                              "dataSource": { "command": "aurora.preview.chat", "args": { "view": "message", "conversation": "{selection.aurora.chat-gallery.id}" } } }
+                          ] }
                         ]
                       },
                       {
-                        "mode": "even",
-                        "widgets": [
-                          { "kind": "button", "action": "preview.apply", "text": "保存" }
-                        ]
+                        "type": "swimlane",
+                        "case": "泳道图",
+                        "id": "demo-graph",
+                        "dataSource": { "command": "aurora.preview.graph" }
                       }
                     ]
-                  },
-                  { "type": "text", "style": "secondary", "text": "会话卡片与气泡消息（点击会话查看标题联动）" },
-                  { "type": "grid", "min": 260, "children": [
-                    { "type": "conversationList", "id": "demo-conversations", "channel": "aurora.chat-gallery",
-                      "dataSource": { "command": "aurora.preview.chat", "args": { "view": "conversation" } } },
-                    { "type": "chatTimeline", "id": "demo-chat", "source": "{selection.aurora.chat-gallery.title}",
-                      "dataSource": { "command": "aurora.preview.chat", "args": { "view": "message", "conversation": "{selection.aurora.chat-gallery.id}" } } }
-                  ] },
-                  { "type": "text", "style": "secondary", "text": "响应式栅格与泳道图" },
-                  {
-                    "type": "swimlane",
-                    "id": "demo-graph",
-                    "dataSource": { "command": "aurora.preview.graph" }
                   }
                 ]
               }

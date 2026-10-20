@@ -477,6 +477,9 @@ public static partial class PageRenderer
         if (children.Count == 0)
             return Unbound("切换容器没有任何分支：switch 至少要声明一个 children", state);
 
+        if (string.IsNullOrWhiteSpace(node.Source))
+            return BuildSwitchTabs(children, state);
+
         var reference = Unwrap(node.Source);
         if (!SelectionChannels.TrySplitReference(reference, out var channel, out var column))
             return Unbound(
@@ -529,6 +532,52 @@ public static partial class PageRenderer
         // Loaded 时再对一次表，Apply 本身按当前支早退，重复调用不产生额外代价。
         host.Loaded += (_, _) => Apply();
         return host;
+    }
+
+    /// <summary>
+    /// 不写 source 的切换容器：自带一行页签，每支的 case 就是页签名（1.39.0）。
+    /// 页签行借 WPF 的 <c>TabControl</c>（样式是 AuroraControls 里那份视图内分段页签），
+    /// 但**只借页签，不借内容区**：TabItem.Content 是 TabItem 的逻辑子元素，
+    /// Loaded 沿逻辑树广播，没选中的页照样收 Loaded、照样取数。内容因此与通道版同一做法——
+    /// 全部分支在这里建出来，只把选中那支挂进下面的格子，切回来是同一个实例。
+    /// </summary>
+    private static FrameworkElement BuildSwitchTabs(IReadOnlyList<PageNode> children, RenderState state)
+    {
+        var tabs = new TabControl { Padding = new Thickness(0) };
+        for (var index = 0; index < children.Count; index++)
+        {
+            var title = children[index].Case;
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = $"第 {index + 1} 页";
+                state.WarnUnbound($"切换容器的第 {index + 1} 支没有 case，自带页签上显示成「{title}」");
+            }
+
+            tabs.Items.Add(new TabItem { Header = title });
+        }
+
+        var branches = children.Select(child => Build(child, state)).ToList();
+        var host = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        Grid.SetRow(host, 1);
+        root.Children.Add(tabs);
+        root.Children.Add(host);
+
+        // 先摘再挂，与通道版同一处理：摘下来的那支仍被 branches 持有，数据、滚动与选中都还在。
+        tabs.SelectionChanged += (_, e) =>
+        {
+            if (!ReferenceEquals(e.OriginalSource, tabs) || tabs.SelectedIndex < 0)
+                return;
+
+            host.Children.Clear();
+            host.Children.Add(branches[tabs.SelectedIndex]);
+        };
+        tabs.SelectedIndex = 0;
+        if (host.Children.Count == 0)
+            host.Children.Add(branches[0]);
+        return root;
     }
 
     /// <summary>哪一支匹配当前值；没有任何一支匹配（含通道还没有值）时用第一支。</summary>

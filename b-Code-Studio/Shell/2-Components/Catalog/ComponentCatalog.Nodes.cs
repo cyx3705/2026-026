@@ -231,14 +231,14 @@ public static partial class ComponentCatalog
             Name = "switch",
             Layer = ComponentLayer.Node,
             Model = typeof(PageNode),
-            Summary = "切换容器：一块版面上按某个通道值轮换显示一批组件（三个子页收进一页）",
+            Summary = "切换容器：一块版面上轮换显示一批组件（几个子页收进一页）；按通道值切，或不写 source 自带一行页签",
             Fields =
             [
                 NodeType,
                 NodeId,
-                new("source", "string", "按哪个值决定显示哪一支，写法 {selection.<通道>.<列>}；通常指向面板里声明了 channel 的选项框（列名固定 value）") { Required = true },
+                new("source", "string", "按哪个值决定显示哪一支，写法 {selection.<通道>.<列>}；通常指向面板里声明了 channel 的选项框（列名固定 value）。不写则自带页签，人点页签切换"),
                 new("children", "node[]", "各分支") { Required = true },
-                new("case", "string", "写在 switch 的**子节点**上：本支对应 source 的哪个取值，大小写不敏感；第二支起必须写"),
+                new("case", "string", "写在 switch 的**子节点**上：本支对应 source 的哪个取值，大小写不敏感；第二支起必须写。自带页签时就是页签名，每支都要写"),
             ],
             Example = """
                 { "type": "switch", "id": "sections", "source": "{selection.mymodule.section.value}", "children": [
@@ -249,6 +249,7 @@ public static partial class ComponentCatalog
             Rules =
             [
                 "没有任何一支匹配（含通道还没有值）时显示第一支",
+                "自带页签：页签行在上、内容在下，开页停在第一页；页签外观封在 Aurora 中",
                 "没被切到过的分支不取数；切走再切回是同一个实例，滚动、筛选、选中都还在",
                 "source 写坏、没有分支渲染成说明原因的牌子；case 重复、漏写记 Warn。它们不算缺件",
             ],

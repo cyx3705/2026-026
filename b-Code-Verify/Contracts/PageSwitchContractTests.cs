@@ -131,8 +131,9 @@ public sealed class PageSwitchContractTests
             using var host = new Harness();
             foreach (var content in new[]
                      {
-                         """{ "type": "switch", "children": [ { "type": "text", "case": "甲", "text": "甲" } ] }""",
+                         """{ "type": "switch", "source": "乱写", "children": [ { "type": "text", "case": "甲", "text": "甲" } ] }""",
                          """{ "type": "switch", "source": "{selection.demo.section.value}" }""",
+                         """{ "type": "switch" }""",
                      })
             {
                 var rendered = host.Render(content);
@@ -202,6 +203,74 @@ public sealed class PageSwitchContractTests
             Descendants<AuroraOptionBox>(second.Root).Single().SelectedItem = "历史";
             UiTestHost.Pump();
             Assert.Equal("规则", host.Channels.Value("demo.section", "value"));
+        });
+    }
+
+    /// <summary>
+    /// 不写 source 的切换容器自带一行页签（1.39.0）：case 就是页签名，开页停在第一页，
+    /// 没点过的页签不取数，点回来是同一个实例——三条硬要求与通道版一样。
+    /// </summary>
+    [Fact]
+    public void ASwitchWithoutSourceDrawsItsOwnTabsAndKeepsTheSameRules()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            using var host = new Harness();
+            var rendered = host.Render("""
+                {
+                  "type": "switch",
+                  "children": [
+                    { "type": "text", "case": "规则", "text": "第一支" },
+                    {
+                      "type": "table",
+                      "case": "历史",
+                      "columns": [ { "key": "sha", "title": "提交" } ],
+                      "dataSource": { "command": "demo.history" }
+                    }
+                  ]
+                }
+                """);
+            Assert.Empty(rendered.MissingComponents);
+            host.Mount(rendered.Root);
+
+            var tabs = Descendants<TabControl>(rendered.Root).Single();
+            Assert.Equal(new object[] { "规则", "历史" }, tabs.Items.Cast<TabItem>().Select(item => item.Header));
+            Assert.Single(Descendants<TextBlock>(rendered.Root), text => text.Text == "第一支");
+            UiTestHost.PumpFor(120);
+            Assert.Empty(host.Fetched);
+
+            tabs.SelectedIndex = 1;
+            Assert.True(UiTestHost.PumpUntil(() => host.Fetched.Count == 1), "切到取数页签之后仍然没有取数");
+            var first = Descendants<AuroraTable>(rendered.Root).Single();
+
+            tabs.SelectedIndex = 0;
+            UiTestHost.Pump();
+            Assert.DoesNotContain(Descendants<AuroraTable>(rendered.Root), _ => true);
+            tabs.SelectedIndex = 1;
+            UiTestHost.Pump();
+
+            Assert.Same(first, Descendants<AuroraTable>(rendered.Root).Single());
+            UiTestHost.PumpFor(120);
+            Assert.Single(host.Fetched);
+        });
+    }
+
+    /// <summary>自带页签时 case 就是页签名，漏写的那一页照样能点到，但必须出声。</summary>
+    [Fact]
+    public void ATabWithoutCaseGetsANumberedTitleAndAWarning()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            using var host = new Harness();
+            var rendered = host.Render("""
+                { "type": "switch", "children": [ { "type": "text", "text": "一" }, { "type": "text", "case": "乙", "text": "二" } ] }
+                """);
+
+            var tabs = Descendants<TabControl>(rendered.Root).Single();
+            Assert.Equal("第 1 页", ((TabItem)tabs.Items[0]).Header);
+            Assert.Contains(
+                host.Log.Snapshot(),
+                entry => entry.Level >= ShellLogLevel.Warn && entry.Message.Contains("没有 case", StringComparison.Ordinal));
         });
     }
 
