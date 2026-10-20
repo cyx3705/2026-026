@@ -568,8 +568,9 @@
                                               RecognizesAccessKey="True" />
                         </Border>
                         <!-- 列分隔:只留一条细线,且是拖拽改列宽的命中区。颜色取表头的 BorderBrush,反色表头才能换成墨块上的线色 -->
+                        <!-- 1.39.0:命中区右移 5,线落在两列交界正中(左右文字各留约 6px),原先线贴着左边文字、离右边文字 13px,显得挤 -->
                         <Thumb x:Name="PART_HeaderGripper"
-                               HorizontalAlignment="Right" Width="8" Cursor="SizeWE">
+                               HorizontalAlignment="Right" Width="8" Margin="0,0,-5,0" Cursor="SizeWE">
                             <Thumb.Template>
                                 <ControlTemplate TargetType="Thumb">
                                     <Border Background="Transparent">
@@ -1353,7 +1354,7 @@
     <!--
         行:固定 30px 高、无圆角。1.39.0 起不画行底横线,改画列之间的竖分隔线(ControlBorder,即站点 hairline-2):
         每行在列交界处画一段贯穿行高的发丝线,上下行接起来就是一根到底的列线,与表头墨块上的列分隔线对齐
-        (表头行呈现器左移 2px、分隔线居中在右缘 8px 命中区里,这里取同一位置)。首列左侧不画。
+        (表头行呈现器左移 2px、分隔线居中在右移 5px 的 8px 命中区里,落在两列交界;这里取同一位置,左右文字各留约 6px)。首列左侧不画。
         选中(REQ-UI-132)是墨色块:行本身不带圆角,选中时在行里垫一块上下各让 1px 的圆角墨块,盖住这一行的竖线。
         不复用 Aurora.Item.Base —— 那条是列表项样式,每行自带 8px 圆角,
         连成表格后每一行都像一张卡片,列也就对不齐了。
@@ -1387,7 +1388,7 @@
                                     <DataTemplate>
                                         <Border Width="{Binding ActualWidth}">
                                             <Border x:Name="Line" Width="1" HorizontalAlignment="Left"
-                                                    Margin="-5,0,0,0"
+                                                    Margin="1,0,0,0"
                                                     Background="{DynamicResource Aurora.Brush.ControlBorder}"
                                                     SnapsToDevicePixels="True" />
                                         </Border>
