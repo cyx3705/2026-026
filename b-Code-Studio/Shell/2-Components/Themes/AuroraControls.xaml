@@ -1322,13 +1322,6 @@
             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True">
                 <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.OnInk}" />
             </DataTrigger>
-            <MultiDataTrigger>
-                <MultiDataTrigger.Conditions>
-                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListViewItem}}" Value="True" />
-                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
-                </MultiDataTrigger.Conditions>
-                <Setter Property="Foreground" Value="{DynamicResource Aurora.Brush.AccentOnInk}" />
-            </MultiDataTrigger>
         </Style.Triggers>
     </Style>
 

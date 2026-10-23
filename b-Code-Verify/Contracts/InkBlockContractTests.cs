@@ -21,8 +21,8 @@ public sealed class InkBlockContractTests
         new("/HistoryAurora;component/Themes/AuroraTokens.Dark.xaml", UriKind.Relative);
 
     /// <summary>
-    /// 墨色令牌只是别名，不引入新颜色：Ink = 本主题正文色、OnInk = 本主题底色，
-    /// AccentOnInk / TextSecondaryOnInk 取另一套主题的对应值。反白字与墨块上的金色编号都要过 AA。
+    /// 墨色令牌只是别名，不引入新颜色。1.40.0 起文字只有一种颜色（原次要文字色，对比度较小）：
+    /// Ink = 正文 = 次要文字，OnInk = 本主题底色，TextSecondaryOnInk 取另一套主题的文字色。反白字要过 AA。
     /// </summary>
     [Fact]
     public void InkTokensAreAliasesAndReadable()
@@ -33,17 +33,11 @@ public sealed class InkBlockContractTests
             {
                 var ink = Token(self, "Aurora.Brush.Ink");
                 Assert.Equal(Token(self, "Aurora.Brush.TextPrimary"), ink);
+                Assert.Equal(Token(self, "Aurora.Brush.TextSecondary"), ink);
                 Assert.Equal(Token(self, "Aurora.Brush.Canvas"), Token(self, "Aurora.Brush.OnInk"));
-                // 1.40.0 亮暗对调:本主题的正文色(= 墨色)就是另一套主题的控制面板色(比取背景对比度小一些)
-                Assert.Equal(Token(other, "Aurora.Brush.SurfaceAlt"), ink);
-                Assert.Equal(Token(other, "Aurora.Brush.Accent"), Token(self, "Aurora.Brush.AccentOnInk"));
                 Assert.Equal(Token(other, "Aurora.Brush.TextSecondary"), Token(self, "Aurora.Brush.TextSecondaryOnInk"));
 
                 Assert.True(Contrast(Token(self, "Aurora.Brush.OnInk"), ink) >= 4.5, $"{self} 反白字");
-                // 墨块上的金色只用于悬停态与编号，按非正文的 3:1 判。深色是浅色主题色落在米色墨块上，
-                // 实测 4.2:1——与站点 accent-on-ink 同值，改它要先改权威 README。
-                Assert.True(Contrast(Token(self, "Aurora.Brush.AccentOnInk"), ink) >= 3.0,
-                    $"{self} 墨块上的金色 {Contrast(Token(self, "Aurora.Brush.AccentOnInk"), ink):F2}");
             }
         });
     }

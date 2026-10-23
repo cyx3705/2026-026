@@ -11,9 +11,9 @@
 
     <!-- ================================================================ 颜色 -->
 
-    <!-- 亮暗对调(1.40.0),见浅色令牌:深色的背景是暗、文字与反色块是浅色的控制面板色 -->
+    <!-- 1.40.0,见浅色令牌:文字只有一种颜色(原次要文字色),反色块同色 -->
     <Color x:Key="Aurora.Color.Canvas">#1A1D1C</Color>
-    <Color x:Key="Aurora.Color.Text">#EBE9E4</Color>
+    <Color x:Key="Aurora.Color.Text">#ACA593</Color>
     <Color x:Key="Aurora.Color.Surface">#1D201F</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#242625</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#2A2D2C</Color>
@@ -27,7 +27,7 @@
     <SolidColorBrush x:Key="Aurora.Brush.SurfacePressed" Color="{StaticResource Aurora.Color.SurfacePressed}" />
 
     <SolidColorBrush x:Key="Aurora.Brush.TextPrimary" Color="{StaticResource Aurora.Color.Text}" />
-    <SolidColorBrush x:Key="Aurora.Brush.TextSecondary" Color="#ACA593" />
+    <SolidColorBrush x:Key="Aurora.Brush.TextSecondary" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.TextDisabled" Color="#77746A" />
 
     <!-- 主题色:暗黄(深色底上提亮) -->
@@ -41,10 +41,9 @@
     <SolidColorBrush x:Key="Aurora.Brush.Hairline" Color="{StaticResource Aurora.Color.SurfaceHover}" />
     <SolidColorBrush x:Key="Aurora.Brush.ControlBorder" Color="{StaticResource Aurora.Color.SurfacePressed}" />
 
-    <!-- 墨色与反白(REQ-UI-132),见浅色令牌。深色里墨色就是亮色正文色,墨色条随之变成亮条 -->
+    <!-- 墨色与反白(REQ-UI-132),见浅色令牌。深色里墨色就是正文色,墨色条随之变成亮条 -->
     <SolidColorBrush x:Key="Aurora.Brush.Ink" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.OnInk" Color="{StaticResource Aurora.Color.Canvas}" />
-    <SolidColorBrush x:Key="Aurora.Brush.AccentOnInk" Color="#7F5E0F" />
     <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#6A6458" />
 
     <!-- ================================================================ 形状 -->
