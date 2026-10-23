@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.39.0",
+    "version": "1.40.0",
     "branch": "main"
   },
   "paths": {
@@ -87,6 +87,20 @@
       ]
     },
     "validation": [
+      {
+        "tool": "dotnet.exe",
+        "configurations": [
+          "Release"
+        ],
+        "arguments": [
+          "test",
+          "b-Code-Verify\\ModuleSmoke\\ModuleSmoke.csproj",
+          "-c",
+          "{configuration}",
+          "-p:NuGetAudit=false"
+        ],
+        "description": "Run module smoke ({configuration})"
+      },
       {
         "tool": "dotnet.exe",
         "configurations": [

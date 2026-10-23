@@ -33,11 +33,11 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.WindowButtonHover}" />
+                                    Value="{DynamicResource Aurora.Brush.SurfaceHover}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.WindowButtonPressed}" />
+                                    Value="{DynamicResource Aurora.Brush.SurfacePressed}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
@@ -61,15 +61,9 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.CloseHover}" />
+                                    Value="{DynamicResource Aurora.Brush.Danger}" />
                             <Setter Property="Foreground"
-                                    Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background"
-                                    Value="{DynamicResource Aurora.Brush.CloseHoverPressed}" />
-                            <Setter Property="Foreground"
-                                    Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
+                                    Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -112,7 +106,7 @@
                             <Setter TargetName="Bd" Property="Background"
                                     Value="{DynamicResource Aurora.Brush.Danger}" />
                             <Setter Property="Foreground"
-                                    Value="{DynamicResource Aurora.Brush.TextOnAccent}" />
+                                    Value="{DynamicResource Aurora.Brush.OnInk}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -63,17 +63,10 @@ public sealed class CommandCatalogContractTests
         // 补全要替换掉已经打出来的那一段，而不是接在后面。
         Assert.Equal(0, result.ReplaceStart);
         Assert.Equal(11, result.ReplaceLength);
-    }
 
-    [Fact]
-    public async Task Complete_FallsBackToContainsWhenNothingStartsWithIt()
-    {
-        // "想不起来是 dock 还是 layout，只记得中间一段"是这里最常见的用法。
-        var session = Session();
-
-        var result = await session.CompleteAsync("rename", 6);
-
-        Assert.Contains(result.Candidates, candidate => candidate.InsertText == "demo.branch.rename");
+        // 没有以它开头的就退到「包含」："想不起来是 dock 还是 layout，只记得中间一段"是这里最常见的用法。
+        var contains = await session.CompleteAsync("rename", 6);
+        Assert.Contains(contains.Candidates, candidate => candidate.InsertText == "demo.branch.rename");
     }
 
     // 1.29.0：目录会话只读总线目录（进程内即宿主目录，Aurora 的指令也在其中），不再另拉 vulcan.command.list 合并。
@@ -101,16 +94,10 @@ public sealed class CommandCatalogContractTests
         var candidate = Assert.Single(result.Candidates);
         Assert.Equal(ConsoleCompletionKind.Parameter, candidate.Kind);
         Assert.Equal("to=", candidate.InsertText);
-    }
 
-    [Fact]
-    public async Task Complete_DoesNotOfferAParameterThatIsAlreadyWritten()
-    {
-        var session = Session();
-
-        var result = await session.CompleteAsync("demo.branch.rename to=x ", 24);
-
-        Assert.DoesNotContain(result.Candidates, candidate => candidate.InsertText == "to=");
+        // 已经写过的参数不再提示。
+        var written = await session.CompleteAsync("demo.branch.rename to=x ", 24);
+        Assert.DoesNotContain(written.Candidates, item => item.InsertText == "to=");
     }
 
     [Fact]
@@ -141,12 +128,6 @@ public sealed class CommandCatalogContractTests
         var parameter = Assert.Single(detail.Parameters);
         Assert.Equal("to", parameter.Name);
         Assert.True(parameter.Required);
-    }
-
-    [Fact]
-    public async Task Detail_ReturnsNullForAnUnknownCommand()
-    {
-        var session = Session();
 
         Assert.Null(await session.DetailAsync("nobody.registered.this"));
     }

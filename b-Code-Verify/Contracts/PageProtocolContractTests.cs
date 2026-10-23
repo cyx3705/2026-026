@@ -41,32 +41,26 @@ public sealed class PageProtocolContractTests
         Assert.Equal("demo", Assert.Single(parsed.Value.Pages).Id);
     }
 
-    [Fact]
-    public void Parse_RejectsUnsupportedSchemaVersion()
+    /// <summary>
+    /// 版本不对、冒名（防止借描述抢注别的模块的页面）、页 id 重复、缺内容、不是 JSON：一律明确失败。
+    /// 文本协议没有编译器保护，报错必须点名出错的那一处，否则排查只能靠猜。
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(InvalidDescriptions))]
+    public void Parse_RejectsInvalidDescriptionLoudly(string json, string owner, string named)
     {
-        var json = MinimalPage.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
-
-        var parsed = PageDescriptionReader.Read(json, "HistoryDemo");
+        var parsed = PageDescriptionReader.Read(json, owner);
 
         Assert.False(parsed.Ok);
-        // 文本协议没有编译器保护，失败必须报出版本号，否则排查只能靠猜。
-        Assert.Contains("schemaVersion=2", parsed.Error);
+        Assert.Contains(named, parsed.Error);
     }
 
-    [Fact]
-    public void Parse_RejectsOwnerMismatch()
+    public static TheoryData<string, string, string> InvalidDescriptions() => new()
     {
-        // 防止一个模块借描述抢注另一个模块的页面。
-        var parsed = PageDescriptionReader.Read(MinimalPage, "HistoryOther");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("HistoryOther", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsDuplicatePageId()
-    {
-        var json = """
+        { MinimalPage.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2"), "HistoryDemo", "schemaVersion=2" },
+        { MinimalPage, "HistoryOther", "HistoryOther" },
+        {
+            """
             {
               "schemaVersion": 1,
               "owner": "HistoryDemo",
@@ -75,39 +69,15 @@ public sealed class PageProtocolContractTests
                 { "id": "demo", "title": "二", "content": { "type": "text" } }
               ]
             }
-            """;
-
-        var parsed = PageDescriptionReader.Read(json, "HistoryDemo");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("重复", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsPageWithoutContent()
-    {
-        var json = """
-            {
-              "schemaVersion": 1,
-              "owner": "HistoryDemo",
-              "pages": [ { "id": "demo", "title": "演示" } ]
-            }
-            """;
-
-        var parsed = PageDescriptionReader.Read(json, "HistoryDemo");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("缺少内容", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsMalformedJson()
-    {
-        var parsed = PageDescriptionReader.Read("{ not json", "HistoryDemo");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("合法 JSON", parsed.Error);
-    }
+            """,
+            "HistoryDemo", "重复"
+        },
+        {
+            """{ "schemaVersion": 1, "owner": "HistoryDemo", "pages": [ { "id": "demo", "title": "演示" } ] }""",
+            "HistoryDemo", "缺少内容"
+        },
+        { "{ not json", "HistoryDemo", "合法 JSON" },
+    };
 
     [Fact]
     public void Render_MapsKnownComponentsToAuroraControls()

@@ -41,7 +41,7 @@
         <TextBlock Text="{Binding Source}" Style="{DynamicResource Aurora.Text.Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
        <Border Grid.Column="1" Background="{DynamicResource Aurora.Brush.Danger}" CornerRadius="{DynamicResource Aurora.Radius.Inner}" Padding="6,1" Margin="4,0,0,0" HorizontalAlignment="Right">
         <Border.Style><Style TargetType="Border"><Style.Triggers><DataTrigger Binding="{Binding Unread}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Border.Style>
-        <TextBlock Text="{Binding Unread}" FontSize="{DynamicResource Aurora.Font.Small}" FontFamily="{DynamicResource Aurora.Font.Family}" Foreground="{DynamicResource Aurora.Brush.TextOnAccent}"/>
+        <TextBlock Text="{Binding Unread}" FontSize="{DynamicResource Aurora.Font.Small}" FontFamily="{DynamicResource Aurora.Font.Family}" Foreground="{DynamicResource Aurora.Brush.OnInk}"/>
        </Border>
        </Grid>
       </StackPanel>

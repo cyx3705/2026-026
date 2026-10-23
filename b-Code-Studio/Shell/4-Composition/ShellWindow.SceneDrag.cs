@@ -309,7 +309,7 @@ internal partial class ShellWindow
         var back = danger ? "Aurora.Brush.Danger" : "Aurora.Brush.Ink";
         drag.Card.SetResourceReference(Border.BackgroundProperty, back);
         drag.Card.SetResourceReference(Border.BorderBrushProperty, back);
-        drag.Text.SetResourceReference(TextBlock.ForegroundProperty, danger ? "Aurora.Brush.TextOnAccent" : "Aurora.Brush.OnInk");
+        drag.Text.SetResourceReference(TextBlock.ForegroundProperty, "Aurora.Brush.OnInk");
         drag.Text.Text = kind switch
         {
             SceneDropKind.Delete => $"松开删除 · {drag.Scene.Title}",

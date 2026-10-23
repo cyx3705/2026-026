@@ -31,18 +31,11 @@ public sealed class ResponsiveGridContractTests
             // 窄到放不下两列时收成一列，而不是溢出。
             grid.Measure(new Size(260, double.PositiveInfinity));
             Assert.Equal(1, grid.Columns);
-        });
-    }
 
-    [Fact]
-    public void Columns_NeverExceedTheChildCount()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var grid = Build(2, min: 100, gap: 0);
-
-            grid.Measure(new Size(2000, double.PositiveInfinity));
-            Assert.Equal(2, grid.Columns);
+            // 再宽，列数也不超过子元素个数。
+            var two = Build(2, min: 100, gap: 0);
+            two.Measure(new Size(2000, double.PositiveInfinity));
+            Assert.Equal(2, two.Columns);
         });
     }
 

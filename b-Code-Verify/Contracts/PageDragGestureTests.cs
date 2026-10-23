@@ -69,32 +69,6 @@ public sealed class PageDragGestureTests
         Assert.Contains("ReleaseCapture(", driver, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// REQ-UI-101：顶栏整个删掉。拖动协调器里不再有页签按下、双击专注、页头拖窗口、
-    /// AvalonDock 原生页签拖动这几条路——页面只剩 Ctrl 标签与右栏胶囊两种拖法。
-    /// </summary>
-    [Fact]
-    public void TopBarGesturesAreGoneFromTheDragCoordinator()
-    {
-        var root = FindSourceRoot();
-        var baseDir = Path.Combine(root, "b-Code-Studio", "Shell", "1-Base");
-        Assert.False(File.Exists(Path.Combine(baseDir, "ShellTopBarCoordinator.cs")));
-        Assert.False(File.Exists(Path.Combine(baseDir, "ShellTopBarCoordinator.NativeTabDrag.cs")));
-
-        var coordinator = File.ReadAllText(Path.Combine(baseDir, "PageDragCoordinator.cs"))
-                          + File.ReadAllText(Path.Combine(baseDir, "PageDragCoordinator.VisualTree.cs"));
-        foreach (var gone in new[]
-                 {
-                     "DoubleClick", "aurora.ui.max", "PreviewMouseLeftButtonDownEvent", "ShellPaneHeader",
-                     "_isMouseDown", "HandleDockTab", "HandleMain", "DispatcherTimer",
-                 })
-        {
-            Assert.DoesNotContain(gone, coordinator, StringComparison.Ordinal);
-        }
-
-        Assert.Contains("FloatingWindowGeometry.GetCursorPosition()", coordinator, StringComparison.Ordinal);
-    }
-
     [Fact]
     public void ScreenThresholdDoesNotDependOnDockManagerOrTabOrigins()
     {

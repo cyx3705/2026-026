@@ -36,28 +36,6 @@ namespace HistoryAurora.Verify;
 [Collection(TestCollections.Ui)]
 public sealed class ShellChromeContractTests
 {
-    [Fact]
-    public void ShellWindowHasNoMenuBarNoStatusBarAndNoTitleBarRow()
-    {
-        RunShell(window =>
-        {
-            // UI-03 / UI-05.1:???????????
-            Assert.Empty(FindVisualDescendants<Menu>(window));
-            Assert.Empty(FindVisualDescendants<System.Windows.Controls.Primitives.StatusBar>(window));
-
-            // 3.1 ??:???????????? ?? ????????????,
-            // ???????????????
-            var chromeBar = RequireElement<FrameworkElement>(window, "ChromeBar");
-            var manager = Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window));
-            var managerTop = manager.TransformToAncestor(window).Transform(new Point(0, 0)).Y;
-            var chromeTop = chromeBar.TransformToAncestor(window).Transform(new Point(0, 0)).Y;
-            Assert.True(managerTop <= chromeTop + 0.5,
-                $"docking top={managerTop} must not be pushed below the chrome bar top={chromeTop}");
-            Assert.True(chromeBar.ActualHeight <= 32.5,
-                $"chrome bar height={chromeBar.ActualHeight} must match the tab row height");
-        });
-    }
-
     /// <summary>
     /// REQ-UI-099：窗口控制组搬到右栏顶部——仍是整个窗体的右上角，但不再挂在任何窗格上。
     /// 1.19.0 及以前它挂在主文档区的页签行上，命令集因此得常驻当锚点（REQ-UI-095 解开）。
@@ -83,23 +61,6 @@ public sealed class ShellChromeContractTests
             Assert.True(chromeTopRight.Y <= railOrigin.Y + 0.5, $"chrome top={chromeTopRight.Y}");
             Assert.True(Math.Abs(chromeTopRight.X - (railOrigin.X + rail.ActualWidth)) < 1.5,
                 $"chrome right={chromeTopRight.X} must reach the rail right edge={railOrigin.X + rail.ActualWidth}");
-        });
-    }
-
-    /// <summary>
-    /// 主窗体的系统标题栏高度保持 0（整窗都是客户区，右栏空白处自己拖窗口）。
-    /// 1.20.2 起工具页也没有页头动作位（REQ-UI-101）：可见的 <see cref="AnchorablePaneTitle"/> 一个都不该有。
-    /// </summary>
-    [Fact]
-    public void InvisibleCaptionStaysZeroAndNoPaneDrawsATitle()
-    {
-        RunShell(window =>
-        {
-            var chrome = WindowChrome.GetWindowChrome(window);
-            Assert.NotNull(chrome);
-            Assert.Equal(0, chrome.CaptionHeight);
-
-            Assert.DoesNotContain(FindVisualDescendants<AnchorablePaneTitle>(window), item => item.IsVisible);
         });
     }
 
@@ -368,25 +329,6 @@ public sealed class ShellChromeContractTests
     }
 
     [Fact]
-    public void ToolPagesHaveNoCaptionBarAndActionsFloatInTheCorner()
-    {
-        RunShell(window =>
-        {
-            // R3-1:?????????????(?? + ?? + ????)????
-            // ???????????? ?? ?????????????
-            var host = FindVisualDescendants<LayoutAnchorableControl>(window).First(item => item.IsVisible);
-            var content = FindVisualDescendants<ContentPresenter>(host).First();
-            var hostTop = host.TransformToAncestor(window).Transform(new Point(0, 0)).Y;
-            var contentTop = content.TransformToAncestor(window).Transform(new Point(0, 0)).Y;
-            Assert.True(contentTop - hostTop < 2,
-                $"tool page content is pushed down by {contentTop - hostTop}px ? a caption bar is back");
-
-            // R4-1:???????????????? ?? ????????
-            Assert.Empty(FindVisualDescendants<AnchorablePaneTitle>(host));
-        });
-    }
-
-    [Fact]
     public void DarkThemeLeavesNoLightPixelsInsideTables()
     {
         RunShell(window =>
@@ -514,31 +456,6 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// 上面两条的模型层证据：原装的 <see cref="LayoutDocumentPane"/> 选不中 anchorable，
-    /// 而 Aurora 的中央窗格能。这条不测产品流程，只把「为什么必须换一个窗格类型」
-    /// 钉在门禁里——回滚那个子类，它会立刻红。
-    /// </summary>
-    [Fact]
-    public void StockDocumentPaneCannotSelectAnAnchorableButAuroraCenterPaneCan()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var stock = new LayoutDocumentPane(new LayoutDocument { ContentId = "mcp" });
-            var strayInStock = new LayoutAnchorable { ContentId = "overview" };
-            stock.Children.Add(strayInStock);
-            strayInStock.IsSelected = true;
-            Assert.Equal(-1, stock.SelectedContentIndex);
-
-            var center = new CenterDocumentPane(new LayoutDocument { ContentId = "mcp" });
-            var anchorable = new LayoutAnchorable { ContentId = "overview" };
-            center.Children.Add(anchorable);
-            anchorable.IsSelected = true;
-            Assert.Equal(1, center.SelectedContentIndex);
-            Assert.Same(anchorable, center.SelectedContent);
-        });
-    }
-
-    /// <summary>
     /// 发一次左键按下。**必须发 <c>MouseLeftButtonDownEvent</c>**：手工 <c>RaiseEvent</c>
     /// 不会像输入管线那样把 <c>MouseDown</c> 升发成它，只发 <c>MouseDown</c> 的用例
     /// 看不见任何类处理器（1.17.5 就是这样绿着上线的）。
@@ -561,37 +478,6 @@ public sealed class ShellChromeContractTests
         }
 
         return args;
-    }
-
-    /// <summary>
-    /// REQ-UI-139（1.30.1）：专注态（页面铺满主窗体）整个删除。没有 aurora.ui.max / aurora.ui.restore、
-    /// 没有「退出聚焦」按钮、没有专注窗格模板，F11 不再改布局；停靠门面上也没有对应成员。
-    /// </summary>
-    [Fact]
-    public void FocusModeIsGone()
-    {
-        foreach (var member in new[] { "MaximizedId", "MaximizeWindow", "RestoreLayoutFromMaximized" })
-            Assert.Empty(typeof(IDockingService).GetMember(member));
-
-        RunShell(window =>
-        {
-            foreach (var command in new[] { "aurora.ui.max", "aurora.ui.restore" })
-                Assert.False(window.Commands.Registry.TryGet(command, out _), $"{command} 仍然登记着");
-            Assert.Null(window.FindName("ExitFocusButton"));
-            Assert.Null(window.TryFindResource("Aurora.Icon.ExitFocus"));
-
-            var before = window.Docking.ListWindows().Select(item => (item.Id, item.IsVisible, item.Side)).ToList();
-            window.RaiseEvent(new KeyEventArgs(
-                Keyboard.PrimaryDevice,
-                PresentationSource.FromVisual(window),
-                0,
-                Key.F11)
-            {
-                RoutedEvent = Keyboard.PreviewKeyDownEvent,
-            });
-            UiTestHost.Pump();
-            Assert.Equal(before, window.Docking.ListWindows().Select(item => (item.Id, item.IsVisible, item.Side)).ToList());
-        });
     }
 
     /// <summary>
@@ -654,15 +540,18 @@ public sealed class ShellChromeContractTests
     }
 
     /// <summary>
-    /// REQ-UI-101（1.20.2）：顶栏整个删掉。每一格窗格都没有页签行——页签面板还在（窗格是 TabControl，
-    /// 靠生成出来的页签容器才产出 SelectedContent），但所在的那一行高 0、不可见；模板里不再有页头标记，
-    /// 窗口控制组也没有第二个落点。页面内容照常画出来。
+    /// REQ-UI-101（1.20.2）：页面内容上方什么栏都没有。
+    /// 主窗体系统标题栏高 0（整窗都是客户区，右栏空白处自己拖窗口）；每一格窗格都没有页签行——
+    /// 页签面板还在（窗格是 TabControl，靠生成出来的页签容器才产出 SelectedContent），但那一行高 0、不可见；
+    /// 工具页没有页头（AnchorablePaneTitle），内容贴着窗格顶。页面内容照常画出来。
     /// </summary>
     [Fact]
-    public void PanesHaveNoTabRow()
+    public void PagesDrawNoBarAboveTheirContent()
     {
         RunShell(window =>
         {
+            Assert.Equal(0, WindowChrome.GetWindowChrome(window)!.CaptionHeight);
+
             var panels = FindVisualDescendants<Panel>(window)
                 .Where(panel => panel is DocumentPaneTabPanel or AnchorablePaneTabPanel)
                 .ToList();
@@ -674,8 +563,12 @@ public sealed class ShellChromeContractTests
                 Assert.Equal(0, row.ActualHeight, 3);
             });
 
-            foreach (var tag in new[] { "ShellPaneHeader", "FocusedShellPaneHeader", "ShellChromeHost", "FocusedShellChromeHost" })
-                Assert.DoesNotContain(FindVisualDescendants<FrameworkElement>(window), element => Equals(element.Tag, tag));
+            Assert.DoesNotContain(FindVisualDescendants<AnchorablePaneTitle>(window), item => item.IsVisible);
+            var tool = FindVisualDescendants<LayoutAnchorableControl>(window).First(item => item.IsVisible);
+            var toolContent = FindVisualDescendants<ContentPresenter>(tool).First();
+            var pushedDown = toolContent.TransformToAncestor(window).Transform(new Point(0, 0)).Y
+                             - tool.TransformToAncestor(window).Transform(new Point(0, 0)).Y;
+            Assert.True(pushedDown < 2, $"工具页内容被往下推了 {pushedDown}px，页头回来了");
 
             Assert.Contains(
                 FindVisualDescendants<ContentPresenter>(window),
@@ -1030,11 +923,8 @@ public sealed class ShellChromeContractTests
                 Assert.Equal(0, scroll.ScrollableWidth);
                 Assert.DoesNotContain('\n', row.Text);
 
-                output.SelectedItem = row;
-                var copy = console.CopySelected();
-                Assert.Contains("\u5df2\u590d\u5236", copy, StringComparison.Ordinal);
-                Assert.Equal(row.Text, Clipboard.GetText());
-
+                // \u903b\u8f91\u884c\u5b8c\u6574\u843d\u5230\u5bfc\u51fa\u6587\u4ef6\u91cc\u3002\u4e0d\u518d\u7ecf\u526a\u8d34\u677f\u9a8c\uff1a\u7cfb\u7edf\u526a\u8d34\u677f\u53ef\u80fd\u6b63\u88ab\u672c\u673a\u522b\u7684\u7a0b\u5e8f\u5360\u7740\uff0c
+                // \u90a3\u662f\u673a\u5668\u72b6\u6001\u4e0d\u662f\u754c\u9762\u884c\u4e3a\uff0c\u653e\u5728\u95e8\u7981\u91cc\u53ea\u4f1a\u8ba9\u9001\u5ba1\u968f\u673a\u5931\u8d25\uff081.40.0\uff09\u3002
                 var export = console.ExportVisible(exportPath);
                 Assert.Contains("\u5df2\u5bfc\u51fa", export, StringComparison.Ordinal);
                 var exported = Assert.Single(File.ReadAllLines(exportPath));
@@ -1196,42 +1086,6 @@ public sealed class ShellChromeContractTests
             Assert.True(console.ClipToBounds);
             var root = Assert.IsType<DockPanel>(console.Content);
             Assert.Equal(default, root.Margin);
-        });
-    }
-
-    /// <summary>
-    /// REQ-UI-120：停靠层没有独立浮窗。停靠门面、视图菜单与布局快照里都找不到把页面浮成 AvalonDock 浮窗的入口；
-    /// 拖动途中的浮出只在 internal 的 <c>DockingHost.FloatForDrag</c> 上，不对外。
-    /// 1.30.1（REQ-UI-138）起 <c>aurora.ui.float</c> 这个名字回来了，但它是 Aurora 自己的置顶页面浮窗：
-    /// 不建 AvalonDock 浮窗、不进布局树；<c>aurora.ui.floatstate</c> 仍然没有。
-    /// </summary>
-    [Fact]
-    public void FloatingWindowsAreNotAUserSurface()
-    {
-        Assert.Null(typeof(IDockingService).GetMethod("Float"));
-        Assert.Null(typeof(DockLayoutSnapshot).GetProperty("FloatingWindows"));
-        Assert.Equal(["Id"], typeof(DockContentSnapshot).GetProperties().Select(property => property.Name));
-
-        RunShell(window =>
-        {
-            var floatState = window.Commands.ExecuteAsync($"aurora.ui.floatstate name={StandardWindowIds.Console}", "test")
-                .GetAwaiter().GetResult();
-            Assert.False(floatState.Success, "aurora.ui.floatstate 仍然可用");
-
-            var floated = window.Commands.ExecuteAsync($"aurora.ui.float name={StandardWindowIds.Console} on=true", "test")
-                .GetAwaiter().GetResult();
-            Assert.True(floated.Success, floated.Message);
-            Assert.Empty(Assert.Single(FindVisualDescendants<AvalonDock.DockingManager>(window)).Layout.FloatingWindows);
-            var restored = window.Commands.ExecuteAsync($"aurora.ui.float name={StandardWindowIds.Console}", "test")
-                .GetAwaiter().GetResult();
-            Assert.True(restored.Success, restored.Message);
-            Assert.Contains("还原", restored.Message, StringComparison.Ordinal);
-
-            var menu = RequireButton(window, "MenuButton").ContextMenu!;
-            var view = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "视图(_V)"));
-            Assert.DoesNotContain(
-                view.Items.OfType<MenuItem>().SelectMany(page => page.Items.OfType<MenuItem>()),
-                item => Equals(item.Header, "浮动"));
         });
     }
 

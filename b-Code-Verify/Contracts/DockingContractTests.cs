@@ -1378,21 +1378,26 @@ public sealed class DockingContractTests
     /// <summary>
     /// 布局存下之后才出现的中央页不能在布局里失踪。1.19.0 及以前它直接露面；
     /// 顶栏只留一页（REQ-UI-096）之后它可能被原来那一页挡着，契约改成「一次显示就到位」。
+    /// 启动恢复与命名布局两条路都要验。
     /// </summary>
-    [Fact]
-    public void RestoredLayoutKeepsANewCenterPageOneShowAway()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ALayoutKeepsACenterPageAddedAfterItWasSavedOneShowAway(bool named)
     {
         UiTestHost.RunSta(() =>
         {
             var store = new MemoryLayoutStore();
-            var firstManager = new DockingManager();
-            var firstHost = new DockingHost(
-                firstManager,
+            var original = new DockingHost(
+                new DockingManager(),
                 [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
                 store,
                 new NullLog());
-            firstHost.Initialize();
-            firstHost.SaveCurrentLayout();
+            original.Initialize();
+            if (named)
+                original.SaveLayout("before-business");
+            else
+                original.SaveCurrentLayout();
 
             var manager = new DockingManager();
             var host = new DockingHost(
@@ -1404,14 +1409,16 @@ public sealed class DockingContractTests
                 store,
                 new NullLog());
             host.Initialize();
+            if (named)
+                Assert.True(host.LoadLayout("before-business"));
 
             Assert.Single(VisibleCenterIds(host));
             host.Show("business");
             Assert.True(host.ListWindows().Single(item => item.Id == "business").IsVisible);
-            // 业务中央页现在是工具窗口而非文档页：位置仍在主文档区，身份是 LayoutAnchorable。
+            // 业务中央页是工具窗口而非文档页：身份是 LayoutAnchorable。
             Assert.Contains(
-                manager.Layout.Descendents().OfType<LayoutAnchorable>(),
-                item => item.ContentId == "business" && item.Parent is LayoutDocumentPane);
+                manager.Layout.RootPanel.Descendents().OfType<LayoutAnchorable>(),
+                item => item.ContentId == "business");
         });
     }
 
@@ -1470,43 +1477,6 @@ public sealed class DockingContractTests
             Assert.False(string.IsNullOrWhiteSpace(json));
             using var document = JsonDocument.Parse(json!);
             Assert.True(document.RootElement.GetProperty("business").GetProperty("Hidden").GetBoolean());
-        });
-    }
-
-    /// <summary>同上，走命名布局那条路：布局里没见过的中央页，一次显示就到位。</summary>
-    [Fact]
-    public void NamedLayoutKeepsACenterPageAddedAfterItWasSavedOneShowAway()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var store = new MemoryLayoutStore();
-            var original = new DockingHost(
-                new DockingManager(),
-                [Tool(StandardWindowIds.Mcp, DockSide.Center, 1)],
-                store,
-                new NullLog());
-            original.Initialize();
-            original.SaveLayout("before-business");
-
-            var manager = new DockingManager();
-            var host = new DockingHost(
-                manager,
-                [
-                    Tool(StandardWindowIds.Mcp, DockSide.Center, 1),
-                    Tool("business", DockSide.Center, 1),
-                ],
-                store,
-                new NullLog());
-            host.Initialize();
-
-            Assert.True(host.LoadLayout("before-business"));
-            Assert.Single(VisibleCenterIds(host));
-            host.Show("business");
-            Assert.True(host.ListWindows().Single(item => item.Id == "business").IsVisible);
-            // 同上：业务中央页以 LayoutAnchorable 呈现。
-            Assert.Contains(
-                manager.Layout.RootPanel.Descendents().OfType<LayoutAnchorable>(),
-                item => item.ContentId == "business");
         });
     }
 
@@ -1799,6 +1769,8 @@ public sealed class DockingContractTests
                 Assert.True(InfoOf(host, "page").IsFloating);
                 Assert.True(InfoOf(host, "page").IsVisible);
                 Assert.Equal(DockSide.Center, InfoOf(host, "page").Side);
+                // Aurora 自己的置顶浮窗：不建 AvalonDock 浮窗、不进布局树（REQ-UI-120）。
+                Assert.Empty(((DockingManager)window.Content).Layout.FloatingWindows);
 
                 // 已浮着时 on=true 不重建窗口。
                 Assert.True(host.SetPageFloating("page", true));

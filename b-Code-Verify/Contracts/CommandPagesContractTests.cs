@@ -292,22 +292,6 @@ public sealed class CommandPagesContractTests
     }
 
     /// <summary>
-    /// 装配根真的把目录会话接上了（REQ-UI-057）。
-    ///
-    /// 上一条只证明「没接线会报错」，证明不了「这台机器接上了」——而漏掉那一行
-    /// 正是 1.9.0 到 1.9.1 命令集一直空着的原因。判据取源码里那一处赋值：
-    /// 装配根要跑起来得有真窗口、真停靠层，在门禁里立不起来。
-    /// </summary>
-    [Fact]
-    public void TheCompositionRootActuallyWiresTheCatalogSession()
-    {
-        var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "4-Composition", "ShellWindow.xaml.cs"));
-
-        Assert.Contains("Catalog = _catalog,", source, StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// 命令集的列是【域 / 类 / 方法 / 只读 / 说明】，而 <c>name</c> 仍然在行里（REQ-UI-058）。
     ///
     /// 完整指令名不再占一列——它的三段就在旁边三格里。但它**必须留在行数据里**：

@@ -6,15 +6,19 @@ using Xunit;
 
 namespace HistoryAurora.Verify.ModuleSmoke;
 
-/// <summary>VERIFY-MODULE-LOAD：模块能被装载并取得宿主上下文。</summary>
+/// <summary>
+/// VERIFY-MODULE-LOAD：模块能被宿主发现、装载并取得宿主上下文。送审时与契约测试一起跑（1.40.0）。
+/// </summary>
 public sealed class ModuleLoadTests
 {
+    /// <summary>装配根接得住宿主上下文；宿主没来得及 Attach 就卸载时，Dispose 也不抛。</summary>
     [Fact]
-    public void CompositionImplementsHostContextContract()
+    public void CompositionTakesTheHostContextAndDisposesWithoutAttach()
     {
         var composition = new AuroraBusinessComposition();
 
         Assert.IsAssignableFrom<HistoryVulcan.Core.Modules.IModuleContextAware>(composition);
+        composition.Dispose();
     }
 
     /// <summary>
@@ -43,12 +47,6 @@ public sealed class ModuleLoadTests
         // AvalonDock 要随包走：模块的装载上下文只在包目录内解析依赖。
         var deps = root.GetProperty("deps").EnumerateArray().Select(item => item.GetString()).ToList();
         Assert.Contains("AvalonDock.dll", deps);
-    }
-
-    [Fact]
-    public void DisposeWithoutAttachDoesNotThrow()
-    {
-        new AuroraBusinessComposition().Dispose();
     }
 
     [Fact]

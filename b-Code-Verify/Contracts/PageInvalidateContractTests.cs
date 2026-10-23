@@ -74,34 +74,22 @@ public sealed class PageInvalidateContractTests
         });
     }
 
-    [Fact]
-    public void ReloadOwner_AcceptsTheModuleNameFromTheCommandExample()
+    /// <summary>指令示例里写的模块名与裸域名都认。</summary>
+    [Theory]
+    [InlineData("HistoryMercury")]
+    [InlineData("mercury")]
+    public void ReloadOwner_AcceptsTheModuleNameOrThePlainDomain(string owner)
     {
         // 渲染要建真的 WPF 控件，因此整条路径必须跑在 STA 上。
         UiTestHost.RunSta(() =>
         {
             var (loader, docking) = Loader();
 
-            var report = loader.ReloadOwnerAsync("HistoryMercury").GetAwaiter().GetResult();
+            var report = loader.ReloadOwnerAsync(owner).GetAwaiter().GetResult();
 
             Assert.Empty(report.Skipped);
             Assert.Equal(1, report.PagesRegistered);
             Assert.Equal("dock.manager", Assert.Single(docking.Registered));
-        });
-    }
-
-    [Fact]
-    public void ReloadOwner_AlsoAcceptsThePlainDomain()
-    {
-        UiTestHost.RunSta(() =>
-        {
-            var (loader, docking) = Loader();
-
-            var report = loader.ReloadOwnerAsync("mercury").GetAwaiter().GetResult();
-
-            Assert.Empty(report.Skipped);
-            Assert.Equal(1, report.PagesRegistered);
-            Assert.Single(docking.Registered);
         });
     }
 

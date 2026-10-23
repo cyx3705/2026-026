@@ -170,7 +170,7 @@ public sealed class RightEdgeAndThemeContractTests
             // 表格可点列与链接用 Accent 当字色:卡片与条带上都要过 AA 4.5
             Assert.True(Contrast(accent, surface) >= 4.5, $"Accent/Surface {Contrast(accent, surface):F2}");
             Assert.True(Contrast(accent, alt) >= 4.5, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
-            Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.TextOnAccent"), accent) >= 4.5, "主按钮白字");
+            Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.OnInk"), accent) >= 4.5, "主按钮白字");
             Assert.True(Contrast(secondary, alt) >= 4.5, $"TextSecondary/SurfaceAlt {Contrast(secondary, alt):F2}");
             // 三层台阶:底部最亮、页面次之、控制面板最深,方向单调
             Assert.True(Luminance(canvas) > Luminance(surface), $"Canvas {canvas} 应比 Surface {surface} 亮");
@@ -178,8 +178,9 @@ public sealed class RightEdgeAndThemeContractTests
             // 小台阶:每层差不超过 1.10:1(深色两级是 1.03 / 1.08)
             Assert.True(Contrast(canvas, surface) <= 1.10, $"Canvas/Surface {Contrast(canvas, surface):F3}");
             Assert.True(Contrast(surface, alt) <= 1.10, $"Surface/SurfaceAlt {Contrast(surface, alt):F3}");
-            // 文字不能是冷色:红通道不低于蓝通道(旧值 #1F2328 / #6B7280 都偏蓝)
-            foreach (var key in new[] { "Aurora.Brush.TextPrimary", "Aurora.Brush.TextSecondary", "Aurora.Brush.TextDisabled" })
+            // 次要文字不能是冷色:红通道不低于蓝通道(旧值 #6B7280 偏蓝)。
+            // 正文不在此列:1.40.0 起浅色正文就是深色背景 #1A1D1C(亮暗对调),由 InkBlockContractTests 判。
+            foreach (var key in new[] { "Aurora.Brush.TextSecondary", "Aurora.Brush.TextDisabled" })
             {
                 var c = Token(LightTokensUri, key);
                 Assert.True(c.R >= c.B, $"{key} 偏冷:{c}");

@@ -15,27 +15,15 @@ namespace HistoryAurora.Verify;
 /// </summary>
 public sealed class SwimlaneLayoutContractTests
 {
-    [Fact]
-    public void Parse_RejectsUnsupportedSchemaVersion()
+    [Theory]
+    [InlineData("""{ "schemaVersion": 7, "nodes": [] }""", "schemaVersion=7")]
+    [InlineData("""{ "schemaVersion": 1, "nodes": [ { "id": "a" }, { "id": "a" } ] }""", "a")]
+    public void Parse_RejectsUnsupportedVersionAndDuplicateNodeIds(string json, string named)
     {
-        var parsed = SwimlaneReader.Read("""{ "schemaVersion": 7, "nodes": [] }""");
+        var parsed = SwimlaneReader.Read(json);
 
         Assert.False(parsed.Ok);
-        Assert.Contains("schemaVersion=7", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsDuplicateNodeIds()
-    {
-        var parsed = SwimlaneReader.Read("""
-            {
-              "schemaVersion": 1,
-              "nodes": [ { "id": "a" }, { "id": "a" } ]
-            }
-            """);
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("a", parsed.Error);
+        Assert.Contains(named, parsed.Error);
     }
 
     [Fact]

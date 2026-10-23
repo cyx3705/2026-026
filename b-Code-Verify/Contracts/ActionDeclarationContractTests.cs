@@ -50,59 +50,39 @@ public sealed class ActionDeclarationContractTests
         Assert.Equal("HistoryDemo", action.Owner);
     }
 
-    [Fact]
-    public void Parse_RejectsUnsupportedSchemaVersion()
+    /// <summary>
+    /// 版本不对、冒名（否则一个模块可以借声明抢注别人的动作）、缺指令、id 重复：一律整份作废，
+    /// 报错文本点名出错的那一处。
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(InvalidDeclarations))]
+    public void Parse_RejectsInvalidDeclarationWholesale(string json, string owner, string named)
     {
-        var parsed = ActionDeclarationReader.Read(
-            MinimalActions.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 9"),
-            "HistoryDemo");
+        var parsed = ActionDeclarationReader.Read(json, owner);
 
         Assert.False(parsed.Ok);
-        Assert.Contains("schemaVersion=9", parsed.Error);
+        Assert.Contains(named, parsed.Error);
     }
 
-    [Fact]
-    public void Parse_RejectsOwnerMismatch()
+    public static TheoryData<string, string, string> InvalidDeclarations() => new()
     {
-        // 否则一个模块可以借声明抢注别人的动作，而按钮那一侧完全看不出换了主人。
-        var parsed = ActionDeclarationReader.Read(MinimalActions, "HistoryOther");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("HistoryOther", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsActionWithoutCommand()
-    {
-        var parsed = ActionDeclarationReader.Read("""
+        { MinimalActions.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 9"), "HistoryDemo", "schemaVersion=9" },
+        { MinimalActions, "HistoryOther", "HistoryOther" },
+        {
+            """{ "schemaVersion": 1, "owner": "HistoryDemo", "actions": [ { "id": "demo.noop", "title": "空" } ] }""",
+            "HistoryDemo", "demo.noop"
+        },
+        {
+            """
             {
               "schemaVersion": 1,
               "owner": "HistoryDemo",
-              "actions": [ { "id": "demo.noop", "title": "空" } ]
+              "actions": [ { "id": "demo.a", "command": "demo.x" }, { "id": "demo.a", "command": "demo.y" } ]
             }
-            """, "HistoryDemo");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("demo.noop", parsed.Error);
-    }
-
-    [Fact]
-    public void Parse_RejectsDuplicateIds()
-    {
-        var parsed = ActionDeclarationReader.Read("""
-            {
-              "schemaVersion": 1,
-              "owner": "HistoryDemo",
-              "actions": [
-                { "id": "demo.a", "command": "demo.x" },
-                { "id": "demo.a", "command": "demo.y" }
-              ]
-            }
-            """, "HistoryDemo");
-
-        Assert.False(parsed.Ok);
-        Assert.Contains("demo.a", parsed.Error);
-    }
+            """,
+            "HistoryDemo", "demo.a"
+        },
+    };
 
     [Fact]
     public async Task Reload_CollectsDeclarationsAndFlagsBrokenCommands()

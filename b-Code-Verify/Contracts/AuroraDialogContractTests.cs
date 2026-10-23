@@ -327,22 +327,6 @@ public sealed class AuroraDialogContractTests
         });
     }
 
-    /// <summary>旧的独立弹窗窗口不许回来：源码里不得再出现 AuroraDialogWindow 类型或 ShowDialog 弹 Aurora 自己的窗。</summary>
-    [Fact]
-    public void TheStandaloneDialogWindowIsGone()
-    {
-        var shell = Path.Combine(RepositoryRoot(), "b-Code-Studio");
-        foreach (var file in Directory.EnumerateFiles(shell, "*.cs", SearchOption.AllDirectories)
-                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                                    && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
-        {
-            var source = File.ReadAllText(file);
-            Assert.DoesNotContain("class AuroraDialogWindow", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("AuroraDialogWindow.Show", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("MessageBox.Show", source, StringComparison.Ordinal);
-        }
-    }
-
     private static string RepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

@@ -34,6 +34,8 @@ public sealed class InkBlockContractTests
                 var ink = Token(self, "Aurora.Brush.Ink");
                 Assert.Equal(Token(self, "Aurora.Brush.TextPrimary"), ink);
                 Assert.Equal(Token(self, "Aurora.Brush.Canvas"), Token(self, "Aurora.Brush.OnInk"));
+                // 1.40.0 亮暗对调:本主题的正文色(= 墨色)就是另一套主题的背景
+                Assert.Equal(Token(other, "Aurora.Brush.Canvas"), ink);
                 Assert.Equal(Token(other, "Aurora.Brush.Accent"), Token(self, "Aurora.Brush.AccentOnInk"));
                 Assert.Equal(Token(other, "Aurora.Brush.TextSecondary"), Token(self, "Aurora.Brush.TextSecondaryOnInk"));
 
