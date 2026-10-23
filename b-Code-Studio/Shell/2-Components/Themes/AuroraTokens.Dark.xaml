@@ -11,9 +11,9 @@
 
     <!-- ================================================================ 颜色 -->
 
-    <!-- 亮暗对调(1.40.0),见浅色令牌:深色的背景是暗、文字与反色块是亮 -->
+    <!-- 亮暗对调(1.40.0),见浅色令牌:深色的背景是暗、文字与反色块是浅色的控制面板色 -->
     <Color x:Key="Aurora.Color.Canvas">#1A1D1C</Color>
-    <Color x:Key="Aurora.Color.Text">#FBFAF7</Color>
+    <Color x:Key="Aurora.Color.Text">#EBE9E4</Color>
     <Color x:Key="Aurora.Color.Surface">#1D201F</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#242625</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#2A2D2C</Color>

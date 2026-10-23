@@ -34,13 +34,14 @@
     <!-- ================================================================ 颜色 -->
 
     <!--
-        1.40.0 颜色合并:亮 = 浅色背景 #FBFAF7,暗 = 深色背景 #1A1D1C,两套主题只是对调。
-        浅色:背景 亮、文字 暗、反色块 暗、反色块文字 亮;深色反过来。
-        所以 Canvas = OnInk,TextPrimary = Ink,且本主题的 Canvas 就是另一套主题的 TextPrimary。
+        1.40.0 颜色合并,两套主题对调:
+        浅色:背景 = 亮 #FBFAF7,文字与反色块 = 深色的控制面板色 #242625,反色块上的字 = 本主题背景;深色反过来
+        (背景 #1A1D1C,文字与反色块 = 浅色的控制面板色 #EBE9E4)。文字不取另一套的背景,是为了对比度小一些。
+        所以 Canvas = OnInk,TextPrimary = Ink,且本主题的 TextPrimary 就是另一套主题的 SurfaceAlt。
         被多处共用的色值只在 Aurora.Color.* 写一次,画刷与下面 AvalonDock 键都引用它。
     -->
     <Color x:Key="Aurora.Color.Canvas">#FBFAF7</Color>
-    <Color x:Key="Aurora.Color.Text">#1A1D1C</Color>
+    <Color x:Key="Aurora.Color.Text">#242625</Color>
     <Color x:Key="Aurora.Color.Surface">#F3F1EC</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#EBE9E4</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#E5E3DE</Color>
