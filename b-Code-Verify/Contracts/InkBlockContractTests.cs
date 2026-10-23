@@ -21,21 +21,19 @@ public sealed class InkBlockContractTests
         new("/HistoryAurora;component/Themes/AuroraTokens.Dark.xaml", UriKind.Relative);
 
     /// <summary>
-    /// 墨色令牌只是别名，不引入新颜色。1.40.0 起文字只有一种颜色（原次要文字色，对比度较小）：
-    /// Ink = 正文 = 次要文字，OnInk = 本主题底色，TextSecondaryOnInk 取另一套主题的文字色。反白字要过 AA。
+    /// 1.40.0 起文字只有一种颜色；OnInk = 本主题底色。1.42.0 起深浅分开设定：墨色块与表头分隔线
+    /// 各主题单独定值，不拿另一套主题的颜色来对齐。反白字要过 AA。
     /// </summary>
     [Fact]
     public void InkTokensAreAliasesAndReadable()
     {
         UiTestHost.RunSta(() =>
         {
-            foreach (var (self, other) in new[] { (LightTokensUri, DarkTokensUri), (DarkTokensUri, LightTokensUri) })
+            foreach (var self in new[] { LightTokensUri, DarkTokensUri })
             {
                 var ink = Token(self, "Aurora.Brush.Ink");
-                Assert.Equal(Token(self, "Aurora.Brush.TextPrimary"), ink);
-                Assert.Equal(Token(self, "Aurora.Brush.TextSecondary"), ink);
+                Assert.Equal(Token(self, "Aurora.Brush.TextPrimary"), Token(self, "Aurora.Brush.TextSecondary"));
                 Assert.Equal(Token(self, "Aurora.Brush.Canvas"), Token(self, "Aurora.Brush.OnInk"));
-                Assert.Equal(Token(other, "Aurora.Brush.TextSecondary"), Token(self, "Aurora.Brush.TextSecondaryOnInk"));
 
                 Assert.True(Contrast(Token(self, "Aurora.Brush.OnInk"), ink) >= 4.5, $"{self} 反白字");
             }

@@ -168,23 +168,18 @@ public sealed class RightEdgeAndThemeContractTests
             var secondary = Token(LightTokensUri, "Aurora.Brush.TextSecondary");
 
             // 表格可点列与链接用 Accent 当字色:卡片上要过 AA 4.5。
-            // 控制面板上的金色只是悬停与编号,1.41.0 起面板色对齐另一套主题的墨色块后按非正文的 3:1 判。
             Assert.True(Contrast(accent, surface) >= 4.5, $"Accent/Surface {Contrast(accent, surface):F2}");
-            Assert.True(Contrast(accent, alt) >= 3.0, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
+            Assert.True(Contrast(accent, alt) >= 4.5, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
             Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.OnInk"), accent) >= 4.5, "主按钮白字");
             Assert.True(Contrast(secondary, alt) >= 4.5, $"TextSecondary/SurfaceAlt {Contrast(secondary, alt):F2}");
             // 三层台阶:底部最亮、页面次之、控制面板最深,方向单调
             Assert.True(Luminance(canvas) > Luminance(surface), $"Canvas {canvas} 应比 Surface {surface} 亮");
             Assert.True(Luminance(surface) > Luminance(alt), $"Surface {surface} 应比 SurfaceAlt {alt} 亮");
-            // 1.41.0 起台阶不再限幅:面板色 = 另一套主题的墨色块,页面底色取背景到面板的 45%(用户从样张选定)。
             // 发丝线 / 悬停要比页面再深一级,否则页面里的分隔线看不见。
+            // 1.42.0 起深浅分开设定,不再断言一套主题的颜色等于另一套的颜色。
             Assert.True(Luminance(surface) > Luminance(Token(LightTokensUri, "Aurora.Brush.Hairline")),
                 "Hairline 应比 Surface 深");
-            // 控制面板色 = 另一套主题的墨色块
-            Assert.Equal(Token(DarkTokensUri, "Aurora.Brush.Ink"), alt);
-            Assert.Equal(Token(LightTokensUri, "Aurora.Brush.Ink"), Token(DarkTokensUri, "Aurora.Brush.SurfaceAlt"));
-            // 次要文字不能是冷色:红通道不低于蓝通道(旧值 #6B7280 偏蓝)。
-            // 正文不在此列:1.40.0 起浅色正文就是深色背景 #1A1D1C(亮暗对调),由 InkBlockContractTests 判。
+            // 文字不能是冷色:红通道不低于蓝通道(旧值 #6B7280 偏蓝)。
             foreach (var key in new[] { "Aurora.Brush.TextSecondary", "Aurora.Brush.TextDisabled" })
             {
                 var c = Token(LightTokensUri, key);

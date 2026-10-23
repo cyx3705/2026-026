@@ -1,4 +1,4 @@
-using HistoryAurora.Shell.Neutral.Storage;
+﻿using HistoryAurora.Shell.Neutral.Storage;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -71,7 +71,7 @@ public sealed class AuroraDialogContractTests
                 dark: true);
 
             var surface = Assert.IsType<SolidColorBrush>(dialog.TryFindResource("Aurora.Brush.Surface"));
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#232320")!, surface.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#1D201F")!, surface.Color);
         });
     }
 
