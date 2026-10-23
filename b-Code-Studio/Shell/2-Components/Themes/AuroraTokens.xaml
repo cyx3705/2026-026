@@ -35,14 +35,15 @@
 
     <!--
         1.40.0 颜色合并:文字只有一种颜色(浅色 #38352F / 深色 #DAD7CE)——从原次要文字色 #6A6458 / #ACA593 往高对比方向调了四档(用户从七档样张里选的第 4 档,对背景约 11:1),同色相。
-        正文 = 次要文字 = 反色块;反色块上的字 = 本主题背景(浅色 #FBFAF7 / 深色 #1A1D1C)。
+        正文 = 次要文字 = 反色块;反色块上的字 = 本主题背景(浅色 #FBFAF7 / 深色 #121414)。
         所以 TextPrimary = TextSecondary = Ink,Canvas = OnInk。
+        1.41.0:控制面板色(SurfaceAlt)对齐另一套主题的墨色块——浅色 #DAD7CE、深色 #38352F;深色背景回到原来的 #121414。
         被多处共用的色值只在 Aurora.Color.* 写一次,画刷与下面 AvalonDock 键都引用它。
     -->
     <Color x:Key="Aurora.Color.Canvas">#FBFAF7</Color>
     <Color x:Key="Aurora.Color.Text">#38352F</Color>
     <Color x:Key="Aurora.Color.Surface">#F3F1EC</Color>
-    <Color x:Key="Aurora.Color.SurfaceAlt">#EBE9E4</Color>
+    <Color x:Key="Aurora.Color.SurfaceAlt">#DAD7CE</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#E5E3DE</Color>
     <Color x:Key="Aurora.Color.SurfacePressed">#DDD9D1</Color>
     <Color x:Key="Aurora.Color.AccentSoft">#F4E9CF</Color>
