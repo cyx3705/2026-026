@@ -71,7 +71,7 @@ public sealed class AuroraDialogContractTests
                 dark: true);
 
             var surface = Assert.IsType<SolidColorBrush>(dialog.TryFindResource("Aurora.Brush.Surface"));
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#1D201F")!, surface.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#232320")!, surface.Color);
         });
     }
 

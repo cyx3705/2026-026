@@ -14,9 +14,9 @@
     <!-- 1.40.0,见浅色令牌:文字只有一种颜色(原次要文字色),反色块同色 -->
     <Color x:Key="Aurora.Color.Canvas">#121414</Color>
     <Color x:Key="Aurora.Color.Text">#DAD7CE</Color>
-    <Color x:Key="Aurora.Color.Surface">#1D201F</Color>
+    <Color x:Key="Aurora.Color.Surface">#232320</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#38352F</Color>
-    <Color x:Key="Aurora.Color.SurfaceHover">#2A2D2C</Color>
+    <Color x:Key="Aurora.Color.SurfaceHover">#2E2C28</Color>
     <Color x:Key="Aurora.Color.SurfacePressed">#343736</Color>
     <Color x:Key="Aurora.Color.AccentSoft">#33342A</Color>
 

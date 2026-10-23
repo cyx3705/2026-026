@@ -176,8 +176,10 @@ public sealed class RightEdgeAndThemeContractTests
             // 三层台阶:底部最亮、页面次之、控制面板最深,方向单调
             Assert.True(Luminance(canvas) > Luminance(surface), $"Canvas {canvas} 应比 Surface {surface} 亮");
             Assert.True(Luminance(surface) > Luminance(alt), $"Surface {surface} 应比 SurfaceAlt {alt} 亮");
-            // 底部到页面是小台阶;页面到控制面板不再限幅(面板色 = 另一套主题的墨色块,1.41.0)
-            Assert.True(Contrast(canvas, surface) <= 1.10, $"Canvas/Surface {Contrast(canvas, surface):F3}");
+            // 1.41.0 起台阶不再限幅:面板色 = 另一套主题的墨色块,页面底色取背景到面板的 45%(用户从样张选定)。
+            // 发丝线 / 悬停要比页面再深一级,否则页面里的分隔线看不见。
+            Assert.True(Luminance(surface) > Luminance(Token(LightTokensUri, "Aurora.Brush.Hairline")),
+                "Hairline 应比 Surface 深");
             // 控制面板色 = 另一套主题的墨色块
             Assert.Equal(Token(DarkTokensUri, "Aurora.Brush.Ink"), alt);
             Assert.Equal(Token(LightTokensUri, "Aurora.Brush.Ink"), Token(DarkTokensUri, "Aurora.Brush.SurfaceAlt"));
