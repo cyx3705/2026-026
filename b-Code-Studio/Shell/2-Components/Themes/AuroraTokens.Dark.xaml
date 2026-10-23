@@ -13,7 +13,7 @@
 
     <!-- 1.40.0,见浅色令牌:文字只有一种颜色(原次要文字色),反色块同色 -->
     <Color x:Key="Aurora.Color.Canvas">#1A1D1C</Color>
-    <Color x:Key="Aurora.Color.Text">#BCB6A8</Color>
+    <Color x:Key="Aurora.Color.Text">#DAD7CE</Color>
     <Color x:Key="Aurora.Color.Surface">#1D201F</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#242625</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#2A2D2C</Color>
@@ -44,7 +44,7 @@
     <!-- 墨色与反白(REQ-UI-132),见浅色令牌。深色里墨色就是正文色,墨色条随之变成亮条 -->
     <SolidColorBrush x:Key="Aurora.Brush.Ink" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.OnInk" Color="{StaticResource Aurora.Color.Canvas}" />
-    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#5A554B" />
+    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#38352F" />
 
     <!-- ================================================================ 形状 -->
 
