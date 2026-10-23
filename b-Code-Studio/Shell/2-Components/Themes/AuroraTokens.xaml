@@ -34,13 +34,13 @@
     <!-- ================================================================ 颜色 -->
 
     <!--
-        1.40.0 颜色合并:文字只有一种颜色,就是原来设计过、对比度较小的次要文字色(浅色 #6A6458 / 深色 #ACA593)。
+        1.40.0 颜色合并:文字只有一种颜色(浅色 #5A554B / 深色 #BCB6A8)——从原次要文字色 #6A6458 / #ACA593 往高对比方向调了一档,同色相。
         正文 = 次要文字 = 反色块;反色块上的字 = 本主题背景(浅色 #FBFAF7 / 深色 #1A1D1C)。
         所以 TextPrimary = TextSecondary = Ink,Canvas = OnInk。
         被多处共用的色值只在 Aurora.Color.* 写一次,画刷与下面 AvalonDock 键都引用它。
     -->
     <Color x:Key="Aurora.Color.Canvas">#FBFAF7</Color>
-    <Color x:Key="Aurora.Color.Text">#6A6458</Color>
+    <Color x:Key="Aurora.Color.Text">#5A554B</Color>
     <Color x:Key="Aurora.Color.Surface">#F3F1EC</Color>
     <Color x:Key="Aurora.Color.SurfaceAlt">#EBE9E4</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#E5E3DE</Color>
@@ -79,7 +79,7 @@
     -->
     <SolidColorBrush x:Key="Aurora.Brush.Ink" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.OnInk" Color="{StaticResource Aurora.Color.Canvas}" />
-    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#ACA593" />
+    <SolidColorBrush x:Key="Aurora.Brush.TextSecondaryOnInk" Color="#BCB6A8" />
 
     <!-- ================================================================ 形状 -->
 
