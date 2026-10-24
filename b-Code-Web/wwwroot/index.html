@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OneHistory · Aurora</title><link rel="stylesheet" href="aurora.css"></head>
+<body>
+<div class="shell">
+  <main id="main"><p>正在连接 OneHistory…</p></main>
+  <aside id="rail" aria-label="控制栏">
+    <button id="rail-toggle" type="button" aria-label="展开或收起控制栏">☰</button>
+    <div class="rail-content">
+      <div class="rail-brand"><strong>OneHistory</strong><span>Aurora 2.0</span></div>
+      <div class="rail-tools"><button id="reload">重新连接</button><button id="theme">深浅主题</button></div>
+      <input id="nav-query" type="search" aria-label="搜索场景与页面" placeholder="搜索场景与页面">
+      <nav aria-label="场景" id="pages"></nav>
+      <h2 class="rail-heading">常用页面</h2>
+      <div id="page-library" aria-label="常用页面"></div>
+      <div id="scene-tray" aria-label="收起的场景" hidden></div>
+      <button id="layout-reset" type="button" hidden>恢复默认排列</button>
+    </div>
+    <button id="adjust" type="button" aria-label="页面调整" aria-pressed="false"><span class="wide">页面调整：关</span><span class="compact">调整</span></button>
+    <footer role="status" id="status">连接中</footer>
+  </aside>
+</div>
+<script type="module" src="app.js"></script>
+</body></html>

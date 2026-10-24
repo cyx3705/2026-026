@@ -2,6 +2,12 @@
 
 > 宿主前端界面模块：窗口、场景、布局、控制台与主题
 
+V2.0 工作区新增 `b-Code-Web/` 浏览器前端：`dotnet run --project b-Code-Web/HistoryAurora.Web.csproj`，
+打开 `http://127.0.0.1:5280`。经本机 Portunus 读取真实模块页面、数据和动作，桌面恢复停靠布局和右侧控制栏，手机用胶囊切页。
+右下“页面调整”（或临时按住 Ctrl）可拖动页面、隐藏/恢复、调整停靠位置；分隔线可拖动调整比例，每个场景自动记住布局。
+弹出页面在电脑打开独立浏览器窗口，在手机显示全屏页面，返回恢复原页面。当前为本地开发入口，公网接入仍由后续 Portunus 工作承担。
+能力范围与验证入口见 `b-Office/现行约定.md` 的 Web 条目。
+
 ## 定位
 
 HistoryAurora 是 HistoryVulcan 的界面模块，经 `RegisterFrontend` 登记为宿主唯一前端：主窗口、场景、布局、

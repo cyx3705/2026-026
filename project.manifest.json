@@ -15,20 +15,24 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "1.42.0",
+    "version": "2.0.0",
     "branch": "main"
   },
   "paths": {
     "activeRoots": [
+      "b-Code-Web",
       "b-Code-Studio",
       "b-Code-Verify",
       "b-Office"
     ],
     "sourceRoots": [
+      "b-Code-Web",
       "b-Code-Studio",
       "b-Code-Verify"
     ],
     "generatedRoots": [
+      "b-Code-Web/bin",
+      "b-Code-Web/obj",
       "b-Code-Studio/**/bin",
       "b-Code-Studio/**/obj",
       "b-Code-Verify/**/bin",
@@ -55,10 +59,14 @@
     "build": "dotnet build .\\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false",
     "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
-    "run": null,
+    "run": "dotnet run --project b-Code-Web/HistoryAurora.Web.csproj",
+    "testWeb": "node --test b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/panel.test.mjs",
+    "testWebBrowser": "node --test b-Code-Verify/Web/browser.test.mjs b-Code-Verify/Web/table-browser.test.mjs b-Code-Verify/Web/panel-browser.test.mjs",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
   },
   "externalDependencies": [
+    "ASP.NET Core 8 shared framework for Aurora Web; Node.js >= 20 for Web protocol tests",
+    "Optional browser validation: Playwright available to Node through NODE_PATH; installed Microsoft Edge by default (AURORA_BROWSER_CHANNEL overrides)",
     "HistoryVulcan >= 5.4.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
     ".NET 8 SDK and Windows Desktop Runtime",
     "Dirkster.AvalonDock 4.72.1 (must match the host pin; unpinned resolves to a .NET Framework build)",

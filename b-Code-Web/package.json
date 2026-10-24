@@ -1,0 +1,10 @@
+{
+  "name": "historyaurora-web",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ../b-Code-Verify/Web/protocol.test.mjs ../b-Code-Verify/Web/layout.test.mjs ../b-Code-Verify/Web/table.test.mjs ../b-Code-Verify/Web/panel.test.mjs",
+    "test:browser": "node --test ../b-Code-Verify/Web/browser.test.mjs ../b-Code-Verify/Web/table-browser.test.mjs ../b-Code-Verify/Web/panel-browser.test.mjs"
+  }
+}
