@@ -110,6 +110,27 @@ public sealed class ModulesPageContractTests
         Assert.Equal("对端", rows.Single(row => row["module"] == "HistoryJuno")["load"]);
     }
 
+    /// <summary>
+    /// 宿主给了模块区扫描（installed）时，行只来自扫描和已装载模块：
+    /// 归属账本里有、包已卸掉的模块（HistoryApollo）不再出现；包在但不装载的照样列出。
+    /// </summary>
+    [Fact]
+    public void ModuleRowsComeFromTheScannedModuleAreaNotTheOwnershipLedger()
+    {
+        var aurora = new ModuleMeta("HistoryAurora", "前端", "", "1.42.0", false, "HistoryAurora.dll", 68);
+        var devices = new NodeDeviceInfo[] { new("local-id", "本机", "8.0.2", true, true) };
+        var placements = new ModulePlacement[]
+        {
+            new("HistoryApollo", null, false),
+            new("HistoryJuno", null, false),
+        };
+
+        var rows = HostedPageData.ModuleRows([aurora], placements, devices, ["HistoryAurora", "HistoryJuno", "Ratio"]);
+        Assert.Equal(["HistoryAurora", "HistoryJuno", "Ratio"], rows.Select(row => row["module"]));
+        Assert.Equal("不装载", rows.Single(row => row["module"] == "HistoryJuno")["load"]);
+        Assert.StartsWith("（未在本机运行）", rows.Single(row => row["module"] == "Ratio")["description"], StringComparison.Ordinal);
+    }
+
     [Fact]
     public void PlaceChoosesADeviceAndRefusesToMoveAurora()
     {
