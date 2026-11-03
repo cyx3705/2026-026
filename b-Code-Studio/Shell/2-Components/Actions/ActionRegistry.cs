@@ -14,12 +14,18 @@ public sealed record ActionLoadReport(
     IReadOnlyList<string> Skipped,
     IReadOnlyList<string> Broken);
 
-/// <summary>解析一次绑定的结果。失败一定带一句能直接显示给人看的原因。</summary>
-public readonly record struct ActionBinding(ActionDeclaration? Action, string? Error)
+/// <summary>
+/// 解析一次绑定的结果。失败一定带一句能直接显示给人看的原因。
+/// <see cref="Pending"/> 为真表示「所属模块在上一轮拉取之后才接上，声明还没拉到」：
+/// 下一轮拉取后面板会整体重建，这不是声明缺失，调用方不该当错误记（1.42.2）。
+/// </summary>
+public readonly record struct ActionBinding(ActionDeclaration? Action, string? Error, bool Pending = false)
 {
     public bool Ok => Action != null;
 
     public static ActionBinding Fail(string reason) => new(null, reason);
+
+    public static ActionBinding Wait(string reason) => new(null, reason, true);
 }
 
 /// <summary>
@@ -51,6 +57,13 @@ public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly List<string> _broken = [];
+
+    /// <summary>
+    /// 上一轮拉取开始时目录里已有的指令域。不在其中的域是那一轮之后才接上的模块：
+    /// 冷启动时模块逐个接上，面板随接随建，早于下一轮拉取——这些按钮只是「等待」，不是「未声明」。
+    /// 还没拉过（null）时一律等待。
+    /// </summary>
+    private HashSet<string>? _settledDomains;
 
     /// <summary>当前全部已声明动作，按 id 排序。</summary>
     public IReadOnlyList<ActionDeclaration> Actions
@@ -87,6 +100,10 @@ public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
         _actions.Clear();
         _broken.Clear();
 
+        // 先于探测取快照：探测之后才接上的模块不算「已就绪」，它的按钮在下一轮之前只是等待。
+        bus.Registry.Expire();
+        var settled = bus.Registry.Domains().ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var owners = await ModuleCommandProbe
             .OwnersWithSuffixAsync(bus, log, Source, ActionsSuffix, cancellation)
             .ConfigureAwait(true);
@@ -94,6 +111,7 @@ public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
         var skipped = new List<string>();
         foreach (var domain in owners)
             await LoadOwnerAsync(domain, skipped, cancellation).ConfigureAwait(true);
+        _settledDomains = settled;
 
         foreach (var action in _actions.Values)
         {
@@ -122,6 +140,7 @@ public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
             bus, log, Source, ActionsSuffix, cancellation).ConfigureAwait(true);
         if (bus.Registry.TryGet(domain + ActionsSuffix, out _) || owners.Contains(domain, StringComparer.OrdinalIgnoreCase))
             await LoadOwnerAsync(domain, [], cancellation).ConfigureAwait(true);
+        (_settledDomains ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(domain);
         _broken.Clear();
         foreach (var action in _actions.Values)
             if (!bus.Registry.TryGet(action.Command, out _))
@@ -137,7 +156,14 @@ public sealed partial class ActionRegistry(ShellBus bus, IShellLog log)
         if (string.IsNullOrWhiteSpace(id))
             return ActionBinding.Fail("按钮未声明 action");
         if (!_actions.TryGetValue(id, out var action) && !_local.TryGetValue(id, out action))
-            return ActionBinding.Fail($"未声明的动作: {id}");
+        {
+            var dot = id.IndexOf('.');
+            var domain = dot > 0 ? id[..dot] : id;
+            return _settledDomains == null || !_settledDomains.Contains(domain)
+                ? ActionBinding.Wait($"等待 {domain} 的动作声明: {id}")
+                : ActionBinding.Fail($"未声明的动作: {id}");
+        }
+
         return new ActionBinding(action, null);
     }
 

@@ -170,6 +170,8 @@ public sealed class PanelComponentContractTests
         UiTestHost.RunSta(() =>
         {
             var (bus, log, actions) = Host(declare: false);
+            // 拉过一轮、demo 域已在目录里却没有声明：这才是真的「未声明」。
+            actions.ReloadAsync().GetAwaiter().GetResult();
             var view = new PanelView(Valid(), bus, log, actions);
 
             var widgets = Elements(view);
@@ -178,6 +180,23 @@ public sealed class PanelComponentContractTests
             Assert.Contains(widgets, element => element is Border);
             Assert.Contains(log.Snapshot(), entry =>
                 entry.Level == ShellLogLevel.Error && entry.Message.Contains("demo.publish"));
+        });
+    }
+
+    /// <summary>冷启动：面板早于动作拉取建好时只显示「等待」，不记错误；下一轮重建后按钮正常（1.42.2）。</summary>
+    [Fact]
+    public void Button_WaitsWithoutErrorBeforeTheFirstActionReload()
+    {
+        UiTestHost.RunSta(() =>
+        {
+            var (bus, log, actions) = Host(declare: true);
+            var view = new PanelView(Valid(), bus, log, actions);
+
+            Assert.DoesNotContain(Elements(view), element => element is Button);
+            Assert.DoesNotContain(log.Snapshot(), entry => entry.Level >= ShellLogLevel.Error);
+
+            actions.ReloadAsync().GetAwaiter().GetResult();
+            Assert.Contains(Elements(new PanelView(Valid(), bus, log, actions)), element => element is Button);
         });
     }
 
