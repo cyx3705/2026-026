@@ -19,7 +19,8 @@
 - 宿主合同以 `../2026-023-HistoryVulcan/b-Office/current/模块开发手册.md` 与宿主指令自描述为准，不在本仓复述指令与公开 API。
 - 界面视觉以令牌文件与 2026-031 `z-OneHistoryID/` 为准，界面取舍见 `现行约定.md`。
 - 消费的宿主版本由 `b-Code-Studio/AuroraVersion.props` 的 `MinimumHistoryVulcanVersion`
-  单点声明，发布脚本与门禁都从此读取，不得各自硬编码字面量。
+  单点声明，质量门禁从此读取，不得各自硬编码字面量；
+  包由宿主管线按 manifest `publish` 段生成（7.0 起单个 nupkg），本仓不另写打包脚本。
 - 模块引用宿主运行库一律 `Private=false`（部署时由宿主提供）；测试工程是独立宿主进程，
   必须 `Private=true` 复制私有副本。
 

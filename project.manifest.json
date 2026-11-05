@@ -62,12 +62,12 @@
     "run": "dotnet run --project b-Code-Web/HistoryAurora.Web.csproj",
     "testWeb": "node --test b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/registration.test.mjs b-Code-Verify/Web/page-tree.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/workspace-state.test.mjs b-Code-Verify/Web/selection.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/table-data.test.mjs b-Code-Verify/Web/panel.test.mjs b-Code-Verify/Web/panel-files.test.mjs b-Code-Verify/Web/console.test.mjs b-Code-Verify/Web/catalog.test.mjs b-Code-Verify/Web/float.test.mjs b-Code-Verify/Web/chat.test.mjs b-Code-Verify/Web/dialog.test.mjs",
     "testWebBrowser": "node --test --test-concurrency=4 b-Code-Verify/Web/browser.test.mjs b-Code-Verify/Web/*-browser.test.mjs",
-    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
+    "package": "HistoryVulcan.Cli.exe --cli vulcan.dev.submit worktree=<工作区>"
   },
   "externalDependencies": [
     "ASP.NET Core 8 shared framework for Aurora Web; Node.js >= 20 for Web protocol tests",
     "Optional browser validation: Playwright available to Node through NODE_PATH; installed Microsoft Edge by default (AURORA_BROWSER_CHANNEL overrides)",
-    "HistoryVulcan >= 5.4.0 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
+    "HistoryVulcan >= 8.0.2 host snapshot from ../2026-023-HistoryVulcan/z-Publish/host",
     ".NET 8 SDK and Windows Desktop Runtime",
     "Dirkster.AvalonDock 4.72.1 (must match the host pin; unpinned resolves to a .NET Framework build)",
     "Dirkster.AvalonDock.Themes.VS2013 4.72.1"
