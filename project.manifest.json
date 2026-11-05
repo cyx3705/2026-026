@@ -60,8 +60,8 @@
     "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
     "run": "dotnet run --project b-Code-Web/HistoryAurora.Web.csproj",
-    "testWeb": "node --test b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/panel.test.mjs",
-    "testWebBrowser": "node --test b-Code-Verify/Web/browser.test.mjs b-Code-Verify/Web/table-browser.test.mjs b-Code-Verify/Web/panel-browser.test.mjs",
+    "testWeb": "node --test b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/registration.test.mjs b-Code-Verify/Web/page-tree.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/workspace-state.test.mjs b-Code-Verify/Web/selection.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/table-data.test.mjs b-Code-Verify/Web/panel.test.mjs b-Code-Verify/Web/panel-files.test.mjs b-Code-Verify/Web/console.test.mjs b-Code-Verify/Web/catalog.test.mjs b-Code-Verify/Web/float.test.mjs b-Code-Verify/Web/chat.test.mjs b-Code-Verify/Web/dialog.test.mjs",
+    "testWebBrowser": "node --test --test-concurrency=4 b-Code-Verify/Web/browser.test.mjs b-Code-Verify/Web/*-browser.test.mjs",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Build-HistoryAuroraPackage.ps1"
   },
   "externalDependencies": [

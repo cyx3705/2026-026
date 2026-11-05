@@ -277,11 +277,13 @@ public static class PageDescriptionReader
         if (!string.Equals(set.Owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
             return PageDescriptionParse.Fail($"owner 声明为 {set.Owner}，与被询问的模块 {expectedOwner} 不符");
 
-        if (set.Pages.Count == 0)
+        if (set.Pages == null || set.Pages.Count == 0)
             return PageDescriptionParse.Fail("未声明任何页面");
 
         foreach (var page in set.Pages)
         {
+            if (page == null)
+                return PageDescriptionParse.Fail("页面列表不能包含 null");
             if (page.Scene != null && !string.Equals(page.Scene, set.Owner, StringComparison.OrdinalIgnoreCase))
                 return PageDescriptionParse.Fail($"页面 {page.Id} 只能声明自己的模块场景 {set.Owner}");
             if (string.IsNullOrWhiteSpace(page.Id))
@@ -292,6 +294,8 @@ public static class PageDescriptionReader
                 return PageDescriptionParse.Fail($"页面 {page.Id} 缺少标题");
             if (page.Content == null)
                 return PageDescriptionParse.Fail($"页面 {page.Id} 缺少内容");
+            if (page.Placement == null)
+                return PageDescriptionParse.Fail($"页面 {page.Id} 的 placement 不能为 null；使用默认位置请省略该字段");
         }
 
         var duplicate = set.Pages

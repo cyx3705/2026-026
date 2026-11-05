@@ -111,14 +111,23 @@ public static class ActionDeclarationReader
         if (!string.Equals(set.Owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
             return ActionDeclarationParse.Fail($"owner 声明为 {set.Owner}，与被询问的模块 {expectedOwner} 不符");
 
+        if (set.Actions == null)
+            return ActionDeclarationParse.Fail("actions 不能为 null；无动作请声明空数组");
+
         foreach (var action in set.Actions)
         {
+            if (action == null)
+                return ActionDeclarationParse.Fail("动作列表不能包含 null");
             if (string.IsNullOrWhiteSpace(action.Id))
                 return ActionDeclarationParse.Fail("存在缺少 id 的动作");
             if (action.Id != action.Id.ToLowerInvariant() || action.Id.Contains(' '))
                 return ActionDeclarationParse.Fail($"动作 id 必须小写且无空格: {action.Id}");
             if (string.IsNullOrWhiteSpace(action.Command))
                 return ActionDeclarationParse.Fail($"动作 {action.Id} 未声明 command");
+            if (action.Title == null)
+                return ActionDeclarationParse.Fail($"动作 {action.Id} 的 title 不能为 null；使用默认标题请省略该字段");
+            if (action.ClearOnSuccess == null || action.ClearOnSuccess.Any(string.IsNullOrWhiteSpace))
+                return ActionDeclarationParse.Fail($"动作 {action.Id} 的 clearOnSuccess 必须是非空控件 id 的数组");
             action.Owner = set.Owner;
         }
 

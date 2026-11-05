@@ -232,20 +232,7 @@ public sealed class SelectionChannels
     /// 而那个通道确实可能存在，于是错得毫无声响。列名不含点，最后一个点因此是确定的分界。
     /// </summary>
     public static bool TrySplitBinding(string? binding, out string channel, out string column)
-    {
-        channel = "";
-        column = "";
-        if (string.IsNullOrWhiteSpace(binding))
-            return false;
-
-        var cut = binding.LastIndexOf('.');
-        if (cut <= 0 || cut == binding.Length - 1)
-            return false;
-
-        channel = binding[..cut];
-        column = binding[(cut + 1)..];
-        return true;
-    }
+        => SelectionBinding.TrySplit(binding, out channel, out column);
 
     /// <summary>按 <c>&lt;通道&gt;.&lt;列&gt;</c> 取值；取不到（未选中或没这一列）返回 null。</summary>
     public string? Value(string channel, string column)

@@ -9,7 +9,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'";
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob:; frame-ancestors 'none'";
     // Reject DNS rebinding and cross-site requests before attaching the privileged local credential.
     if (context.Request.Host.Host is not ("127.0.0.1" or "localhost" or "[::1]"))
     {
@@ -28,6 +28,74 @@ app.Use(async (context, next) =>
 });
 app.UseDefaultFiles();
 app.UseStaticFiles();
+// REQ-WEB-018: the native pure graph layout remains the single source for coordinates and lanes.
+app.MapPost("/api/graph-layout", async (HttpContext context) =>
+{
+    try
+    {
+        using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+        var parsed = HistoryAurora.Shell.Components.Graph.SwimlaneReader.Read(document.RootElement.GetRawText());
+        if (!parsed.Ok) return Results.BadRequest(new { success = false, message = parsed.Error });
+        var layout = HistoryAurora.Shell.Components.Graph.SwimlaneLayout.Arrange(parsed.Value!);
+        return Results.Json(new { success = true, layout,
+            description = new { parsed.Value!.Title, parsed.Value.LaneTitles, parsed.Value.SelectAction }, metrics = new
+        {
+            nodeWidth = HistoryAurora.Shell.Components.Graph.SwimlaneLayout.NodeWidth,
+            nodeHeight = HistoryAurora.Shell.Components.Graph.SwimlaneLayout.NodeHeight,
+            laneHeight = HistoryAurora.Shell.Components.Graph.SwimlaneLayout.LaneHeight,
+            laneTitleWidth = HistoryAurora.Shell.Components.Graph.SwimlaneLayout.LaneTitleWidth
+        } });
+    }
+    catch (JsonException)
+    {
+        return Results.BadRequest(new { success = false, message = "泳道描述不是有效 JSON" });
+    }
+});
+// REQ-WEB-012: share Aurora's authoritative native page descriptions with the browser.
+app.MapGet("/api/frontend", () => Results.Content(
+    HistoryAurora.Shell.HostedPages.Views.HostedPageDescriptions.Json, "application/json"));
+// REQ-WEB-039: the native reader owns page DTOs, defaults and envelope validation.
+app.MapPost("/api/page-description", (Delegate)HistoryAurora.Web.DescriptionEndpoints.ReadPages);
+app.MapPost("/api/action-description", (Delegate)HistoryAurora.Web.DescriptionEndpoints.ReadActions);
+// Personal standalone panels share the desktop source, without modifying it.
+app.MapGet("/api/panels", () =>
+{
+    var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "HistoryVulcan", "ModuleData", "HistoryAurora", "panels");
+    try { return Results.Json(HistoryAurora.Web.PanelFileReader.Read(directory), HistoryAurora.Web.PanelFileReader.WriteOptions); }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        return Results.Json(new { success = false, message = "无法读取独立面板目录" }, statusCode: 503);
+    }
+});
+// REQ-WEB-013: read desktop scene history without changing its files or current window.
+app.MapGet("/api/layout-history", async (HttpContext context) =>
+{
+    var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "HistoryVulcan", "ModuleData", "HistoryAurora", "layout");
+    var layouts = new Dictionary<string, JsonElement>();
+    var errors = new List<string>();
+    if (Directory.Exists(directory))
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*.layout.v1.json"))
+        {
+            var scene = Path.GetFileName(file)[..^".layout.v1.json".Length];
+            if (scene.EndsWith(".defaults", StringComparison.OrdinalIgnoreCase) || scene == "all") continue;
+            try
+            {
+                using var document = JsonDocument.Parse(await File.ReadAllTextAsync(file, context.RequestAborted));
+                layouts[scene] = document.RootElement.Clone();
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            {
+                errors.Add($"{scene}：无法读取桌面布局历史");
+            }
+        }
+    }
+    return Results.Json(new { schemaVersion = 1, layouts, errors });
+});
+app.MapGet("/api/module-root", () => Results.Json(new { path = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HistoryVulcan", "Modules") }));
 // REQ-WEB-010: browser-owned source picker lists server paths without reading file contents.
 app.MapPost("/api/files", async (HttpContext context) =>
 {

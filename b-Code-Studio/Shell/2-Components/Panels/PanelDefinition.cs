@@ -1,4 +1,5 @@
 using HistoryAurora.Shell.Components.Selection;
+using System.Text.Json.Serialization;
 
 namespace HistoryAurora.Shell.Components.Panels;
 
@@ -48,6 +49,7 @@ public sealed class PanelDefinition
     public List<PanelRow> Rows { get; set; } = new();
 
     /// <summary>全部小组件，按行内顺序摊平。取值与遍历都用它。</summary>
+    [JsonIgnore]
     public IEnumerable<PanelWidget> AllWidgets => Rows.SelectMany(row => row.Widgets);
 }
 
@@ -301,6 +303,8 @@ public static class PanelDefinitionValidator
             return PanelDefinitionParse.Fail("面板缺少 id");
         if (string.IsNullOrWhiteSpace(definition.Title))
             return PanelDefinitionParse.Fail($"面板 {definition.Id} 缺少标题");
+        if (definition.Rows == null)
+            return PanelDefinitionParse.Fail($"面板 {definition.Id} 的 rows 必须是行数组");
 
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in definition.Rows)
@@ -310,7 +314,7 @@ public static class PanelDefinitionValidator
             if (row.ResolvedMode is null)
                 return PanelDefinitionParse.Fail(
                     $"面板 {definition.Id} 的行声明了无法识别的 mode={row.Mode}；只支持 flex / even");
-            if (row.Widgets.Count == 0)
+            if (row.Widgets == null || row.Widgets.Count == 0)
                 return PanelDefinitionParse.Fail($"面板 {definition.Id} 含没有小组件的空行");
 
             foreach (var widget in row.Widgets)
@@ -328,6 +332,8 @@ public static class PanelDefinitionValidator
         PanelWidget widget,
         HashSet<string> ids)
     {
+        if (widget == null)
+            return PanelDefinitionParse.Fail($"面板 {definition.Id} 含空小组件");
         if (widget.ResolvedKind is not { } kind)
             return PanelDefinitionParse.Fail(
                 $"面板 {definition.Id} 含无法识别的小组件 {widget.Kind}；只支持 text / textbox / button / switch / sourcePicker / choices");
@@ -372,7 +378,7 @@ public static class PanelDefinitionValidator
                 // follows 写错的症状是「框里永远空着」，与「还没选中」长得一样，
                 // 因此形状必须在收下声明时就判死，不留到运行期。
                 if (widget.Follows is { Length: > 0 } follows
-                    && !SelectionChannels.TrySplitBinding(follows, out _, out _))
+                    && !SelectionBinding.TrySplit(follows, out _, out _))
                     return PanelDefinitionParse.Fail(
                         $"面板 {definition.Id} 的文本框 {widget.Id} 的 follows 必须写成 <通道>.<列>: {follows}");
                 // 通道名带点是常态（janus.section），因此只判空白与空格：
@@ -458,7 +464,7 @@ public static class PanelDefinitionValidator
                 if (widget.EnabledWhen is { } gate && string.IsNullOrWhiteSpace(gate.Selected))
                     return PanelDefinitionParse.Fail(
                         $"面板 {definition.Id} 的按钮 {widget.Action} 的 enabledWhen 只支持 selected=<通道>");
-                if (widget.Icon != null && !PanelIconCatalog.Supports(widget.Icon))
+                if (widget.Icon != null && !PanelIconNames.Supports(widget.Icon))
                     return PanelDefinitionParse.Fail(
                         $"面板 {definition.Id} 的按钮 {widget.Action} 使用未知 icon={widget.Icon}；当前只支持 refresh-cw");
                 break;

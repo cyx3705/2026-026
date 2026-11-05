@@ -17,8 +17,8 @@ test('REQ-WEB-008: table widths, reorder, persistence, menus, row snapshots and 
       if (text==='vulcan.command.list') data=[{commandName:'demo.ui.describe'},{commandName:'demo.ui.actions'}];
       else if (text==='demo.ui.describe') data={schemaVersion:1,owner:'HistoryDemo',pages:[{id:'table-page',title:'表格测试',scene:'HistoryDemo',placement:{side:'center'},content:{
         type:'table',id:'projects',channel:'demo.row',dataSource:{command:'demo.rows',rowKey:'id'},columns:[
-          {key:'id',title:'编号',width:80}, {key:'name',title:'名称',width:'*',cellAction:'open',cellStyle:'double'},
-          {key:'kind',title:'类型',width:100}, {key:'note',title:'备注',cellEditAction:'edit'}],rowActions:[
+          {key:'id',title:'编号',width:'80'}, {key:'name',title:'名称',width:'*',cellAction:'open',cellStyle:'double'},
+          {key:'kind',title:'类型',width:'100'}, {key:'note',title:'备注',cellEditAction:'edit'}],rowActions:[
           {action:'open',title:'打开'}, {action:'menu',title:'仅菜单操作',inline:false,args:{fixed:{value:'固定参数'}}}]
       }}]};
       else if (text==='demo.ui.actions') data={schemaVersion:1,owner:'HistoryDemo',actions:[
@@ -92,9 +92,10 @@ test('REQ-WEB-008: changing source clears selection and rejects late responses; 
     const page=await browser.newPage();
     await page.route('**/api/command',r => r.fulfill({json:{success:true,data:[]}}));
     await page.goto(base);
+    await page.waitForFunction(()=>!document.getElementById('reload').disabled);
     await page.evaluate(async () => {
       const {renderTable}=await import('/table.js');
-      const context={owner:'Test',pageId:'race',tables:new Map(),disposers:[],refreshers:[],followers:[]};
+      const context={owner:'Test',pageId:'race',tables:new Map(),disposers:[],refreshers:[],followers:[],initializers:[]};
       let selection={scope:{id:'initial'}}, immediate=true;
       const deferred={};
       const node={id:'race',type:'table',channel:'selected',dataSource:{command:'test.rows',rowKey:'id',args:{id:'{selection.scope.id}'}},rowActions:[{action:'noop',title:'动作',inline:false}]};
@@ -103,7 +104,8 @@ test('REQ-WEB-008: changing source clears selection and rejects late responses; 
         selection:() => selection,active:() => true,action:async()=>{},danger:()=>false,report:()=>{},
         publish:(channel,row) => { selection[channel]=row; for (const follower of context.followers) follower(); }
       });
-      component.id='race-fixture'; component.style.width='600px'; document.body.append(component); immediate=false;
+      component.id='race-fixture'; component.style.width='600px'; document.getElementById('main').replaceChildren(component);
+      await Promise.all(context.initializers.map(load=>load()));immediate=false;
       window.tableRace={context,deferred,selection,set:id => { selection.scope=id ? {id} : undefined; for (const follower of context.followers) follower(); }};
     });
     const fixture=page.locator('#race-fixture');
@@ -114,9 +116,12 @@ test('REQ-WEB-008: changing source clears selection and rejects late responses; 
     assert.equal(await fixture.locator('tbody tr').count(),0);
     assert.equal(await page.evaluate(() => tableRace.selection.selected),undefined);
     await page.evaluate(() => tableRace.set('new'));
+    assert.equal(await page.evaluate(()=>!!tableRace.deferred.new),false);
+    await page.evaluate(() => tableRace.deferred.old([{id:'old',value:'迟到数据'}]));
+    await page.waitForFunction(()=>!!tableRace.deferred.new);
+    assert.equal(await fixture.getByText('迟到数据').count(),0);
     await page.evaluate(() => tableRace.deferred.new([{id:'new',value:'新数据'}]));
     await fixture.getByText('新数据').waitFor();
-    await page.evaluate(() => tableRace.deferred.old([{id:'old',value:'迟到数据'}]));
     assert.equal(await fixture.getByText('迟到数据').count(),0);
     await fixture.locator('tbody tr').click({button:'right'}); await page.getByRole('menu').waitFor();
     await page.evaluate(() => tableRace.set(null));

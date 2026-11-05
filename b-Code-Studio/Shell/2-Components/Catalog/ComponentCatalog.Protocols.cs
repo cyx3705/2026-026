@@ -44,12 +44,15 @@ public static partial class ComponentCatalog
             Rules =
             [
                 "模块登记三条只读指令 <域>.ui.describe / <域>.ui.actions / <域>.ui.data，都声明 HiddenReason，不对远端暴露",
-                "跨进程时 CommandResult.Data 不保形：同一份 JSON 也放进 Message，渲染器优先 Data、回退 Message",
+                "跨进程时 CommandResult.Data 不保形：同一份 JSON 也放进 Message；对象/数组优先取 Data，Data 退化为标量或字符串时回退 Message 中的对象/数组；失败结果不作为数据读取",
                 "宿主装完全部模块后才通知 Aurora 整轮拉取，不要为「问得太早」写重试，也不要在 Attach 里抢着 invalidate",
                 "描述变了调 aurora.ui.invalidate owner=<模块名>，它会连同动作声明一起重拉",
+                "单模块刷新先取动作再替换页面内容；相同 id 的停靠位置、隐藏与分栏沿用用户布局，描述无效时保留旧页",
                 "一格一页：每个位置任何时刻只放一页，后来的顶掉原来的；位置被占时新页藏着，要露面走 aurora.ui.show",
                 "每个声明了页面的模块自动得到一个以模块名为 id 的场景；想把用户带过来调 aurora.scene.go id=<模块名>",
                 "单模块描述失败只跳过该模块并记 Warn；未知节点渲染成显式占位并进缺件清单（aurora.ui.missing）",
+                "Web 与桌面共用页面描述模型和解析器：字段名忽略大小写，数字字段可读字符串数字，缺省值一致；pages 不可为空或含 null，显式 placement=null 明确拒绝",
+                "退役的独立 button / input / select 节点提示改用 panel / popup，不进入缺件清单；缺件按组件名忽略大小写归并，并列出引用页面",
                 "描述里没有外观：不接受样式键与颜色。缺组件用 aurora.ui.request 申请，不要在模块里自建",
                 "Aurora 自持的命令集、模块管理、组件测试几页也走这套协议，b-Code-Studio/Shell/3-HostedPages/Views/HostedPageDescriptions.cs 是真在跑的范例",
             ],
@@ -85,6 +88,10 @@ public static partial class ComponentCatalog
                 "占位符引用了取不到的值时整条拒绝执行，不会把 {x} 原样发上总线",
                 "声明了但指令不存在的动作进断链账（aurora.ui.actions）；按钮渲染成说明原因的牌子",
                 "改了声明调 aurora.ui.invalidate 或 aurora.ui.reloadactions",
+                "Web 与桌面共用动作声明解析器，字段名忽略大小写，版本可读字符串数字；动作 id 使用同一套小写、无空格规则，空动作数组合法",
+                "actions 不可为 null 或包含 null，title=null 与无效 clearOnSuccess 数组明确拒绝；省略标题时按钮回退动作 id",
+                "动作参数里的 null 按空串发送；占位符不含空白，面板控件引用与 clearOnSuccess 控件 id 忽略大小写",
+                "动作声明独立于页面描述发现，没有页面的模块也可以提供动作；重拉时移除已退役声明，模块动作重名保留先登记者",
             ],
         },
         new()
@@ -106,7 +113,9 @@ public static partial class ComponentCatalog
             [
                 "通道名按最后一个点分成「通道 + 列」：通道名带点是常态，列名不含点",
                 "通道名建议以自己的域起头；同名通道只认第一个声明方，第二个被拒并记 Warn",
+                "Web 按页面声明顺序预登记通道，隐藏页与未打开分支也保留发布权；通道名大小写不敏感，重复声明在所属页提示并可查询",
                 "引用了没人声明的通道等于按钮永远灰着；aurora.ui.channels 列出全部通道、当前值与断链引用",
+                "Web 台账包含发布来源、当前行、引用方、断链和重复声明；模块刷新撤销原发布方后，仍在的发布方接替并复用当前控件值，退役通道清除旧选中",
                 "改名这类动作同时要「改谁」和「改成什么」：选中行走 {selection.*}，输入框走 {控件id}",
             ],
         },
@@ -127,10 +136,13 @@ public static partial class ComponentCatalog
             Example = """{ "mode": "delta", "revision": "r2", "upserts": [ { "id": "a", "name": "甲" } ], "removes": [ "b" ] }""",
             Rules =
             [
-                "所有行必须有非空唯一键；重复键、更新与删除冲突、非法载荷整批拒绝，旧内容与版本保持",
+                "声明 rowKey 时所有行必须有非空唯一键；重复键、更新与删除冲突、非法载荷整批拒绝，旧内容与版本保持",
                 "切换取数参数自动回全量；不要在 args 里占用保留参数 since",
                 "同表请求串行、重复刷新合并，旧结果不会覆盖新选择",
+                "列与行内容均未变化时复用原行，保留该行编辑草稿；目标行变化时还原草稿，刷新不提交编辑",
+                "声明 rowKey 时按键保留选择；更新所选行会发布最新字段，删除所选行会清空选择",
                 "数据在界面之外被改了，调 aurora.ui.refreshdata [page=] [node=] 按页或按节点重取，别一把全刷",
+                "refreshdata 的页和节点 id 忽略大小写，没有匹配取数节点时明确失败并列出现有绑定；不刷新面板候选或控制台日志",
                 "会跑 Git 之类重活的取数，用通道引用限定到单个对象；打开一页不该触发全库扫描",
             ],
         },
@@ -172,6 +184,7 @@ public static partial class ComponentCatalog
                              { "id": "m2", "title": "m2", "parents": [ "m1", "w1" ], "tone": "accent" } ],
                   "selectAction": "mymodule.node.detail" }
                 """,
+            Rules = ["nodes / lanes 不接受 null，数组元素不能为 null；显式边必须有 from / to；无效描述整份作废，空节点数组合法"],
         },
         new()
         {
@@ -194,7 +207,10 @@ public static partial class ComponentCatalog
                 { "id": "release", "title": "发布", "side": "right", "ratio": 0.22, "rows": [
                   { "widgets": [ { "kind": "button", "action": "mymodule.publish", "text": "发布" } ] } ] }
                 """,
-            Rules = ["新页面优先写进 <域>.ui.describe 的 panel 节点；独立面板文件留给不属于任何模块的个人快捷面板"],
+            Rules = ["新页面优先写进 <域>.ui.describe 的 panel 节点；独立面板文件留给不属于任何模块的个人快捷面板",
+                "文件允许注释、尾逗号和不区分大小写的字段名；每份经同一原生校验器检查，坏文件或重复 id 不阻断其他面板",
+                "panelreload 重读并重建既有面板，不重排用户布局；新增面板在桌面重启或 Web 重新连接后注册，移除声明的旧窗口在重新进入前仍可保留",
+                "隐藏独立面板首次 panelset 时先创建并显示；存在同名嵌入面板时优先回写独立窗口，不触发用户提交"],
         },
         new()
         {

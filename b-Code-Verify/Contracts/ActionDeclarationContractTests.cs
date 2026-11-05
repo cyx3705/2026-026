@@ -50,6 +50,25 @@ public sealed class ActionDeclarationContractTests
         Assert.Equal("HistoryDemo", action.Owner);
     }
 
+    [Fact]
+    public void Parse_SharedWebReaderAcceptsNativeFieldCasingAndDefaults()
+    {
+        var parsed = ActionDeclarationReader.Read("""
+            { "SCHEMAVERSION":"1", "OWNER":"historydemo", "ACTIONS":[
+              { "ID":"运行", "COMMAND":"demo.run", "ARGS":{"note":null}, "owner":"Spoofed" }
+            ] }
+            """, "HistoryDemo");
+        Assert.True(parsed.Ok, parsed.Error);
+        var action = Assert.Single(parsed.Value!.Actions);
+        Assert.Equal("运行", action.Id);
+        Assert.Equal("", action.Title);
+        Assert.False(action.Danger);
+        Assert.Empty(action.ClearOnSuccess);
+        Assert.Equal("historydemo", action.Owner);
+        Assert.Equal("demo.run note=\"\"", ActionRegistry.BuildCommandText(action, _ => null, out var error));
+        Assert.Equal("", error);
+    }
+
     /// <summary>
     /// 版本不对、冒名（否则一个模块可以借声明抢注别人的动作）、缺指令、id 重复：一律整份作废，
     /// 报错文本点名出错的那一处。
@@ -66,6 +85,12 @@ public sealed class ActionDeclarationContractTests
 
     public static TheoryData<string, string, string> InvalidDeclarations() => new()
     {
+        { """{"schemaVersion":1,"owner":"HistoryDemo","actions":null}""", "HistoryDemo", "actions" },
+        { """{"schemaVersion":1,"owner":"HistoryDemo","actions":[null]}""", "HistoryDemo", "null" },
+        { MinimalActions.Replace("\"title\": \"重命名\"", "\"title\": null"), "HistoryDemo", "title" },
+        { MinimalActions.Replace("\"title\": \"重命名\"", "\"clearOnSuccess\": null"), "HistoryDemo", "clearOnSuccess" },
+        { MinimalActions.Replace("\"title\": \"重命名\"", "\"clearOnSuccess\": [null]"), "HistoryDemo", "clearOnSuccess" },
+        { MinimalActions.Replace("\"title\": \"重命名\"", "\"clearOnSuccess\": [\" \" ]"), "HistoryDemo", "clearOnSuccess" },
         { MinimalActions.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 9"), "HistoryDemo", "schemaVersion=9" },
         { MinimalActions, "HistoryOther", "HistoryOther" },
         {

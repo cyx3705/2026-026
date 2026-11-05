@@ -79,6 +79,7 @@ public static partial class ComponentCatalog
             [
                 "动作缺失或写错时按钮渲染成写明原因的警示牌，aurora.ui.actions 列出断链",
                 "面板成功操作会等本页数据刷新完成再结束运行态",
+                "Web 在动作声明暂时移除再恢复时保留同一按钮落点的运行态；旧提交结束前不重复执行，结束后仍检查当前选择条件",
                 "想让按钮调 Aurora 自己的能力（浮窗、刷新），声明一条指向 aurora.* 指令的动作即可，不需要新组件",
             ],
         },
@@ -119,7 +120,7 @@ public static partial class ComponentCatalog
                 WidgetFlex,
             ],
             Example = """{ "kind": "sourcePicker", "id": "source", "label": "来源", "selectCommand": "aurora.ui.selectdirectory", "commitAction": "mymodule.source.set" }""",
-            Rules = ["kind 也接受 source-picker / source"],
+            Rules = ["kind 也接受 source-picker / source", "Web 来源提交失败可原路径重试，成功的相同路径不重复提交；选择期间较新的程序回写保留，页面注销后的回执不再回写或报告"],
         },
         new()
         {
@@ -155,6 +156,7 @@ public static partial class ComponentCatalog
             [
                 "与 select 选项框取数同形：重取候选尽量留住选中项，还在就留着，否则退到 value，再否则第一项；程序回写不触发 commitAction",
                 "面板上任何动作成功后会重取全部候选：菜单里删掉、新增一项后不必另外刷新",
+                "Web 提交期间选项暂时禁用，程序回写仍可更新显示与通道，不触发另一次提交；完成后恢复选择",
                 "右键落在选项条上只开它自己的菜单，不再唤起页面的 context 弹出层",
                 "选项条不是表格：候选多到要滚动、要排序筛选时用 table",
             ],

@@ -5,6 +5,7 @@ export function closeMenu(owner) {
 }
 export function showMenu(items, opener, {x, y, owner, report = () => {}} = {}) {
   closeMenu();
+  const document=opener.ownerDocument,window=document.defaultView,{innerWidth,innerHeight}=window;
   const menu = document.createElement('div'), abort = new AbortController(), rect = opener.getBoundingClientRect();
   menu.className = 'table-menu'; menu.setAttribute('role','menu');
   const close = (focus = false) => { abort.abort(); menu.remove(); if (current?.menu === menu) current=null; if (focus && opener.isConnected) opener.focus(); };
@@ -18,7 +19,7 @@ export function showMenu(items, opener, {x, y, owner, report = () => {}} = {}) {
     button.onclick=() => { close(true); Promise.resolve().then(item.run).catch(report); };
     menu.append(button);
   }
-  (opener.closest('dialog') ?? document.body).append(menu);
+  (opener.closest('dialog,[popover]') ?? document.body).append(menu);
   menu.style.left=`${Math.max(0,Math.min(x ?? rect.x,innerWidth-menu.offsetWidth))}px`;
   menu.style.top=`${Math.max(0,Math.min(y ?? rect.bottom,innerHeight-menu.offsetHeight))}px`;
   const buttons=[...menu.querySelectorAll('button:not(:disabled)')];

@@ -1,4 +1,6 @@
-import {defaultLayout, pageIds, dockPage, removePage, normalizeLayout, pageHome} from './layout.js';
+import {pageIds, dockPage, removePage, pageHome, restorePage, seedDesktopLayouts,desktopLayout,normalizeLayout,visibleLayout} from './layout.js';
+import {workspaceState,layoutName,layoutSnapshot,readLayoutSnapshot,resizePage} from './workspace-state.js';
+import {SceneManager} from './scenes.js';
 
 const el = (tag,text,cls) => { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(cls) node.className=cls; return node; };
 const $ = id => document.getElementById(id);
@@ -6,21 +8,17 @@ const storageKey = 'aurora.web.workspace.v1';
 export class Workspace {
   constructor(hooks) {
     this.hooks=hooks; this.pages=[]; this.panes=new Map(); this.adjust=false; this.scene=null;
-    this.saved={layouts:{},order:[],hidden:[],active:{},homes:{}};
-    try { const saved=JSON.parse(localStorage.getItem(storageKey));
-      if (saved?.layouts && typeof saved.layouts==='object' && !Array.isArray(saved.layouts)) this.saved={...this.saved,...saved};
-    } catch { hooks.report('保存的布局无法读取，已使用默认布局'); }
-    this.saved.order=Array.isArray(this.saved.order)?this.saved.order:[];
-    this.saved.hidden=Array.isArray(this.saved.hidden)?this.saved.hidden:[];
-    this.saved.active=this.saved.active && typeof this.saved.active==='object'?this.saved.active:{};
-    this.saved.homes=this.saved.homes && typeof this.saved.homes==='object'?this.saved.homes:{};
+    this.saved=workspaceState();this.desktopLayouts={};this.sceneManager=new SceneManager(this);
+    try { this.saved=workspaceState(JSON.parse(localStorage.getItem(storageKey))); }
+    catch { hooks.report('保存的布局无法读取，已使用默认布局'); }
     $('adjust').onclick=()=>this.setAdjust(!this.adjust);
-    $('layout-reset').onclick=()=> { this.tree=defaultLayout(this.scenePages()); this.saved.homes[this.scene]={}; this.active=pageIds(this.tree)[0]; this.persist(); this.draw(); };
+    $('layout-reset').onclick=()=>{try {this.resetLayout();}catch(error){hooks.report(error);}};
+    $('layout-desktop').onclick=()=>{try {this.restoreDesktopLayout();hooks.report('已恢复桌面布局');}catch(error){hooks.report(error);}};
     $('nav-query').oninput=()=>this.drawRail();
-    $('nav-query').onkeydown=e=> { if(e.key==='Enter') $('pages button, #page-library button')?.click(); };
+    $('nav-query').onkeydown=e=> { if(e.key==='Enter')document.querySelector('#pages button, #page-library button')?.click(); };
     $('rail-toggle').onclick=()=>document.body.classList.toggle('rail-open');
     $('scene-tray').ondragover=e=> { if(this.drag?.kind==='scene') e.preventDefault(); };
-    $('scene-tray').ondrop=e=> { e.preventDefault(); if(this.drag?.kind==='scene') this.hideScene(this.drag.id,true); };
+    $('scene-tray').ondrop=e=> { e.preventDefault();try {if(this.drag?.kind==='scene')this.hideScene(this.drag.id,true);}catch(error){this.hooks.report(error);} };
     $('page-library').ondragover=e=> { if(this.adjust&&this.drag?.kind==='page') e.preventDefault(); };
     $('page-library').ondrop=e=> { e.preventDefault(); if(this.adjust&&this.drag?.kind==='page') this.hide(this.drag.id); };
     window.addEventListener('dragend',()=> { this.drag=null; document.body.classList.remove('dragging'); },true);
@@ -44,26 +42,80 @@ export class Workspace {
     button.onclick=async()=> { try { await handler(); } catch(error) { this.hooks.report(error); } };
     return button;
   }
-  setPages(pages) {
+  setPages(pages,{replaceIds}={}) {
+    this.hooks.onPagesChanged?.(replaceIds);
+    if(replaceIds)for(const id of replaceIds)this.panes.delete(id);else this.panes.clear();
     this.pages=pages;
-    const scenes=[...new Set(pages.map(p=>p.scene||p.owner))];
-    this.scenes=[...this.saved.order.filter(id=>scenes.includes(id)),...scenes.filter(id=>!this.saved.order.includes(id))];
+    this.scenes=this.sceneManager.list().map(scene=>scene.id);
     this.drawRail();
   }
   scenePages() { return this.pages.filter(p=>(p.scene||p.owner)===this.scene); }
-  async open(scene,force=false) {
-    if(!force && this.scene===scene && $('scene-canvas')) { document.body.classList.remove('rail-open'); return; }
-    this.scene=scene; this.panes.clear(); this.hooks.onSwitch(scene);
-    const available=new Set(this.pages.map(p=>p.id));
-    this.tree=Object.hasOwn(this.saved.layouts,scene) ? normalizeLayout(this.saved.layouts[scene],available)
-      : defaultLayout(this.scenePages());
-    this.active=this.saved.active[scene] || pageIds(this.tree)[0] || this.scenePages()[0]?.id;
-    this.saved.lastScene=scene; this.persist(); this.draw(); document.body.classList.remove('rail-open');
+  restoreDesktopHistory(history) {
+    this.desktopLayouts=history?.layouts??{};
+    return seedDesktopLayouts(this.saved,history,this.pages,Math.max(320,innerWidth-200),innerHeight);
+  }
+  // Explicit recovery bypasses automatic migration markers and browser-named copies.
+  restoreDesktopLayout(value=this.scene) {
+    const scene=this.sceneManager.require(value);
+    const snapshot=this.desktopLayouts[scene.id];
+    if(!snapshot)throw new Error(`场景 [${scene.title}] 没有桌面布局历史`);
+    const tree=desktopLayout(snapshot,null,Math.max(320,innerWidth-200),innerHeight);
+    if(!tree)throw new Error(`场景 [${scene.title}] 的桌面布局历史为空`);
+    const ids=pageIds(tree),active=ids.includes(snapshot.activeContentId)?snapshot.activeContentId:ids[0];
+    this.commitSaved(saved=>{
+      this.sceneManager.store(saved,scene.id,tree,active,{});
+      saved.desktopHistory[scene.id]=true;
+      saved.resetScenes=saved.resetScenes.filter(id=>id!==scene.id);
+      saved.lastScene=scene.id;
+    });
+    if(this.scene===scene.id)this.sceneManager.paint(scene.id);
+    return scene.id;
+  }
+  async open(scene,force=false,recordUse=true) {this.sceneManager.open(scene,force,recordUse);}
+  setLayout(tree,active=this.layoutActive) {
+    this.fullTree=normalizeLayout(tree,null);this.projectedNodes=new WeakMap();
+    const available=new Set(this.pages.map(page=>page.id));
+    this.tree=visibleLayout(this.fullTree,available,this.projectedNodes);this.layoutActive=active;
+    this.active=available.has(active)?active:pageIds(this.tree)[0];
   }
   persist() {
-    this.saved.layouts[this.scene]=this.tree; this.saved.order=this.scenes; this.saved.active[this.scene]=this.active;
+    this.saved.layouts[this.scene]=this.fullTree;this.saved.active[this.scene]=this.layoutActive;
+    if(Object.hasOwn(this.saved.userScenes,this.scene))this.saved.namedLayouts[this.scene]=layoutSnapshot(this.fullTree,this.layoutActive,this.saved.homes[this.scene]);
     try { localStorage.setItem(storageKey,JSON.stringify(this.saved)); }
     catch { this.hooks.report('浏览器无法保存布局，当前调整仅在本次打开期间有效'); }
+  }
+  commitSaved(update) {
+    const next=workspaceState(structuredClone(this.saved));update(next);
+    try { localStorage.setItem(storageKey,JSON.stringify(next)); }
+    catch { throw new Error('浏览器无法保存布局，本次操作未保存'); }
+    this.saved=next;
+  }
+  listLayouts() {return [...new Set([...Object.keys(this.desktopLayouts),...Object.keys(this.saved.namedLayouts)])].sort((a,b)=>a.localeCompare(b));}
+  saveLayout(value) {
+    const requested=layoutName(value),name=this.listLayouts().find(name=>name.toLowerCase()===requested.toLowerCase())??requested;
+    const snapshot=layoutSnapshot(this.fullTree,this.layoutActive,this.saved.homes[this.scene]);
+    this.commitSaved(next=>{
+      next.namedLayouts[name]=snapshot;
+      if(Object.hasOwn(next.userScenes,name))this.sceneManager.store(next,name,snapshot.tree,snapshot.active,snapshot.homes);
+    });return name;
+  }
+  loadLayout(value) {
+    const requested=layoutName(value),name=this.listLayouts().find(name=>name.toLowerCase()===requested.toLowerCase());
+    if(!name)throw new Error(`布局方案 [${requested}] 不存在`);
+    const available=new Set(this.pages.map(page=>page.id));
+    const snapshot=Object.hasOwn(this.saved.namedLayouts,name)?this.saved.namedLayouts[name]:layoutSnapshot(
+      desktopLayout(this.desktopLayouts[name],null,Math.max(320,innerWidth-200),innerHeight),this.desktopLayouts[name].activeContentId,{});
+    const next=readLayoutSnapshot(snapshot,available,{retainMissing:true});next.active=pageIds(next.tree).includes(next.active)?next.active:pageIds(next.tree)[0];
+    this.commitSaved(saved=>this.sceneManager.store(saved,this.scene,next.tree,next.active,next.homes));
+    this.setLayout(next.tree,next.active);this.draw();return name;
+  }
+  resetLayout() {
+    this.sceneManager.reset();
+  }
+  setRatio(id,value) {
+    const updated=resizePage(this.tree,id,value);
+    const apply=(old,next)=>{if(old?.kind!=='split')return;const original=this.projectedNodes.get(old);if(original)original.ratio=next.ratio;apply(old.first,next.first);apply(old.second,next.second);};
+    apply(this.tree,updated);this.setLayout(this.fullTree);this.persist();this.draw();
   }
   setAdjust(value) {
     this.adjust=value; document.body.classList.toggle('adjusting',value);
@@ -71,20 +123,25 @@ export class Workspace {
     $('adjust').querySelector('.wide').textContent=`页面调整：${value?'开':'关'}`;
     this.drawRail();
     for(const [id,pane] of this.panes) pane.querySelector('.page-label').draggable=value;
+    if(!value)this.hooks.onReveal?.();
   }
   select(id) {
-    this.active=id;
     const page=this.pages.find(p=>p.id===id); if(!page) return;
+    this.active=id;this.layoutActive=id;
     // Mobile can visit a hidden page without rewriting its desktop docking position.
     if(!this.panes.has(id)) this.pane(id);
     this.persist(); this.draw();
   }
   show(id) {
     if(matchMedia('(max-width:700px)').matches) return this.select(id);
-    if(pageIds(this.tree).includes(id)) { this.active=id; this.draw(); return; }
+    if(pageIds(this.tree).includes(id)) { this.active=id;this.layoutActive=id;this.persist();this.draw();return; }
     const page=this.pages.find(p=>p.id===id); if(!page) return;
     const home=this.saved.homes[this.scene]?.[id];
-    if(home && pageIds(this.tree).includes(home.target)) { this.place(id,home.target,home.side,home.ratio); return; }
+    if(home&&(home.targets??[home.target]).some(target=>pageIds(this.fullTree).includes(target))) {
+      if(home.side==='center')this.place(id,home.target,home.side,home.ratio);
+      else {this.setLayout(restorePage(this.fullTree,id,home),id);this.persist();this.draw();}
+      return;
+    }
     const side=page.placement?.side==='tab'?'center':page.placement?.side||'right';
     const target=page.placement?.tabTarget || this.active;
     this.place(id,target,side);
@@ -96,19 +153,17 @@ export class Workspace {
       this.saved.homes[this.scene]??={};
       this.saved.homes[this.scene][target]={target:id,side:'center',ratio};
     }
-    this.tree=dockPage(this.tree,id,target,side,ratio); this.active=id; this.persist(); this.draw();
+    this.setLayout(dockPage(this.fullTree,id,target,side,ratio),id);this.persist();this.draw();
   }
   hide(id) {
     this.saved.homes[this.scene]??={};
-    this.saved.homes[this.scene][id]=pageHome(this.tree,id);
-    this.tree=removePage(this.tree,id);
-    if(this.active===id) this.active=pageIds(this.tree)[0];
+    this.saved.homes[this.scene][id]=pageHome(this.fullTree,id);
+    const tree=removePage(this.fullTree,id);
+    this.setLayout(tree,this.layoutActive===id?pageIds(visibleLayout(tree,new Set(this.pages.map(page=>page.id))))[0]:this.layoutActive);
     this.persist(); this.draw();
   }
   hideScene(id,hidden) {
-    this.saved.hidden=this.saved.hidden.filter(value=>value!==id);
-    if(hidden) this.saved.hidden.push(id);
-    this.persist(); this.drawRail();
+    this.sceneManager.hide(id,hidden);
   }
   dragSource(node,kind,id) {
     node.draggable=this.adjust;
@@ -125,12 +180,13 @@ export class Workspace {
     const query=$('nav-query').value.trim().toLowerCase();
     const matches=text=>text.toLowerCase().includes(query);
     $('pages').replaceChildren(); $('scene-tray').replaceChildren();
-    for(const scene of this.scenes||[]) {
-      if(!matches(scene)) continue;
+    for(const info of this.sceneManager.list()) {
+      const scene=info.id;
+      if(!matches(`${scene} ${info.title}`)) continue;
       const hidden=this.saved.hidden.includes(scene);
       if(hidden&&!this.adjust&&!query) continue;
       const item=el('div',undefined,'scene-item');
-      const button=this.control(scene.replace(/^History/,''),()=>this.open(scene));
+      const button=this.control(info.title,()=>this.open(scene));
       button.setAttribute('aria-current',this.scene===scene?'page':'false'); button.dataset.scene=scene;
       this.dragSource(button,'scene',scene);
       item.append(button);
@@ -139,9 +195,7 @@ export class Workspace {
         button.ondragover=e=> { if(this.drag?.kind==='scene'&&this.drag.id!==scene) e.preventDefault(); };
         button.ondrop=e=> { e.preventDefault();
           if(this.drag?.kind!=='scene') return;
-          const id=this.drag.id; this.scenes=this.scenes.filter(value=>value!==id);
-          this.scenes.splice(this.scenes.indexOf(scene),0,id); this.saved.hidden=this.saved.hidden.filter(value=>value!==id);
-          this.persist(); this.drawRail();
+          try {this.sceneManager.move(this.drag.id,scene,{unhide:true});}catch(error){this.hooks.report(error);}
         };
       }
       (hidden&&!query?$('scene-tray'):$('pages')).append(item);
@@ -156,6 +210,7 @@ export class Workspace {
     if(!library.length) $('page-library').append(el('p',query?'没有匹配的页面':'所有页面都已打开','rail-hint'));
     $('scene-tray').hidden=!this.adjust;
     $('layout-reset').hidden=!this.adjust;
+    $('layout-desktop').hidden=!this.adjust||!Object.hasOwn(this.desktopLayouts,this.scene);
   }
   pane(id) {
     if(this.panes.has(id)) return this.panes.get(id);
@@ -183,7 +238,7 @@ export class Workspace {
       targets.append(target);
     }
     pane.append(targets); this.panes.set(id,pane);
-    this.hooks.renderPage(page,content).catch(error=>this.hooks.report(error));
+    pane.rendered=this.hooks.renderPage(page,content).catch(error=>this.hooks.report(error));
     return pane;
   }
   node(tree) {
@@ -196,7 +251,7 @@ export class Workspace {
     grip.setAttribute('aria-orientation',tree.axis==='x'?'vertical':'horizontal');
     grip.setAttribute('aria-valuemin','12'); grip.setAttribute('aria-valuemax','88');
     grip.setAttribute('aria-valuenow',String(Math.round(tree.ratio*100)));
-    const resize=value=> { tree.ratio=Math.max(.12,Math.min(.88,value)); first.style.flex=`${tree.ratio} 1 0%`;
+    const resize=value=> { tree.ratio=Math.max(.12,Math.min(.88,value));const original=this.projectedNodes.get(tree);if(original)original.ratio=tree.ratio;first.style.flex=`${tree.ratio} 1 0%`;
       second.style.flex=`${1-tree.ratio} 1 0%`; grip.setAttribute('aria-valuenow',String(Math.round(tree.ratio*100))); };
     grip.onpointerdown=e=> {
       if(e.button!==0) return;
@@ -226,10 +281,11 @@ export class Workspace {
     if(this.active&&!activeInTree) { const extra=this.pane(this.active); extra.classList.add('mobile-extra'); canvas.append(extra); }
     for(const [id,pane] of this.panes) { pane.dataset.active=String(id===this.active); pane.querySelector('.page-label').draggable=this.adjust; }
     main.replaceChildren(capsules,canvas); this.drawRail();
+    this.hooks.onReveal?.();
     let start;
     canvas.addEventListener('touchstart',e=> { const touch=e.touches[0];
       start=matchMedia('(max-width:700px)').matches&&e.touches.length===1
-        && !e.target.closest('input,textarea,select,button,.table-scroll,.dock-separator')
+        && !e.target.closest('input,textarea,select,button,.table-scroll,.dock-separator,.graph-viewport,.chat-viewport,.conversation-list')
         ? {x:touch.clientX,y:touch.clientY}:null;
     },{passive:true});
     canvas.addEventListener('touchend',e=> { if(!start) return;

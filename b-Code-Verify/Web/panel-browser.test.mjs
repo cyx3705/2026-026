@@ -93,6 +93,7 @@ test('REQ-WEB-010: candidate reloads retain selection, publish fallback and igno
   const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL || 'msedge',headless:true});
   try {
     const page=await browser.newPage(); await page.route('**/api/command',r=>r.fulfill({json:{success:true,data:[]}})); await page.goto(base);
+    await page.waitForFunction(()=>!document.getElementById('reload').disabled);
     await page.evaluate(async () => {
       const {renderPanel}=await import('/panel.js');
       const context={owner:'Test',pageId:'candidates',panels:[],inputs:new Map(),disposers:[],refreshers:[],followers:[],initializers:[]};
@@ -102,7 +103,7 @@ test('REQ-WEB-010: candidate reloads retain selection, publish fallback and igno
         active:()=>true,selection:()=>selection,declaration:()=>({command:'test.commit'}),action:async (...args)=>commits.push(args),report:e=>reports.push(e.message),
         publish:(channel,row)=>{selection[channel]=row; for(const follower of context.followers) follower();}
       });
-      component.id='candidate-fixture'; document.body.append(component);
+      component.id='candidate-fixture'; document.getElementById('main').replaceChildren(component);
       await Promise.all(context.initializers.map(load=>load())); initial=false;
       window.panelRace={context,selection,deferred,reports,commits,set:id=>{selection.scope=id ? {id} : undefined; context.followers.forEach(f=>f());}};
     });

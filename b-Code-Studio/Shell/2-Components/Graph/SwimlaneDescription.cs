@@ -152,9 +152,19 @@ public static class SwimlaneReader
             return SwimlaneParse.Fail(
                 $"schemaVersion={value.SchemaVersion} 不受支持，本端只支持 {SwimlaneDescription.SupportedSchemaVersion}");
 
+        // JSON null bypasses non-nullable C# annotations; reject the whole descriptor
+        // before layout or rendering so one bad data source cannot break its host.
+        if (value.Nodes == null || value.Lanes == null)
+            return SwimlaneParse.Fail("nodes 与 lanes 不能为 null");
+        if (value.Lanes.Any(lane => lane == null))
+            return SwimlaneParse.Fail("存在 null 泳道");
+        if (value.Edges?.Any(edge => edge == null
+                || string.IsNullOrWhiteSpace(edge.From) || string.IsNullOrWhiteSpace(edge.To)) == true)
+            return SwimlaneParse.Fail("存在无效边");
+
         foreach (var node in value.Nodes)
         {
-            if (string.IsNullOrWhiteSpace(node.Id))
+            if (node == null || string.IsNullOrWhiteSpace(node.Id))
                 return SwimlaneParse.Fail("存在缺少 id 的节点");
         }
 

@@ -38,6 +38,22 @@ public sealed class SwimlaneLayoutContractTests
         Assert.Single(layout.Lanes);
     }
 
+    // REQ-WEB-018: both frontends share this reader; malformed snapshots must fail
+    // atomically rather than throw inside the native renderer or HTTP endpoint.
+    [Theory]
+    [InlineData("""{ "schemaVersion": 1, "nodes": null }""")]
+    [InlineData("""{ "schemaVersion": 1, "lanes": null }""")]
+    [InlineData("""{ "schemaVersion": 1, "nodes": [null] }""")]
+    [InlineData("""{ "schemaVersion": 1, "lanes": [null] }""")]
+    [InlineData("""{ "schemaVersion": 1, "edges": [null] }""")]
+    [InlineData("""{ "schemaVersion": 1, "edges": [{"from":null,"to":"a"}] }""")]
+    public void Parse_RejectsNullCollectionsAndInvalidEntries(string json)
+    {
+        var parsed = SwimlaneReader.Read(json);
+        Assert.False(parsed.Ok);
+        Assert.False(string.IsNullOrWhiteSpace(parsed.Error));
+    }
+
     [Fact]
     public void Arrange_PlacesChildrenToTheRightOfParents()
     {

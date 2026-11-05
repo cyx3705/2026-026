@@ -323,6 +323,8 @@ internal static class HostedPageDescriptions
                                   {
                                     "widgets": [
                                       { "kind": "text", "text": "第三支：换掉的是组件，不是页面。" },
+                                      { "kind": "textbox", "id": "note", "label": "说明", "value": "分支演示" },
+                                      { "kind": "textbox", "id": "option", "label": "选项", "value": "第三项" },
                                       { "kind": "button", "action": "preview.apply", "text": "分支内按钮" }
                                     ]
                                   }
@@ -343,7 +345,8 @@ internal static class HostedPageDescriptions
                               },
                               {
                                 "widgets": [
-                                  { "kind": "textbox", "id": "popup-option", "label": "模式", "mode": "select",
+                                      { "kind": "textbox", "id": "note", "label": "说明", "value": "弹层演示" },
+                                      { "kind": "textbox", "id": "option", "label": "模式", "mode": "select",
                                     "options": [ "全部", "仅主线", "仅分支" ] }
                                 ]
                               },

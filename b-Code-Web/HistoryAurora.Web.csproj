@@ -3,4 +3,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <Version>2.0.0</Version>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../b-Code-Studio/Shell/3-HostedPages/Views/HostedPageDescriptions.cs" Link="HostedPageDescriptions.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Graph/SwimlaneLayout.cs" Link="Graph/SwimlaneLayout.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Graph/SwimlaneDescription.cs" Link="Graph/SwimlaneDescription.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Panels/PanelDefinition.cs" Link="Panels/PanelDefinition.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Pages/PageDescription.cs" Link="Pages/PageDescription.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Actions/ActionDeclaration.cs" Link="Actions/ActionDeclaration.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Panels/PanelIconNames.cs" Link="Panels/PanelIconNames.cs" />
+    <Compile Include="../b-Code-Studio/Shell/2-Components/Selection/SelectionBinding.cs" Link="Selection/SelectionBinding.cs" />
+  </ItemGroup>
 </Project>

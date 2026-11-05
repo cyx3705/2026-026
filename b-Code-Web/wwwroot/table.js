@@ -1,5 +1,9 @@
-import {bindArgs, rowsOf} from './protocol.js';
+import {isVisible} from './dom.js';
+import {bindArgs} from './protocol.js';
+import {applyTableUpdate,validateTableSource} from './table-data.js';
 import {columnWeight, columnOrder, allocateWidths, resizeWidths} from './table-layout.js';
+import {createTableViewport} from './table-viewport.js';
+import {tableActions,tableArguments} from './table-actions.js';
 
 const el = (tag, text, cls) => {
   const e = document.createElement(tag);
@@ -12,15 +16,25 @@ const textOf = value => value == null ? '' : typeof value === 'object' ? JSON.st
 export async function renderTable(node, context, hooks) {
   const box = el('section', undefined, 'table-section');
   const scroll = el('div', undefined, 'table-scroll'), notice = el('p', '', 'notice'); notice.hidden = true;
-  box.dataset.table = node.id ?? ''; box.append(notice, scroll);
+  const empty=el('p','暂无数据','table-empty');empty.hidden=true;
+  const actionNotice=el('p','','notice table-action-notice');actionNotice.hidden=true;
+  box.dataset.table = node.id ?? ''; box.append(actionNotice,notice, scroll);
+  try {validateTableSource(node.dataSource);}catch(error){notice.textContent=error.message;notice.hidden=false;return box;}
   const storageKey = node.id ? `aurora.web.table.v1:${JSON.stringify([context.owner, context.pageId, node.id])}` : null;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(storageKey)) ?? {}; } catch { /* Unavailable storage uses defaults. */ }
   let columns = node.columns ?? [], order = [], weights = {}, widths = [], colgroup;
-  let rows = [], selectedKey, selected, sourceKey, request = 0, disposed = false, menu, cancelGesture, viewportWidth=0;
-  const pending = new Set(), inline = (node.rowActions ?? []).filter(a => a.inline !== false);
-  const identity = (row, index) => row[node.dataSource.rowKey || 'id'] ?? index;
+  let data={rows:[],revision:null},rows=data.rows,selectedKey,selected,sourceKey,request=0,disposed=false,pendingVisible=true,menu,cancelGesture,viewportWidth=0;
+  let running,latestArgs,dirty=false,abort,renderedSchema,updating=false;
+  const pending = new Set();
+  const declaration=id=>hooks.declaration?hooks.declaration(id):{danger:hooks.danger?.(id)};
+  let actions=tableActions(node,declaration),inline=actions.rows.filter(a=>a.inline!==false);
+  const pendingKey=(row,index,id)=>JSON.stringify([identity(row,index),id.toLowerCase()]);
+  const identity = (row, index) => node.dataSource.rowKey ? row[node.dataSource.rowKey] : index;
   const active = () => !disposed && hooks.active();
+  const viewport=createTableViewport({scroll,identity,makeRow,selectedKey:()=>selectedKey,
+    onNavigate:view=>select(view.row,view.index,view.tr),onChange:()=>{cancelGesture?.();closeMenu();},
+    mutate:work=>{updating=true;try{work();}finally{updating=false;}}});
   const save = () => {
     if (!storageKey) return;
     try { localStorage.setItem(storageKey, JSON.stringify({order, weights})); }
@@ -33,6 +47,7 @@ export async function renderTable(node, context, hooks) {
   };
   function openMenu(items, x, y, opener) {
     closeMenu();
+    const document=box.ownerDocument,window=document.defaultView,{innerWidth,innerHeight}=window;
     menu = el('div', undefined, 'table-menu'); menu.setAttribute('role', 'menu');
     menu.opener = opener; menu.abort = new AbortController();
     const signal = menu.abort.signal;
@@ -60,23 +75,19 @@ export async function renderTable(node, context, hooks) {
     scroll.addEventListener('scroll', () => closeMenu(), {signal});
   }
   function select(row, index, tr) {
+    if(!active())return;
     selectedKey = identity(row, index); selected = row;
-    for (const sibling of scroll.querySelectorAll('tbody tr')) sibling.setAttribute('aria-selected', String(sibling === tr));
+    viewport.selection();
     if (node.channel) hooks.publish(node.channel, row);
   }
-  const resolveOverrides = spec => Object.fromEntries(Object.entries(spec.args ?? {}).map(([key, binding]) => {
-    if (Object.hasOwn(binding, 'value')) return [key, binding.value];
-    const match = /^(.+)\.selected\.(.+)$/.exec(binding.from ?? '');
-    const value = match && context.tables.get(match[1])?.selected()?.[match[2]];
-    if (value == null) throw new Error(`无法取得参数：${binding.from}`);
-    return [key, value];
-  }));
+  const resolveOverrides = spec => tableArguments(spec.args,context.tables);
   async function run(spec, row, index) {
-    const key = JSON.stringify([identity(row, index), spec.action]);
-    if (pending.has(key) || !active()) return;
+    const key = pendingKey(row,index,spec.action);
+    if (pending.has(key) || !active()) return false;
+    if(!declaration(spec.action))throw new Error(`未声明的动作：${spec.action}`);
     const snapshot = {...row}, additions = resolveOverrides(spec);
     pending.add(key);
-    try { await hooks.action(spec.action, snapshot, additions); }
+    try { await hooks.action(spec.action, snapshot, additions);return true; }
     finally {
       pending.delete(key);
       // Successful actions can rebuild the rows while this action is still pending.
@@ -85,15 +96,16 @@ export async function renderTable(node, context, hooks) {
     }
   }
   function rowMenu(row, index, tr, x, y) {
+    if(!active())return;
     select(row, index, tr);
     const snapshot = {...row};
-    if (!node.rowActions?.length) return;
+    if (!actions.rows.length) return;
     // Freeze explicit cross-table arguments when opening, too.
-    const items = node.rowActions.map(spec => {
+    const items = actions.rows.map(spec => {
       let additions, error;
       try { additions = resolveOverrides(spec); } catch (e) { error = e; }
-      return {title:spec.title || '执行', danger:spec.danger || hooks.danger(spec.action),
-        disabled:pending.has(JSON.stringify([identity(row,index),spec.action])),
+      return {title:spec.title, danger:spec.danger,
+        disabled:pending.has(pendingKey(row,index,spec.action)),
         run:async () => {
           if (error) throw error;
           const frozen = {...spec, args:Object.fromEntries(Object.entries(additions).map(([k,v]) => [k,{value:v}]))};
@@ -118,6 +130,7 @@ export async function renderTable(node, context, hooks) {
   }
   function reset() { saved = {}; weights = Object.fromEntries(columns.map(c => [c.key, columnWeight(c.width)])); order = columnOrder(columns); save(); draw(); }
   function headerMenu(column, th, x, y) {
+    if(!active())return;
     const i = order.indexOf(column.key), star = columns.find(c => c.width === '*')?.key;
     openMenu([
       {title:'向左移动列', disabled:i === 0 || column.key === star, run:() => moveColumn(column.key, order[i-1])},
@@ -127,9 +140,10 @@ export async function renderTable(node, context, hooks) {
     ], x, y, th);
   }
   function gesture(e, th, column, resizing) {
-    if (e.button !== 0) return;
+    if (e.button !== 0||!active()) return;
     if (viewportWidth !== scroll.clientWidth || widths.length !== order.length) fit();
     e.preventDefault(); e.stopPropagation(); closeMenu(); cancelGesture?.();
+    const document=box.ownerDocument,window=document.defaultView;
     const start = e.clientX, initial = [...widths], i = order.indexOf(column.key), abort = new AbortController();
     const signal = abort.signal; let moved = false, target;
     const finish = cancelled => {
@@ -160,7 +174,10 @@ export async function renderTable(node, context, hooks) {
     document.addEventListener('pointercancel', () => finish(true), {signal,once:true});
     window.addEventListener('blur', () => finish(true), {signal,once:true});
   }
-  function draw() {
+  function draw({dataOnly=false}={}) {
+    const schema=JSON.stringify([columns,order]),existing=scroll.querySelector('table');
+    empty.hidden=rows.length!==0;
+    if(dataOnly&&existing&&schema===renderedSchema){viewport.reconcile(rows,existing.tBodies[0]);return;}
     cancelGesture?.(); closeMenu();
     const table = el('table', undefined, 'aurora-table'), head = el('thead'), header = el('tr'), body = el('tbody');
     colgroup = el('colgroup');
@@ -195,92 +212,180 @@ export async function renderTable(node, context, hooks) {
       }
       header.append(th); colgroup.append(el('col'));
     });
-    if (inline.length) { header.append(el('th','操作')); colgroup.append(el('col')); }
+    if (inline.length) { header.append(el('th','操作','row-action-header')); colgroup.append(el('col')); }
     head.append(header); table.append(colgroup,head,body);
-    rows.forEach((row,index) => {
-      const tr = el('tr'); tr.tabIndex = 0; tr.setAttribute('aria-selected',String(identity(row,index) === selectedKey));
-      tr.onclick = () => select(row,index,tr);
-      tr.oncontextmenu = e => { e.preventDefault(); rowMenu(row,index,tr,e.clientX,e.clientY); };
-      tr.onkeydown = e => {
-        if (e.target !== tr) return;
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(row,index,tr); }
-        if (e.key === 'ContextMenu' || e.key === 'F10' && e.shiftKey) { e.preventDefault(); const r=tr.getBoundingClientRect(); rowMenu(row,index,tr,r.x+8,r.bottom); }
-      };
-      for (const key of order) {
-        const column = columns.find(c => c.key === key), value = textOf(row[key]), td = el('td'); td.title = value;
-        if (column.cellEditAction && (!column.editableWhen || String(row[column.editableWhen]).toLowerCase() === 'true')) {
-          td.textContent = value; td.classList.add('editable-cell'); td.ondblclick = () => edit(td,column,row,index);
-        } else if (column.cellAction && value && column.cellStyle !== 'double') {
-          const b = el('button',value,column.cellStyle === 'button' ? '' : 'cell-link'); b.type='button';
-          b.onclick = () => { select(row,index,tr); void run({action:column.cellAction},row,index).catch(hooks.report); }; td.append(b);
-        } else { td.textContent = value; if (column.cellAction && value) td.ondblclick = () => void run({action:column.cellAction},row,index).catch(hooks.report); }
-        tr.append(td);
-      }
-      if (inline.length) {
-        const td = el('td',undefined,'row-actions');
-        for (const spec of inline) {
-          const b = el('button',spec.title || '执行',spec.danger || hooks.danger(spec.action) ? 'danger' : ''); b.type='button';
-          b.dataset.pendingKey=JSON.stringify([identity(row,index),spec.action]);
-          b.disabled = pending.has(JSON.stringify([identity(row,index),spec.action]));
-          b.onclick = async () => { select(row,index,tr); b.disabled=true; try { await run(spec,row,index); } catch(e) { hooks.report(e); } finally { b.disabled=false; } }; td.append(b);
-        }
-        tr.append(td);
-      }
-      body.append(tr);
-    });
-    const top = scroll.scrollTop; scroll.replaceChildren(table); scroll.scrollTop = top; fit();
+    renderedSchema=schema;
+    viewport.reconcile(rows,body);
+    const top = scroll.scrollTop,left=scroll.scrollLeft; scroll.replaceChildren(table,empty); fit(); scroll.scrollTop=top;scroll.scrollLeft=left;
   }
-  function edit(td,column,row,index) {
-    if (td.querySelector('input')) return;
+  function makeRow(row,index) {
+    const tr = el('tr'); tr.tabIndex = 0; tr.setAttribute('aria-selected',String(identity(row,index) === selectedKey));
+    const view={row,index,tr};
+    tr.onclick = () => select(row,view.index,tr);
+    tr.oncontextmenu = e => { e.preventDefault(); rowMenu(row,view.index,tr,e.clientX,e.clientY); };
+    tr.onkeydown = e => {
+      if (e.target !== tr) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(row,view.index,tr); }
+      if (e.key === 'ContextMenu' || e.key === 'F10' && e.shiftKey) { e.preventDefault(); const r=tr.getBoundingClientRect(); rowMenu(row,view.index,tr,r.x+8,r.bottom); }
+      viewport.keydown(e,view);
+    };
+    const cells=order.map(key=>{
+      const column=columns.find(c=>c.key===key),td=el('td'),value=textOf(row[key]);td.title=value;tr.append(td);
+      let signature;
+      return ()=>{
+        const binding=actions.columns.get(key),editable=binding?.edit&&(!column.editableWhen||String(row[column.editableWhen]).trim().toLowerCase()==='true');
+        const mode=editable?'edit':binding&&!binding.edit&&value.trim()?(binding.style==='double'?'double':'button'):'text';
+        const next=JSON.stringify([mode,binding?.id,binding?.style]);
+        if(signature!==next){
+          view.cancelEdit?.(td);td.replaceChildren();td.classList.toggle('editable-cell',mode==='edit');td.ondblclick=null;
+          if(mode==='button'){
+            const b=el('button',value,binding.style==='button'?'':'cell-link');b.type='button';
+            b.onclick=()=>{select(row,view.index,tr);void run({action:binding.id},row,view.index).catch(hooks.report);};td.append(b);
+          }else {
+            td.textContent=value;
+            if(mode==='edit')td.ondblclick=()=>edit(td,column,view);
+            if(mode==='double')td.ondblclick=()=>{select(row,view.index,tr);void run({action:binding.id},row,view.index).catch(hooks.report);};
+          }
+          signature=next;
+        }
+        const b=td.querySelector('button');
+        if(b){b.classList.toggle('danger',!!binding.danger);b.title=binding.summary;}
+      };
+    });
+    view.rebind=()=>{
+      cells.forEach(bind=>bind());
+      let td=tr.querySelector('.row-actions');
+      if(!inline.length){td?.remove();return;}
+      if(!td){td=el('td',undefined,'row-actions');tr.append(td);}
+      const existing=new Map([...td.children].map(b=>[b.dataset.binding,b]));
+      const buttons=inline.map((spec,index)=>{
+        const key=JSON.stringify([index,spec.action.toLowerCase()]);
+        const b=existing.get(key)??el('button');b.type='button';b.dataset.binding=key;
+        b.dataset.action=spec.action.toLowerCase();b.textContent=spec.title;b.title=spec.summary||spec.action;
+        b.classList.toggle('danger',!!spec.danger);b.dataset.pendingKey=pendingKey(row,view.index,spec.action);
+        b.disabled=pending.has(b.dataset.pendingKey);
+        b.onclick=async()=>{select(row,view.index,tr);b.disabled=true;try{await run(spec,row,view.index);}catch(e){hooks.report(e);}finally{b.disabled=false;}};
+        return b;
+      });
+      for(const button of [...td.children])if(!buttons.includes(button))button.remove();
+      buttons.forEach((button,index)=>{if(td.children[index]!==button)td.insertBefore(button,td.children[index]??null);});
+    };
+    view.rebind();
+    return view;
+  }
+  function edit(td,column,view) {
+    if (!active()||td.querySelector('input')||pending.has(pendingKey(view.row,view.index,column.cellEditAction))) return;
+    const {row,index}=view;view.editing=true;
+    const ticket=Symbol('edit');td.editTicket=ticket;
     const snapshot = {...row}, original = textOf(row[column.key]), input = el('input'); input.value = original;
     input.setAttribute('aria-label',`编辑${column.title || column.key}`); td.replaceChildren(input); input.focus(); input.select();
     let finished = false;
-    const cancel = () => { if (!finished) { finished=true; td.textContent=original; } };
-    input.onblur = cancel;
+    const cancel = () => { if (!finished) { finished=true;view.editing=false;td.textContent=original;viewport.schedule(); } };
+    view.cancelEdit=cell=>{if(cell===td){td.editTicket=undefined;cancel();}};
+    input.onblur = () => {if(!updating)cancel();};
     input.onkeydown = async e => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
       if (e.key !== 'Enter' || finished || e.isComposing) return;
-      e.preventDefault(); e.stopPropagation(); finished=true; input.disabled=true;
-      try { await run({action:column.cellEditAction},{...snapshot,[column.key]:input.value},index); if (td.isConnected) td.textContent=input.value; }
-      catch (error) { td.textContent=original; hooks.report(error); }
+      e.preventDefault(); e.stopPropagation();
+      if(input.value===original){cancel();return;}
+      finished=true;view.editing=false;input.disabled=true;viewport.schedule();
+      try { const saved=await run({action:column.cellEditAction},{...snapshot,[column.key]:input.value},index); if (td.isConnected&&td.editTicket===ticket) td.textContent=saved?input.value:original; }
+      catch (error) { if(td.isConnected&&td.editTicket===ticket)td.textContent=original;if(active())hooks.report(error); }
+      finally {view.editing=false;viewport.schedule();}
     };
   }
-  async function refresh() {
-    const ticket = ++request;
+  function clearRows() {
+    closeMenu();cancelGesture?.();data={rows:[],revision:null};rows=data.rows;selectedKey=undefined;selected=undefined;
+    viewport.clear();renderedSchema=undefined;colgroup=undefined;scroll.replaceChildren();
+    if(node.channel)hooks.publish(node.channel,undefined);
+  }
+  // One in-flight request per table. Further requests invalidate that response and
+  // collapse into one follow-up using the latest source and last accepted revision.
+  function refresh() {
+    if(!active())return Promise.resolve();
+    ++request;dirty=true;
     try {
-      const args = bindArgs(node.dataSource.args, {}, {}, hooks.selection()), nextSource = JSON.stringify(args);
-      previous = nextSource;
-      if (sourceKey !== nextSource) {
-        closeMenu(); cancelGesture?.();
-        sourceKey = nextSource; selectedKey = undefined; selected=undefined; rows=[]; scroll.replaceChildren();
-        if (node.channel) hooks.publish(node.channel,undefined);
+      latestArgs=bindArgs(node.dataSource.args,{},{},hooks.selection());
+      const next=JSON.stringify(latestArgs);previous=next;
+      if(sourceKey!==next){sourceKey=next;clearRows();}
+    }catch(error){
+      latestArgs=undefined;previous=null;sourceKey=undefined;dirty=false;clearRows();
+      notice.textContent=error.message.startsWith('无法取得参数')?'请先选择相关条目':error.message;notice.hidden=false;
+      return running??Promise.resolve();
+    }
+    if(!isVisible(box)){pendingVisible=true;return running??Promise.resolve();}
+    pendingVisible=false;
+    return startReload();
+  }
+  function startReload() {
+    if(!running)running=Promise.resolve().then(reload).finally(()=>{
+      running=null;
+      // A channel follower can request again in a microtask after reload exits
+      // but before this finalizer runs. Keep that request in the same wait chain.
+      if(dirty&&active()&&latestArgs){
+        if(isVisible(box))return startReload();
+        pendingVisible=true;
       }
-      const result = rowsOf(await hooks.invoke(node.dataSource.command,args));
-      if (ticket !== request || !active()) return;
-      rows = result;
-      columns = node.columns?.length ? node.columns : [...new Set(rows.flatMap(r => Object.keys(r)))].map(key => ({key}));
-      order = columnOrder(columns, order.length ? order : Array.isArray(saved.order) ? saved.order : []);
-      weights = Object.fromEntries(columns.map(c => [c.key, columnWeight(weights[c.key] ?? saved.weights?.[c.key] ?? c.width)]));
-      selected = rows.find((r,i) => identity(r,i) === selectedKey);
-      notice.hidden = true; draw();
-      if (node.channel) hooks.publish(node.channel, selected);
-    } catch (error) {
-      if (ticket !== request || !active()) return;
-      if (error.message.startsWith('无法取得参数')) {
-        closeMenu(); cancelGesture?.();
-        sourceKey = undefined; selectedKey=undefined; selected=undefined; rows=[]; scroll.replaceChildren();
-        if (node.channel) hooks.publish(node.channel,undefined);
-      }
-      notice.textContent = error.message.startsWith('无法取得参数') ? '请先选择相关条目' : error.message;
-      notice.hidden = false;
+    });
+    return running;
+  }
+  async function reload() {
+    while(dirty&&active()&&latestArgs) {
+      if(!isVisible(box)){pendingVisible=true;return;}
+      dirty=false;
+      const ticket=request,args=latestArgs,key=sourceKey,delta=!!(data.revision&&node.dataSource.deltaCommand);
+      abort=new AbortController();
+      try {
+        const result=await hooks.invoke(delta?node.dataSource.deltaCommand:node.dataSource.command,
+          delta?{...args,since:data.revision}:args,{signal:abort.signal});
+        if(ticket!==request||key!==sourceKey||!active())continue;
+        const next=applyTableUpdate(data,result,{rowKey:node.dataSource.rowKey,deltaAllowed:delta,
+          columnKeys:node.columns?.length?node.columns.map(column=>column.key):undefined});
+        rows=next.rows;
+        if(!next.delta||!columns.length)columns=node.columns?.length?node.columns:next.columnKeys.map(key=>({key}));
+        order=columnOrder(columns,order.length?order:Array.isArray(saved.order)?saved.order:[]);
+        weights=Object.fromEntries(columns.map(column=>[column.key,columnWeight(weights[column.key]??saved.weights?.[column.key]??column.width)]));
+        selected=rows.find((row,index)=>identity(row,index)===selectedKey);
+        if(!selected)selectedKey=undefined;
+        notice.hidden=true;draw({dataOnly:true});data=next;
+        if(node.channel)hooks.publish(node.channel,selected);
+      }catch(error){
+        if(ticket!==request||!active())continue;
+        notice.textContent=error.message;notice.hidden=false;
+      }finally{abort=null;}
     }
   }
-  if (node.id) context.tables.set(node.id, {selected:() => selected});
+  function showActionIssues() {
+    actionNotice.textContent=actions.errors.length?'表格操作未绑定：'+actions.errors.join('；'):'';
+    actionNotice.hidden=!actions.errors.length;
+  }
+  const actionIds=new Set([...(node.columns??[]).flatMap(column=>[column.cellAction,column.cellEditAction]),
+    ...(node.rowActions??[]).map(spec=>spec.action)].filter(id=>typeof id==='string').map(id=>id.toLowerCase()));
+  (context.actionBindings??=[]).push(changed=>{
+    if(!active()||changed&&![...changed].some(id=>actionIds.has(id.toLowerCase())))return false;
+    const hadInline=inline.length>0;
+    actions=tableActions(node,declaration);inline=actions.rows.filter(spec=>spec.inline!==false);
+    closeMenu();showActionIssues();
+    const header=scroll.querySelector('thead tr');
+    if(header&&hadInline!==!!inline.length){
+      if(inline.length){header.append(el('th','操作','row-action-header'));colgroup.append(el('col'));}
+      else {header.querySelector('.row-action-header')?.remove();colgroup.lastElementChild?.remove();}
+    }
+    viewport.updateViews(view=>view.rebind());fit();return true;
+  });
+  showActionIssues();
+  if (node.id) context.tables.set(node.id, {selected:() => selected,refresh});
+  (context.dataBindings??=[]).push({node:node.id??'',refresh});
+  const reveal=()=>{if(pendingVisible&&isVisible(box))return refresh();};
+  (context.revealers??=[]).push(()=>{viewport.schedule();return reveal();});
   const observer = new ResizeObserver(() => {
+    void reveal();
+    viewport.schedule();
     if (scroll.clientWidth === viewportWidth) return;
     cancelGesture?.(); fit();
   }); observer.observe(scroll);
-  context.disposers.push(() => { disposed=true; ++request; observer.disconnect(); cancelGesture?.(); closeMenu(); });
+  (context.relocators??=[]).push(()=>{cancelGesture?.();closeMenu();fit();viewport.relocate();void reveal();});
+  context.disposers.push(() => { disposed=true; ++request;dirty=false;abort?.abort();observer.disconnect();cancelGesture?.();closeMenu();viewport.dispose(); });
   let previous;
   if (JSON.stringify(node.dataSource?.args ?? {}).includes('{selection.')) context.followers.push(() => {
     let next;
@@ -288,5 +393,5 @@ export async function renderTable(node, context, hooks) {
     if (next !== previous) { previous=next; void refresh(); }
   });
   context.refreshers.push(refresh);
-  await refresh(); return box;
+  (context.initializers ??= []).push(refresh); return box;
 }

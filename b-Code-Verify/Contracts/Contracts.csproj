@@ -36,6 +36,8 @@
     <!-- DEC-004：Aurora 是独立应用而非模块，契约测试对着 App 工程跑。
          原先指向 Module 骨架，那是 DEC-004 之前的形态。 -->
     <ProjectReference Include="..\..\b-Code-Studio\Module\HistoryAurora.Module.csproj" />
+    <!-- The filesystem adapter is tested against temporary files without starting the Web server. -->
+    <Compile Include="..\..\b-Code-Web\PanelFileReader.cs" Link="Web/PanelFileReader.cs" />
   </ItemGroup>
 
 </Project>

@@ -19,7 +19,7 @@ internal static class PanelIconCatalog
         + "M21,3 V8 H16";
 
     public static bool Supports(string? name)
-        => string.Equals(name, "refresh-cw", StringComparison.OrdinalIgnoreCase);
+        => PanelIconNames.Supports(name);
 
     public static FrameworkElement Create(string name, Button owner)
     {

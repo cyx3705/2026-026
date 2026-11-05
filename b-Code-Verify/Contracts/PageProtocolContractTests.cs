@@ -41,6 +41,27 @@ public sealed class PageProtocolContractTests
         Assert.Equal("demo", Assert.Single(parsed.Value.Pages).Id);
     }
 
+    [Fact]
+    public void Parse_SharedWebReaderPreservesNativeCasingNumericStringsAndDefaults()
+    {
+        var parsed = PageDescriptionReader.Read("""
+            { "SCHEMAVERSION": "1", "OWNER": "historydemo", "PAGES": [
+              { "ID": "原生页", "TITLE": "演示", "PLACEMENT": { "RATIO": "0.4" },
+                "CONTENT": { "TYPE": "panel", "ROWS": [ { "WIDGETS": [
+                  { "KIND": "textbox", "ID": "draft", "MINWIDTH": "140" }
+                ] } ] } }
+            ] }
+            """, "HistoryDemo");
+        Assert.True(parsed.Ok, parsed.Error);
+        var page = Assert.Single(parsed.Value!.Pages);
+        Assert.Equal("原生页", page.Id);
+        Assert.Equal("right", page.Placement.Side);
+        Assert.Equal(.4, page.Placement.Ratio);
+        Assert.True(page.Placement.Visible);
+        Assert.True(page.Placement.Singleton);
+        Assert.Equal(140, Assert.Single(Assert.Single(page.Content!.Rows!).Widgets).MinWidth);
+    }
+
     /// <summary>
     /// 版本不对、冒名（防止借描述抢注别的模块的页面）、页 id 重复、缺内容、不是 JSON：一律明确失败。
     /// 文本协议没有编译器保护，报错必须点名出错的那一处，否则排查只能靠猜。
@@ -77,6 +98,13 @@ public sealed class PageProtocolContractTests
             "HistoryDemo", "缺少内容"
         },
         { "{ not json", "HistoryDemo", "合法 JSON" },
+        { """{ "schemaVersion": 1, "owner": "HistoryDemo", "pages": null }""", "HistoryDemo", "未声明" },
+        { """{ "schemaVersion": 1, "owner": "HistoryDemo", "pages": [null] }""", "HistoryDemo", "null" },
+        { """{ "schemaVersion": 1, "owner": "HistoryDemo", "pages": [] }""", "HistoryDemo", "未声明" },
+        { MinimalPage.Replace("\"title\": \"演示\"", "\"title\": \"\""), "HistoryDemo", "标题" },
+        { MinimalPage.Replace("\"id\": \"demo\"", "\"id\": \"Demo\""), "HistoryDemo", "小写" },
+        { MinimalPage.Replace("\"id\": \"demo\"", "\"id\": \"two pages\""), "HistoryDemo", "空格" },
+        { MinimalPage.Replace("\"title\": \"演示\"", "\"title\": \"演示\", \"placement\": null"), "HistoryDemo", "placement" },
     };
 
     [Fact]
