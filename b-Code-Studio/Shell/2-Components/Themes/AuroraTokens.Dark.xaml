@@ -18,7 +18,8 @@
     <Color x:Key="Aurora.Color.SurfaceAlt">#242625</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#2A2D2C</Color>
     <Color x:Key="Aurora.Color.SurfacePressed">#343736</Color>
-    <Color x:Key="Aurora.Color.AccentSoft">#33342A</Color>
+    <!-- AccentSoft:主题金 28% 叠在 Canvas 上(原 #33342A),推法见浅色令牌 -->
+    <Color x:Key="Aurora.Color.AccentSoft">#3C3218</Color>
 
     <SolidColorBrush x:Key="Aurora.Brush.Canvas" Color="{StaticResource Aurora.Color.Canvas}" />
     <SolidColorBrush x:Key="Aurora.Brush.Surface" Color="{StaticResource Aurora.Color.Surface}" />

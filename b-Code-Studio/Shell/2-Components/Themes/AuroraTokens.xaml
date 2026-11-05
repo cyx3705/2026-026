@@ -46,7 +46,9 @@
     <Color x:Key="Aurora.Color.SurfaceAlt">#EBE9E4</Color>
     <Color x:Key="Aurora.Color.SurfaceHover">#E5E3DE</Color>
     <Color x:Key="Aurora.Color.SurfacePressed">#DDD9D1</Color>
-    <Color x:Key="Aurora.Color.AccentSoft">#F4E9CF</Color>
+    <!-- AccentSoft:选中/气泡底。2.0.0 起由主题金 #A97F22 叠在本主题 Canvas 上推出(不透明:气泡与正文两层叠用,半透明会加深),
+         浓度按原值亮度对齐——浅色 15%(原 #F4E9CF),深色 28%(原 #33342A);正文在上面约 10:1。 -->
+    <Color x:Key="Aurora.Color.AccentSoft">#EFE8D7</Color>
 
     <SolidColorBrush x:Key="Aurora.Brush.Canvas" Color="{StaticResource Aurora.Color.Canvas}" />
     <SolidColorBrush x:Key="Aurora.Brush.Surface" Color="{StaticResource Aurora.Color.Surface}" />
