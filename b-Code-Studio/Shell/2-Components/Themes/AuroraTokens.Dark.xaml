@@ -6,7 +6,7 @@
     <!--
         UI-08 深色令牌(S-04 落地)。键名与 AuroraTokens.xaml 逐一对应,主题切换
         整份替换,不做逐键覆盖 —— 少一个键就会露出浅色底,所以两份必须同步维护。
-        主题色仍是暗黄,深色下提亮以保证对比度。
+        主题色是金,深浅同值(2.0.0,随 2026-031 令牌)。
     -->
 
     <!-- ================================================================ 颜色 -->
@@ -30,8 +30,8 @@
     <SolidColorBrush x:Key="Aurora.Brush.TextSecondary" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.TextDisabled" Color="#77746A" />
 
-    <!-- 主题色:暗黄(深色底上提亮) -->
-    <SolidColorBrush x:Key="Aurora.Brush.Accent" Color="#D9A441" />
+    <!-- 主题色:金,2.0.0 起深浅同值 #A97F22(见浅色令牌) -->
+    <SolidColorBrush x:Key="Aurora.Brush.Accent" Color="#A97F22" />
     <SolidColorBrush x:Key="Aurora.Brush.AccentSoft" Color="{StaticResource Aurora.Color.AccentSoft}" />
 
     <SolidColorBrush x:Key="Aurora.Brush.Danger" Color="#E06C6C" />

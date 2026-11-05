@@ -167,10 +167,12 @@ public sealed class RightEdgeAndThemeContractTests
             var accent = Token(LightTokensUri, "Aurora.Brush.Accent");
             var secondary = Token(LightTokensUri, "Aurora.Brush.TextSecondary");
 
-            // 表格可点列与链接用 Accent 当字色:卡片上要过 AA 4.5。
-            Assert.True(Contrast(accent, surface) >= 4.5, $"Accent/Surface {Contrast(accent, surface):F2}");
-            Assert.True(Contrast(accent, alt) >= 4.5, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
-            Assert.True(Contrast(Token(LightTokensUri, "Aurora.Brush.OnInk"), accent) >= 4.5, "主按钮白字");
+            // 2.0.0 起主题色随 2026-031 令牌深浅同值(#A97F22),只做强调:聚焦边、选区、悬停字、提示点。
+            // 正文和主按钮不用它(主按钮是墨色块,见 InkBlockContractTests),所以不按正文 AA 4.5,
+            // 而按界面元素的 3:1 下限判,在页面与控制面板上都要看得见。
+            Assert.True(Contrast(accent, surface) >= 3.0, $"Accent/Surface {Contrast(accent, surface):F2}");
+            Assert.True(Contrast(accent, alt) >= 3.0, $"Accent/SurfaceAlt {Contrast(accent, alt):F2}");
+            Assert.Equal(accent, Token(DarkTokensUri, "Aurora.Brush.Accent"));
             Assert.True(Contrast(secondary, alt) >= 4.5, $"TextSecondary/SurfaceAlt {Contrast(secondary, alt):F2}");
             // 三层台阶:底部最亮、页面次之、控制面板最深,方向单调
             Assert.True(Luminance(canvas) > Luminance(surface), $"Canvas {canvas} 应比 Surface {surface} 亮");

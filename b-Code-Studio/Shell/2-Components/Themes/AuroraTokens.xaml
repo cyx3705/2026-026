@@ -9,7 +9,7 @@
 
         AvalonDock 主题画刷键(reskeys)也在这里定义:主题切换时整份字典被替换,
         应用色与停靠色因此始终同步,不会出现「界面已深色、页签仍浅色」。
-        主题色(Accent)按 3.1 决议统一为暗黄,浅色深色只差明度。
+        主题色(Accent)按 3.1 决议统一为暗黄;2.0.0 起随 2026-031 令牌改为深浅同值的金 #A97F22。
 
         1.26.0(REQ-UI-127):浅色中性色改取 OneHistory 站点(onehistory.exc0.top,
         2026-031 b-Site/assets/site.css)的暖纸色系 —— Canvas / SurfaceAlt / ControlBorder
@@ -58,8 +58,9 @@
     <SolidColorBrush x:Key="Aurora.Brush.TextSecondary" Color="{StaticResource Aurora.Color.Text}" />
     <SolidColorBrush x:Key="Aurora.Brush.TextDisabled" Color="#9E998D" />
 
-    <!-- 主题色:暗黄 -->
-    <SolidColorBrush x:Key="Aurora.Brush.Accent" Color="#7F5E0F" />
+    <!-- 主题色:金。2.0.0 起随 2026-031 z-OneHistoryID 令牌深浅共用 #A97F22(原浅色 #7F5E0F、深色 #D9A441)。
+         金色只做强调(聚焦边、选区、悬停字、提示点),不做正文字色,因此不按正文 AA 4.5 要求,界面元素守 3:1。 -->
+    <SolidColorBrush x:Key="Aurora.Brush.Accent" Color="#A97F22" />
     <SolidColorBrush x:Key="Aurora.Brush.AccentSoft" Color="{StaticResource Aurora.Color.AccentSoft}" />
 
     <!-- 危险色也是关闭按钮的悬停底(UI-02.4) -->
