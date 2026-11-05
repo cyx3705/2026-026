@@ -111,7 +111,7 @@ test('REQ-WEB-029: page context popup stays out of layout, respects row/header m
     await page.locator('[data-page=layout] .page-content').focus();await page.keyboard.press('Shift+F10');
     await editor.waitFor();assert.equal(await editor.getByRole('textbox',{name:'弹层草稿'}).inputValue(),'保持原草稿');await page.keyboard.press('Escape');
     const button=page.getByRole('button',{name:'按钮弹层',exact:true});
-    assert.equal(await button.evaluate(n=>{const expected=document.createElement('span');expected.style.backgroundColor='var(--accent)';document.body.append(expected);const matches=getComputedStyle(n).backgroundColor===getComputedStyle(expected).backgroundColor;expected.remove();return matches;}),true);
+    assert.equal(await button.evaluate(n=>{const expected=document.createElement('span');expected.style.backgroundColor='var(--ink-block)';document.body.append(expected);const matches=getComputedStyle(n).backgroundColor===getComputedStyle(expected).backgroundColor;expected.remove();return matches;}),true);
     await button.click();const panel=page.getByRole('dialog',{name:'按钮弹层',exact:true});await panel.waitFor();
     await button.click();await panel.waitFor({state:'detached'});assert.equal(await button.getAttribute('aria-expanded'),'false');
     await button.click();await page.getByText('空白说明',{exact:true}).click();await panel.waitFor({state:'detached'});
