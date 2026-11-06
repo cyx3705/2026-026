@@ -21,7 +21,7 @@ internal sealed class PopupPage : ContentPage
                 return;
             try
             {
-                _ready.TrySetResult(await WindowChrome.AttachAsync(view, Window));
+                _ready.TrySetResult(await WindowChrome.AttachAsync(view, this));
             }
             catch (Exception ex)
             {

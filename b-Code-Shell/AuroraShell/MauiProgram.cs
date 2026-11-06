@@ -11,8 +11,10 @@ public static class MauiProgram
         builder.UseMauiApp<App>();
 #if WINDOWS
         // REQ-SHELL-005：主窗口与弹出窗口都不要系统标题栏，窗口按钮由网页画、经窗口桥执行。
-        builder.ConfigureLifecycleEvents(events => events.AddWindows(windows =>
-            windows.OnWindowCreated(window => WindowChrome.MakeFrameless(window))));
+        // MAUI 在窗口接上之后会重新打开自己画的标题栏，所以激活时再收一次（幂等）。
+        builder.ConfigureLifecycleEvents(events => events.AddWindows(windows => windows
+            .OnWindowCreated(window => WindowChrome.MakeFrameless(window))
+            .OnActivated((window, _) => WindowChrome.MakeFrameless(window))));
 #endif
         return builder.Build();
     }
