@@ -69,6 +69,8 @@ internal sealed class AuroraService : IDisposable
 
         var shell = new ShellLauncher(environment.DataDirectory, context.Log);
         _web.ShellSeen += shell.Remember;
+        // 网页控制台每两秒拉一次日志。走 Execute 会把回执写回同一份日志，下一次又匹配到它。
+        _web.QuietCommand = (text, cancellation) => bus.InvokeAsync(text, "AuroraWeb", cancellation);
         _frontend = context.RegisterFrontend(new WebFrontend(new DispatcherSynchronizationContext(_dispatcher), _web, shell, context.Log));
         _web.EnsureStarted();
     }

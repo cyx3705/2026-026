@@ -14,7 +14,8 @@ namespace HistoryAurora.Module;
 /// </summary>
 /// <remarks>
 /// 协议与 <c>b-Code-Web/ParentLink.cs</c> 一一对应：发 <c>{"id","op","command","args"}</c>，
-/// 收带 <see cref="Prefix"/> 前缀的 <c>{"id","result"}</c> 与 <c>{"event":"ready"|"clients"}</c>。
+/// 收带 <see cref="Prefix"/> 前缀的 <c>{"id","result"}</c>、<c>{"id","op":"log.snapshot","text"}</c>
+/// 与 <c>{"event":"ready"|"clients"}</c>。日志快照由 <see cref="QuietCommand"/> 安静执行，再把结果写回 stdin。
 /// 子进程意外退出不自动拉回：下一次需要它（推送或 vulcan.app.show）时再起，避免端口被占时反复重启。
 /// </remarks>
 internal sealed class WebProcess : IDisposable
@@ -49,6 +50,9 @@ internal sealed class WebProcess : IDisposable
 
     /// <summary>壳里的网页连上时触发，参数是壳报来的自身路径（REQ-WEB-045）。</summary>
     public event Action<string>? ShellSeen;
+
+    /// <summary>网页拉取控制台时的安静执行。不设置时回失败，不改走会写日志的通道。</summary>
+    internal Func<string, CancellationToken, Task<CommandResult>>? QuietCommand { get; set; }
 
     /// <summary>等到至少一个网页连上推送通道；超时返回 false。</summary>
     public async Task<bool> WaitClientAsync(TimeSpan timeout)
@@ -256,6 +260,15 @@ internal sealed class WebProcess : IDisposable
                 }
                 return;
             }
+            if (root.TryGetProperty("op", out var operation) && operation.GetString() == "log.snapshot")
+            {
+                var requestId = root.TryGetProperty("id", out var requestIdValue) ? requestIdValue.GetString() : null;
+                var text = root.TryGetProperty("text", out var textValue) && textValue.ValueKind == JsonValueKind.String
+                    ? textValue.GetString() ?? ""
+                    : "";
+                _ = ReplyLogSnapshotAsync(requestId, text);
+                return;
+            }
             if (root.TryGetProperty("id", out var id) && id.GetString() is { } key
                 && root.TryGetProperty("result", out var result)
                 && _waiting.TryRemove(key, out var waiter))
@@ -265,6 +278,32 @@ internal sealed class WebProcess : IDisposable
         {
             _log.Log(ShellLogLevel.Warn, "aurora.web", $"无法解析 Aurora Web 回执：{ex.Message}");
         }
+    }
+
+    private async Task ReplyLogSnapshotAsync(string? id, string text)
+    {
+        CommandResult result;
+        var reader = QuietCommand;
+        if (reader == null)
+            result = CommandResult.Fail("Aurora Web 的日志读取还没接上");
+        else
+        {
+            try
+            {
+                result = await reader(text, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                result = CommandResult.Fail("读取控制台日志失败: " + ex.GetType().Name);
+            }
+        }
+        if (id == null)
+            return;
+        Send(new
+        {
+            id,
+            result = new { success = result.Success, message = result.Message, data = result.Data },
+        });
     }
 
     private void OnExited(Process process)

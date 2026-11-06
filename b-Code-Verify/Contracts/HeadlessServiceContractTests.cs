@@ -2,7 +2,9 @@ using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HistoryAurora.Module;
+using HistoryAurora.Shell.Neutral.Logging;
 using HistoryVulcan.Core.Commands;
+using HistoryVulcan.Core.Logging;
 using Xunit;
 
 namespace HistoryAurora.Verify;
@@ -135,6 +137,26 @@ public sealed class HeadlessServiceContractTests
         var link = File.ReadAllText(Path.Combine(RepositoryRoot(), "b-Code-Web", "ParentLink.cs"));
         Assert.Contains($"public const string Prefix = \"{WebProcess.Prefix}\";", link, StringComparison.Ordinal);
         Assert.Contains("--parent-stdio", link, StringComparison.Ordinal);
+        Assert.Contains("log.snapshot", link, StringComparison.Ordinal);
+        var process = File.ReadAllText(Path.Combine(RepositoryRoot(), "b-Code-Studio", "Module", "WebProcess.cs"));
+        Assert.Contains("log.snapshot", process, StringComparison.Ordinal);
+        Assert.Contains("QuietCommand", process, StringComparison.Ordinal);
+    }
+
+    /// <summary>读日志的回显和成功回执不能再出现在下一次快照里，否则控制台会自己刷个不停。</summary>
+    [Fact]
+    public void LogSnapshotOmitsItsOwnReadback()
+    {
+        var log = new MemoryShellLog();
+        log.Log(ShellLogLevel.Info, "app", "真实日志");
+        log.Log(ShellLogLevel.Info, "cmd:module:HistoryPortunus:Shell:session:AuroraWeb", "aurora.log.snapshot minlevel=trace limit=200 after=1");
+        log.Log(ShellLogLevel.Info, "cmd:result:aurora:log", "✓ 控制台日志匹配 2 条，返回 2 条");
+        log.Log(ShellLogLevel.Info, "cmd:result:aurora:ui", "✓ 已打开");
+
+        var snapshot = log.ReadSnapshot(new ConsoleLogQuery(ShellLogLevel.Trace, null, null, null, null, 100));
+
+        Assert.Equal(2, snapshot.MatchedCount);
+        Assert.Equal(["✓ 已打开", "真实日志"], snapshot.Entries.Select(entry => entry.Message).ToArray());
     }
 
     /// <summary>包里带着 Web 子进程；没有 AvalonDock，也没有任何 XAML。</summary>

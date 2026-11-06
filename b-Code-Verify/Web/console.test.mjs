@@ -40,7 +40,7 @@ test('REQ-WEB-014: filters, domain focus and completion derive names and paramet
   assert.equal(commandCompletions('demo.l',catalog)[0].value,'demo.list');
   assert.deepEqual(commandCompletions('demo.list mode=o',catalog).map(i=>i.value),['demo.list mode=one']);
   assert.equal(commandCompletions('demo.list mode=all q',catalog)[0].value,'demo.list mode=all query=');
-  const entries=[entry(1),{...entry(2),level:'Error'},{...entry(3,'aurora.log.snapshot minlevel=trace'),source:'cmd:AuroraWeb'}];
+  const entries=[entry(1),{...entry(2),level:'Error'},{...entry(3,'aurora.log.snapshot minlevel=trace'),source:'cmd:AuroraWeb'},{...entry(4,'✓ 控制台日志匹配 2 条，返回 2 条'),source:'cmd:result:aurora:log'}];
   assert.deepEqual(filteredLogs({entries,level:'error'}).map(e=>e.sequence),[2]);
   assert.equal(filteredLogs({entries,level:'trace'}).length,2);
 });

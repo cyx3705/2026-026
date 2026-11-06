@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 
@@ -11,7 +12,10 @@ namespace HistoryAurora.Web;
 /// <c>{"id":"…","op":"invoke","command":"aurora.ui.dialog","args":{…}}</c>、
 /// <c>{"op":"broadcast","command":"…","args":{…}}</c>。
 /// 本进程 → 模块（stdout，带 <see cref="Prefix"/> 前缀，别的输出一律被模块忽略）：
-/// <c>{"id":"…","result":{…}}</c>、<c>{"event":"ready","url":"…"}</c>、<c>{"event":"clients","count":n}</c>、<c>{"event":"shell","path":"…"}</c>（壳里的网页连上了，path 是壳的路径）。
+/// <c>{"id":"…","result":{…}}</c>、<c>{"id":"…","op":"log.snapshot","text":"…"}</c>、
+/// <c>{"event":"ready","url":"…"}</c>、<c>{"event":"clients","count":n}</c>、<c>{"event":"shell","path":"…"}</c>（壳里的网页连上了，path 是壳的路径）。
+/// 控制台拉取走 <c>log.snapshot</c>：模块用安静调用读日志，再把结果写回 stdin。
+/// 不能经会回显的指令通道读，否则每一轮回执都会变成下一轮匹配到的新日志。
 /// stdin 关闭就是模块没了：本进程随之退出，不留孤儿服务占着端口。
 /// </remarks>
 public static class ParentLink
@@ -20,6 +24,7 @@ public static class ParentLink
     public const string Prefix = "@aurora ";
 
     private static readonly object WriteGate = new();
+    private static readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> Pending = new(StringComparer.Ordinal);
     private static TextWriter? _out;
 
     /// <summary>命令行带 --parent-stdio 时启用。</summary>
@@ -40,11 +45,66 @@ public static class ParentLink
             {
                 if (string.IsNullOrWhiteSpace(line))
                     continue;
+                if (TryComplete(line))
+                    continue;
                 _ = HandleAsync(channel, line, lifetime.ApplicationStopping);
             }
             lifetime.StopApplication();
         });
     }
+
+    /// <summary>这条文本是控制台在读自己的日志，不能再走会回显的指令通道。</summary>
+    public static bool IsLogSnapshot(string text)
+    {
+        var trimmed = text.TrimStart();
+        const string name = "aurora.log.snapshot";
+        return trimmed.StartsWith(name, StringComparison.OrdinalIgnoreCase)
+            && (trimmed.Length == name.Length || char.IsWhiteSpace(trimmed[name.Length]));
+    }
+
+    /// <summary>
+    /// 请模块安静读取控制台。返回值是指令结果 JSON（success / message / data），不经过会写日志的执行通道。
+    /// </summary>
+    public static async Task<JsonElement> ReadLogSnapshotAsync(string text, CancellationToken cancellation)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var waiter = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!Pending.TryAdd(id, waiter))
+            return Failure("日志读取标识冲突");
+        try
+        {
+            if (!Send(new { id, op = "log.snapshot", text }))
+                return Failure("Aurora 模块未连接，无法读取控制台日志");
+            using var registration = cancellation.Register(() => waiter.TrySetCanceled(cancellation));
+            return await waiter.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            Pending.TryRemove(id, out _);
+        }
+    }
+
+    private static bool TryComplete(string line)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object)
+                return false;
+            if (root.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } key
+                && Pending.TryRemove(key, out var waiter))
+                waiter.TrySetResult(result.Clone());
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static JsonElement Failure(string message)
+        => JsonSerializer.SerializeToElement(new { success = false, message });
 
     private static async Task HandleAsync(FrontendChannel channel, string line, CancellationToken stopping)
     {
@@ -77,20 +137,22 @@ public static class ParentLink
         }
     }
 
-    private static void Send(object message)
+    private static bool Send(object message)
     {
         var writer = _out;
         if (writer == null)
-            return;
+            return false;
         var text = Prefix + JsonSerializer.Serialize(message);
         lock (WriteGate)
         {
             try
             {
                 writer.WriteLine(text);
+                return true;
             }
             catch (IOException)
             {
+                return false;
             }
         }
     }

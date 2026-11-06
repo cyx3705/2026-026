@@ -205,6 +205,13 @@ app.MapPost("/api/command", async (HttpContext context, IHttpClientFactory facto
         if (!input.TryGetProperty("text", out var value) || value.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(value.GetString()) || value.GetString()!.Length > 65536)
             return Results.BadRequest(new { success = false, message = "指令为空或过长" });
+        // The console polls this command. A normal execution writes its own receipt back into the
+        // log, and the next poll matches that receipt. Ask the module to read quietly instead.
+        if (parentMode && ParentLink.IsLogSnapshot(value.GetString()!))
+        {
+            var snapshot = await ParentLink.ReadLogSnapshotAsync(value.GetString()!, context.RequestAborted);
+            return Results.Content(snapshot.GetRawText(), "application/json");
+        }
         // Read on every request: Portunus rotates both port and token after restarting.
         var endpointPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "HistoryVulcan", "ModuleData", "HistoryPortunus", "endpoint.json");

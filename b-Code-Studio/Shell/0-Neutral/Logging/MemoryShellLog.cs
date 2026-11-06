@@ -189,6 +189,8 @@ public sealed class MemoryShellLog : IShellLog, IDisposable
     {
         if (item.Entry.Level < query.MinimumLevel)
             return false;
+        if (IsConsoleReadback(item.Entry))
+            return false;
         if (query.After is { } after && item.Sequence <= after)
             return false;
         if (query.Since is { } since && new DateTimeOffset(item.Entry.Time) < since)
@@ -202,6 +204,20 @@ public sealed class MemoryShellLog : IShellLog, IDisposable
         return string.IsNullOrEmpty(query.Keyword)
                || item.Entry.Category.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase)
                || item.Entry.Message.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 控制台读取自己的回显和成功回执。留在缓冲里会让下一次快照再匹配到它们，读日志就停不下来。
+    /// </summary>
+    private static bool IsConsoleReadback(ShellLogEntry entry)
+    {
+        var message = entry.Message ?? "";
+        var category = entry.Category ?? "";
+        if (message.StartsWith("aurora.log.snapshot", StringComparison.OrdinalIgnoreCase)
+            && category.Contains("AuroraWeb", StringComparison.Ordinal))
+            return true;
+        return category.Equals("cmd:result:aurora:log", StringComparison.OrdinalIgnoreCase)
+            && message.Contains("控制台日志匹配", StringComparison.Ordinal);
     }
 
     private sealed record SequencedLogEntry(long Sequence, ShellLogEntry Entry);

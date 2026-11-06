@@ -36,9 +36,15 @@ export function filteredLogs(model,catalog=[]) {
     if(model.domain&&model.domain!=='全部'&&logDomain(e,catalog).toLowerCase()!==model.domain.toLowerCase())return false;
     if(model.muteLayout&&String(e.source).toLowerCase()==='layout')return false;
     if(model.keyword&&!`${e.source} ${e.message}`.toLowerCase().includes(model.keyword.toLowerCase()))return false;
-    // Do not fill the console with the browser's own readback requests.
-    return !(String(e.source).includes('AuroraWeb')&&String(e.message).startsWith('aurora.log.snapshot'));
+    // The console polls its own log. Hide that poll's echo and the "匹配 N 条" receipt,
+    // or each poll is the next poll's new match.
+    return !isConsoleReadback(e);
   });
+}
+function isConsoleReadback(entry) {
+  const source=String(entry.source??''),message=String(entry.message??'');
+  if(source.includes('AuroraWeb')&&message.startsWith('aurora.log.snapshot'))return true;
+  return source.toLowerCase()==='cmd:result:aurora:log'&&message.includes('控制台日志匹配');
 }
 
 // Hidden desktop filter controls are driven by these same public commands in Web.
