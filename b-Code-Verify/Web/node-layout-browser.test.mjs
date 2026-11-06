@@ -36,7 +36,7 @@ test('REQ-WEB-029: fill reserves space without stretching panels; case-insensiti
     const rb=await bounds(root),tb=await bounds(top),bb=await bounds(bottom),pb=await bounds(control);
     assert.ok(pb.height<60);assert.ok(Math.abs(pb.y-(tb.y+tb.height))<1);
     assert.ok(Math.abs(bb.bottom-(rb.bottom-12))<1);
-    assert.equal(await top.evaluate(n=>getComputedStyle(n).fontSize),'11px');
+    assert.equal(await top.evaluate(n=>getComputedStyle(n).fontSize),'13px');
     assert.equal(await root.locator('.node-stack').evaluate(n=>getComputedStyle(n).gap),'0px');
     await replace({type:'stack',orientation:'HORIZONTAL',gap:'TIGHT',children:[panel('左端',{fill:true}),text('右端')]});
     const left=await bounds(page.locator('[data-panel=左端]')),right=await bounds(page.getByText('右端',{exact:true}));
