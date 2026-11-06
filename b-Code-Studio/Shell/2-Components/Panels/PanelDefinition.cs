@@ -200,7 +200,7 @@ public sealed class PanelWidget
     ///
     /// 不写时由组件按内容量：按钮和说明文字的字宽就是它们的最窄宽度，不必注册；
     /// 文本框量不出来——空框的内容宽度是 0——因此不写时按
-    /// <see cref="HistoryAurora.Shell.Components.Widgets.AuroraPanelBoard.DefaultInputMinWidth"/> 算。
+    /// <c>AuroraPanelBoard.DefaultInputMinWidth</c> 算。
     /// 写了就以写的为准。
     /// </summary>
     public double? MinWidth { get; set; }

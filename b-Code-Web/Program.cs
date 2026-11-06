@@ -1,11 +1,25 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using HistoryAurora.Web;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 // REQ-WEB-001: frontend development stays local until Portunus provides remote authentication.
-builder.WebHost.UseUrls("http://127.0.0.1:5280");
+var port = args.SkipWhile(arg => arg != "--port").Skip(1).Select(text => int.TryParse(text, out var value) ? value : 0)
+    .FirstOrDefault(value => value is > 0 and < 65536);
+var url = $"http://127.0.0.1:{(port == 0 ? 5280 : port)}";
+builder.WebHost.UseUrls(url);
+var parentMode = ParentLink.Requested(args);
+if (parentMode)
+    builder.Logging.ClearProviders();   // stdout belongs to the module protocol (REQ-WEB-041).
 builder.Services.AddHttpClient("portunus", client => client.Timeout = TimeSpan.FromMinutes(5));
+var channel = new FrontendChannel();
 var app = builder.Build();
+// REQ-WEB-042: dev runs serve the source folder; the module package serves the copy embedded in this assembly.
+var physicalRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+IFileProvider webFiles = Directory.Exists(physicalRoot)
+    ? new PhysicalFileProvider(physicalRoot)
+    : new EmbeddedFileProvider(typeof(FrontendChannel).Assembly, "HistoryAurora.Web.wwwroot");
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -16,7 +30,10 @@ app.Use(async (context, next) =>
         context.Response.StatusCode = 403;
         return;
     }
-    if (context.Request.Path.StartsWithSegments("/api")
+    // EventSource cannot send custom headers; the push stream instead requires a same-origin fetch.
+    var sameOriginStream = context.Request.Path.Equals("/api/events") && HttpMethods.IsGet(context.Request.Method)
+        && context.Request.Headers["Sec-Fetch-Site"] == "same-origin";
+    if (context.Request.Path.StartsWithSegments("/api") && !sameOriginStream
         && (context.Request.Headers["X-Aurora-Web"] != "1"
             || (context.Request.Headers.TryGetValue("Origin", out var callerOrigin)
                 && callerOrigin != $"{context.Request.Scheme}://{context.Request.Host}")))
@@ -26,8 +43,37 @@ app.Use(async (context, next) =>
     }
     await next(context);
 });
-app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = webFiles });
+app.UseStaticFiles(new StaticFileOptions { FileProvider = webFiles });
+// REQ-WEB-040: host-originated UI commands reach the most recently active page over SSE.
+app.MapGet("/api/events", async (HttpContext context) =>
+{
+    var id = context.Request.Query["client"].ToString();
+    var kind = context.Request.Query["kind"].ToString() == "mobile" ? "mobile" : "desktop";
+    if (id.Length is < 8 or > 64 || !id.All(char.IsAsciiLetterOrDigit))
+    {
+        context.Response.StatusCode = 400;
+        return;
+    }
+    await channel.StreamAsync(context, id, kind);
+});
+app.MapPost("/api/events/active", async (HttpContext context) =>
+{
+    var input = await JsonSerializer.DeserializeAsync<JsonElement>(context.Request.Body, cancellationToken: context.RequestAborted);
+    var known = input.TryGetProperty("client", out var client) && client.ValueKind == JsonValueKind.String
+        && channel.MarkActive(client.GetString()!, !input.TryGetProperty("visible", out var visible) || visible.ValueKind != JsonValueKind.False);
+    return known ? Results.Json(new { success = true }) : Results.NotFound(new { success = false, message = "网页未连接推送通道" });
+});
+app.MapPost("/api/events/reply", async (HttpContext context) =>
+{
+    var input = await JsonSerializer.DeserializeAsync<JsonElement>(context.Request.Body, cancellationToken: context.RequestAborted);
+    if (!input.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String
+        || !input.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object)
+        return Results.BadRequest(new { success = false, message = "回执缺少 id 或 result" });
+    return channel.Complete(id.GetString()!, result)
+        ? Results.Json(new { success = true })
+        : Results.NotFound(new { success = false, message = "该请求已结束或不存在" });
+});
 // REQ-WEB-018: the native pure graph layout remains the single source for coordinates and lanes.
 app.MapPost("/api/graph-layout", async (HttpContext context) =>
 {
@@ -177,4 +223,6 @@ app.MapPost("/api/command", async (HttpContext context, IHttpClientFactory facto
         return Results.Json(new { success = false, message = "无法连接本机 Portunus，请确认 OneHistory 服务已启动" }, statusCode: 503);
     }
 });
+if (parentMode)
+    _ = ParentLink.Start(channel, app.Lifetime, url);
 app.Run();

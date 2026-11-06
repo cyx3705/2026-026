@@ -1,8 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
+    <!-- The module package carries only the assembly; the page ships inside it (REQ-WEB-042). -->
+    <RootNamespace>HistoryAurora.Web</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\*" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="../b-Code-Studio/Shell/3-HostedPages/Views/HostedPageDescriptions.cs" Link="HostedPageDescriptions.cs" />
     <Compile Include="../b-Code-Studio/Shell/2-Components/Graph/SwimlaneLayout.cs" Link="Graph/SwimlaneLayout.cs" />

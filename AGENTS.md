@@ -7,7 +7,8 @@
 1. 读取根目录 `project.manifest.json`，确认项目身份、状态、活动目录和可用命令。
 2. 读取根目录 `README.md` 和 `b-Office/现行约定.md`（本仓唯一的长期文档）。
 3. 写页面描述或改组件层时，用 `aurora.component.list` / `aurora.component.show name=<名>` 读组件自描述；
-   新增或改动组件必须同步 `Shell/2-Components/Catalog/` 里的规格，`ComponentCatalogContractTests` 会拦。
+   新增或改动组件必须同步 `Shell/2-Components/Catalog/` 里的规格（网页渲染器与目录的自动对账尚未补，需手工核对）。
+   界面只在 `b-Code-Web` 网页里；加 `aurora.*` 界面指令 = `browser-commands.js` 实现 + `Module/AuroraCommands.json` 一条自描述。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
 5. 查任何模块（含本模块）的指令怎么调用：先执行 `diana.docs.catalog`，把完整输出留在本对话中，再
    `diana.docs.read domain=<域>`。说明书就是注册时的自描述（宿主 6.1.0 起没有消费文档）；

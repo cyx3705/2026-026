@@ -143,36 +143,6 @@ public sealed class ModulesPageContractTests
         Assert.DoesNotContain("vulcan.module.reload", source, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void FileAndDirectoryPickersRestoreTheProcessWorkingDirectory()
-    {
-        var source = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Shell", "4-Composition", "BuiltinCommands.Panel.cs"));
-
-        Assert.Contains("new Microsoft.Win32.OpenFileDialog { RestoreDirectory = true }", source, StringComparison.Ordinal);
-        Assert.Contains("new Microsoft.Win32.OpenFolderDialog()", source, StringComparison.Ordinal);
-        Assert.Contains("Environment.CurrentDirectory = cwd", source, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// 1.29.0：界面指令原样登记进宿主，由宿主经前端的界面上下文编组（异步 Post，已在界面线程上就地执行），
-    /// 界面不再逐字段抄代理描述符、也不再自己同步等 Dispatcher。
-    /// </summary>
-    [Fact]
-    public void ShellCommandsAreRegisteredAsIsAndMarshalledByTheHost()
-    {
-        var host = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Module", "AuroraShellHost.cs"));
-        var frontend = File.ReadAllText(Path.Combine(
-            RepositoryRoot(), "b-Code-Studio", "Module", "AuroraFrontend.cs"));
-
-        Assert.Contains("registrar.Register(descriptor)", host, StringComparison.Ordinal);
-        Assert.DoesNotContain("Marshalled(", host, StringComparison.Ordinal);
-        Assert.DoesNotContain("source.Handler(context)", host, StringComparison.Ordinal);
-        Assert.DoesNotContain("RemoteExecutor", host, StringComparison.Ordinal);
-        Assert.Contains("new DispatcherSynchronizationContext(window.Dispatcher)", frontend, StringComparison.Ordinal);
-    }
-
     /// <summary>向上找到含 project.manifest.json 的目录，即仓库根。</summary>
     private static string RepositoryRoot()
     {

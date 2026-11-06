@@ -7,16 +7,14 @@ namespace HistoryAurora.Verify;
 /// <summary>
 /// 分层与依赖方向的契约（REQ-UI-049、REQ-UI-074）。
 ///
-/// 界面分四层加一个装配根，编号越大越靠上，**依赖只能向下**：
+/// 2.1.0 起界面在浏览器里，这里只剩模块侧的三层，编号越大越靠上，**依赖只能向下**
+/// （1-Base 停靠外壳与 4-Composition 装配根随 WPF 一起退役，编号保留不复用）：
 ///
 /// <list type="table">
-///   <item><term>0-Neutral</term><description>中立：指令面、日志、纯工具。不认识任何一层界面。</description></item>
-///   <item><term>1-Base</term><description>基础层，页面外壳：停靠、拖出拖入、页面合并、弹窗。
-///         **它不知道页面里画的是什么**——只认 <c>ToolWindowDescriptor</c> 这样的纯数据。</description></item>
-///   <item><term>2-Components</term><description>组件层，演进层：风格令牌、表格、控制面板、泳道、页面描述与渲染器。
-///         别的模块注册页面，事实上就是在消费这一层。</description></item>
-///   <item><term>3-HostedPages</term><description>页面层：Aurora 自己托管的那几页。与模块页同一条路，没有特殊待遇。</description></item>
-///   <item><term>4-Composition</term><description>装配根：ShellWindow 与内置指令组，把下面四层接起来。没有任何东西可以依赖它。</description></item>
+///   <item><term>0-Neutral</term><description>中立：指令面、日志、纯工具。</description></item>
+///   <item><term>2-Components</term><description>组件层：页面描述、动作声明、面板定义、泳道布局、组件目录。
+///         Web 前端直接链接其中的纯 C# 源（REQ-WEB-018/039）。</description></item>
+///   <item><term>3-HostedPages</term><description>页面层：Aurora 自己托管的那几页的描述与取数。</description></item>
 /// </list>
 ///
 /// **1.16.0 起，层不再由这份文件里的字典规定，而由目录本身规定。**
@@ -42,8 +40,6 @@ namespace HistoryAurora.Verify;
 /// </summary>
 public sealed partial class LayerContractTests
 {
-    private const int Base = 1;
-    private const int Component = 2;
 
     /// <summary>
     /// 层目录名。序号即层号，序号后的那一段即命名空间里的层名。
@@ -52,10 +48,8 @@ public sealed partial class LayerContractTests
     private static readonly string[] LayerDirectories =
     [
         "0-Neutral",
-        "1-Base",
         "2-Components",
         "3-HostedPages",
-        "4-Composition",
     ];
 
     private static string LayerName(int layer) => LayerDirectories[layer][2..];
@@ -128,8 +122,8 @@ public sealed partial class LayerContractTests
     }
 
     /// <summary>
-    /// 目录、命名空间、层号三者必须对齐：<c>Shell/1-Base/Docking/X.cs</c> 只能声明
-    /// <c>HistoryAurora.Shell.Base.Docking</c>。
+    /// 目录、命名空间、层号三者必须对齐：<c>Shell/2-Components/Panels/X.cs</c> 只能声明
+    /// <c>HistoryAurora.Shell.Components.Panels</c>。
     ///
     /// **这是让上面那条依赖门禁真的生效的前提。** 命名空间不带层名时，同层与跨层的引用
     /// 在源码里长得一模一样（都是 <c>Foo.Bar</c>），正则无从区分；带上层名之后，
@@ -167,37 +161,6 @@ public sealed partial class LayerContractTests
         }
 
         Assert.Empty(mismatched.Order());
-    }
-
-    /// <summary>
-    /// 基础层不认识任何组件。它拿到的是 <c>ToolWindowDescriptor</c> 这样的纯数据，
-    /// 页面里画的是表格还是泳道与它无关——**顶栏上的页面动作也必须按这条走**：
-    /// 组件层把动作翻译成一份数据清单交下来，基础层不得反过来去问组件。
-    ///
-    /// 这是三层里最容易破的一条，因为「顶栏要显示这一页的按钮」听起来像是顶栏的事。
-    /// 1.16.0 之前它确实被破着：顶栏的交互控件清单里直接列着组件层的
-    /// <c>AuroraOptionBox</c>，写成短名就绕过了正则。现在方向反过来——
-    /// 组件实现基础层的 <c>IInteractiveCommandControl</c> 标记。
-    /// </summary>
-    [Fact]
-    public void BaseLayerKnowsNothingAboutComponents()
-    {
-        var leaked = new List<string>();
-
-        foreach (var file in ShellSources())
-        {
-            var (layer, label) = LayerOf(file);
-            if (layer != Base)
-                continue;
-
-            foreach (var referenced in ReferencedLayers(file))
-            {
-                if (referenced >= Component)
-                    leaked.Add($"{label} → {LayerName(referenced)}");
-            }
-        }
-
-        Assert.Empty(leaked.Distinct().Order());
     }
 
     /// <summary>文件正文里出现的层引用。</summary>

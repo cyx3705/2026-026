@@ -96,8 +96,7 @@ public sealed class ComponentRequestStore(ISettingsService settings, IShellLog l
     {
         var all = Load();
         var open = all
-            .Where(r => !PageRenderer.SupportedComponents.Contains(r.Component)
-                        && !PageRenderer.SupportedCapabilities.Contains(r.Component))
+            .Where(r => !PageSupport.Supports(r.Component))
             .OrderBy(r => r.FirstSeen, StringComparer.Ordinal)
             .ToList();
 

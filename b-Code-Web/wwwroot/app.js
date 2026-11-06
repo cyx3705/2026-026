@@ -1,3 +1,4 @@
+import {connectFrontendLink} from './frontend-link.js';
 import {payload, commandText, bindArgs, rowsOf,parseCommand,resolveAction} from './protocol.js';
 import {Workspace} from './workspace.js';
 import {renderTable} from './table.js';
@@ -430,3 +431,11 @@ function setTheme(mode) {
 $('theme').onclick=()=>setTheme('toggle');
 try {setTheme(localStorage.getItem('aurora.web.theme')||'light');}catch {setTheme('light');}
 connect();
+// REQ-WEB-040: the host reaches this page through the Aurora module; window verbs map onto the page.
+connectFrontendLink({report,run:async(command,args)=>{
+  const name=String(command).toLowerCase();
+  if(name==='vulcan.app.show'){window.focus();return {success:true,message:'Aurora 网页已打开'};}
+  if(name==='vulcan.app.focusconsole'){window.focus();workspace.show('console');return {success:true,message:'已聚焦控制台'};}
+  if(name==='vulcan.app.hide'||name==='vulcan.app.close')return {success:true,message:'网页由浏览器管理，未关闭'};
+  return browserCommand(name,args,document,[],undefined);
+}});

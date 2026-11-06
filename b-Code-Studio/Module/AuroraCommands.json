@@ -1,0 +1,631 @@
+[
+  {
+    "name": "aurora.app.about",
+    "summary": "显示关于对话框"
+  },
+  {
+    "name": "aurora.app.theme",
+    "summary": "切换界面主题(浅色 / 深色)",
+    "example": "aurora.app.theme mode=dark",
+    "parameters": [
+      {
+        "name": "mode",
+        "description": "light、dark 或 toggle",
+        "default": "toggle",
+        "position": 0,
+        "allowedValues": [
+          "light",
+          "dark",
+          "toggle"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "aurora.command.copyexample",
+    "summary": "复制指定命令的示例",
+    "example": "aurora.command.copyexample name=aurora.log.level",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "完整的已注册指令名（三段式），例如 aurora.log.level；该指令必须声明了示例",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.command.history",
+    "summary": "查看指令历史",
+    "example": "aurora.command.history count=10",
+    "readonly": true,
+    "parameters": [
+      {
+        "name": "count",
+        "description": "显示条数",
+        "type": "int",
+        "default": "20",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.autoscroll",
+    "summary": "设置控制台自动滚动",
+    "example": "aurora.log.autoscroll enabled=false",
+    "parameters": [
+      {
+        "name": "enabled",
+        "description": "true/false；省略时查询当前值",
+        "type": "bool",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.class",
+    "summary": "设置命令集的命令类过滤（控制台不再按类过滤）",
+    "example": "aurora.log.class class=win",
+    "parameters": [
+      {
+        "name": "class",
+        "description": "当前域内的命令类；省略时查询当前值",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.clear",
+    "summary": "清空控制台可见缓冲"
+  },
+  {
+    "name": "aurora.log.copy",
+    "summary": "复制控制台选中行"
+  },
+  {
+    "name": "aurora.log.export",
+    "summary": "导出控制台当前可见内容",
+    "example": "aurora.log.export path=console.txt",
+    "parameters": [
+      {
+        "name": "path",
+        "description": "目标文件路径；省略时写入默认导出目录",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.focus",
+    "summary": "聚焦控制台，可选仅显示错误",
+    "example": "aurora.log.focus errors=true",
+    "parameters": [
+      {
+        "name": "errors",
+        "description": "true 时切换到错误过滤",
+        "type": "bool",
+        "default": "false",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.keyword",
+    "summary": "设置控制台关键字过滤",
+    "example": "aurora.log.keyword text=timeout",
+    "parameters": [
+      {
+        "name": "text",
+        "description": "关键字；省略时查询当前值",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.level",
+    "summary": "设置控制台显示级别",
+    "example": "aurora.log.level level=warn",
+    "parameters": [
+      {
+        "name": "level",
+        "description": "trace/debug/info/warn/error/fatal；省略时查询当前值",
+        "position": 0,
+        "allowedValues": [
+          "trace",
+          "debug",
+          "info",
+          "warn",
+          "error",
+          "fatal"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.mute",
+    "summary": "屏蔽或恢复 layout 来源",
+    "example": "aurora.log.mute layout=true",
+    "parameters": [
+      {
+        "name": "layout",
+        "description": "true/false；省略时查询当前值",
+        "type": "bool",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.prefill",
+    "summary": "把一条指令填进控制台输入框（不执行）",
+    "example": "aurora.log.prefill text=vulcan.module.list",
+    "parameters": [
+      {
+        "name": "text",
+        "description": "要填入的文本",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.log.source",
+    "summary": "设置控制台日志域过滤（兼容命令名）",
+    "example": "aurora.log.source source=app",
+    "parameters": [
+      {
+        "name": "source",
+        "description": "命令总线当前已注册的域；省略时查询当前值",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.nav.open",
+    "summary": "聚焦右栏搜索框：搜索并打开场景与页面。全局快捷键由 HistoryMercury 注册",
+    "hiddenReason": "把光标放进界面右栏的搜索框，只对坐在屏幕前的人有意义"
+  },
+  {
+    "name": "aurora.scene.delete",
+    "summary": "删除一个场景：另存的连记录一起删；模块场景删后不再列出，模块装回来也不复活，aurora.scene.reset scene=<模块> 恢复。最后一个场景不能删",
+    "example": "aurora.scene.delete id=出图",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "场景 id（aurora.scene.list 方括号里那个），例如 出图、HistoryJanus",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.go",
+    "summary": "切到一个场景：恢复它上次的布局与显隐；模块场景第一次进入时露出该模块的页与常驻页（控制台、命令集）",
+    "example": "aurora.scene.go id=HistoryMinerva",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "场景 id 或标题（aurora.scene.list 可查）；模块场景的 id 就是模块名，也认去掉 History 的简称",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.hide",
+    "summary": "把场景收进右下页面调整小栏（右栏不再列出，搜索与菜单照旧），hidden=false 放回右栏",
+    "example": "aurora.scene.hide id=HistoryJuno hidden=true",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "场景 id（aurora.scene.list 可查）",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "hidden",
+        "description": "true 收起，false 放回右栏",
+        "type": "bool",
+        "default": "true",
+        "position": 1
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.list",
+    "summary": "列出全部场景（按右栏的先后）：当前场景、来源、是否收进小栏、使用次数。场景不含页面集合，只是一份布局",
+    "readonly": true
+  },
+  {
+    "name": "aurora.scene.move",
+    "summary": "调整场景在右栏与菜单里的先后：挪到另一个场景前面，省略 before 则挪到最后",
+    "example": "aurora.scene.move id=HistoryJanus before=HistoryMinerva",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "要挪的场景 id（aurora.scene.list 可查）",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "before",
+        "description": "挪到这个场景前面，例如 HistoryMinerva；省略表示挪到最后",
+        "position": 1
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.open",
+    "summary": "在当前场景里打开一页（不切场景）；它回到自己的位置，那个位置原来的页被隐藏（一格一页）",
+    "example": "aurora.scene.open page=graph",
+    "parameters": [
+      {
+        "name": "page",
+        "description": "页面 id 或标题（aurora.ui.windows 可查）",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.reset",
+    "summary": "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）；点名一个删掉的模块场景则把它恢复",
+    "example": "aurora.scene.reset scene=HistoryJanus",
+    "parameters": [
+      {
+        "name": "scene",
+        "description": "场景 id 或标题；省略为当前场景",
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.scene.save",
+    "summary": "把当前露面的页面与布局另存为一个场景，并切到它",
+    "example": "aurora.scene.save id=出图 title=出图与提交",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "场景 id，同时是命名布局的文件名；不能与模块场景重名",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "title",
+        "description": "显示名，省略时同 id",
+        "position": 1
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.actions",
+    "summary": "列出模块声明的、可被按钮绑定的动作",
+    "readonly": true,
+    "hiddenReason": "界面内部协议不对远程暴露"
+  },
+  {
+    "name": "aurora.ui.channels",
+    "summary": "列出选择通道、当前选中行与断链引用",
+    "readonly": true
+  },
+  {
+    "name": "aurora.ui.dialog",
+    "summary": "显示 Aurora 主题化弹窗（message / confirm / prompt / choice / content；content 可带动作候选）",
+    "example": "aurora.ui.dialog kind=confirm title=确认 body=\"覆盖现有文件？\" danger=true",
+    "parameters": [
+      {
+        "name": "kind",
+        "description": "message / confirm / prompt / choice / content",
+        "default": "message",
+        "position": 0,
+        "allowedValues": [
+          "message",
+          "confirm",
+          "prompt",
+          "choice",
+          "content"
+        ]
+      },
+      {
+        "name": "title",
+        "description": "弹窗标题栏文字，一句短语，例如 确认覆盖；省略则标题栏留空"
+      },
+      {
+        "name": "body",
+        "description": "说明或摘要"
+      },
+      {
+        "name": "content",
+        "description": "content 种类的大段正文"
+      },
+      {
+        "name": "value",
+        "description": "prompt 种类的输入初值"
+      },
+      {
+        "name": "options",
+        "description": "{label,value} JSON 列表：choice 必填，content 选填（正文下方的动作候选）"
+      },
+      {
+        "name": "primary",
+        "description": "主按钮文案"
+      },
+      {
+        "name": "cancel",
+        "description": "取消按钮文案"
+      },
+      {
+        "name": "danger",
+        "description": "主按钮用危险档",
+        "type": "bool",
+        "default": "false"
+      },
+      {
+        "name": "defaultcancel",
+        "description": "Enter 落到取消",
+        "type": "bool",
+        "default": "false"
+      },
+      {
+        "name": "timeout",
+        "description": "confirm 倒计时秒数，到期拒绝",
+        "type": "int"
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.dock",
+    "summary": "停靠窗口到指定方位，那个位置原来的页被隐藏(一格一页；pos=center 占中央区)",
+    "example": "aurora.ui.dock name=console pos=bottom ratio=0.3",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "pos",
+        "description": "停靠方位",
+        "required": true,
+        "allowedValues": [
+          "left",
+          "right",
+          "top",
+          "bottom",
+          "center"
+        ]
+      },
+      {
+        "name": "ratio",
+        "description": "四边停靠比例；提供时须严格位于 (0,1)，Center 不使用",
+        "type": "double"
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.float",
+    "summary": "把一页浮成置顶小窗（操作别的程序时也够得着），或还原回停靠区；不写 on 时切换。浮着的状态与位置跨重启保留",
+    "example": "aurora.ui.float name=powersw",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "on",
+        "description": "true 浮出、false 还原；省略时切换",
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.hide",
+    "summary": "隐藏窗口(状态保留,可再唤出)",
+    "example": "aurora.ui.hide name=console",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.invalidate",
+    "summary": "模块声明自己的页面描述已变，请求重拉该模块",
+    "example": "aurora.ui.invalidate owner=HistoryMercury",
+    "hiddenReason": "界面内部协议不对远程暴露",
+    "allowUnspecifiedParameters": true,
+    "parameters": [
+      {
+        "name": "owner",
+        "description": "模块名（HistoryMercury）或指令域（mercury），两种都接受",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.invoke",
+    "summary": "按动作 id 执行一条模块声明的动作",
+    "example": "aurora.ui.invoke action=janus.branch.rename to=ai/foo",
+    "hiddenReason": "界面内部协议不对远程暴露",
+    "allowUnspecifiedParameters": true
+  },
+  {
+    "name": "aurora.ui.layoutload",
+    "summary": "加载命名布局方案",
+    "example": "aurora.ui.layoutload name=调试布局",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "方案名(aurora.ui.layouts 可查)",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.layoutreset",
+    "summary": "重置为默认布局"
+  },
+  {
+    "name": "aurora.ui.layouts",
+    "summary": "列出全部命名布局方案",
+    "readonly": true
+  },
+  {
+    "name": "aurora.ui.layoutsave",
+    "summary": "把当前布局保存为命名方案",
+    "example": "aurora.ui.layoutsave name=调试布局",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "布局方案名，自取，例如 调试布局；同名覆盖，之后用 aurora.ui.layoutload 载入",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.missing",
+    "summary": "列出页面描述里引用了、但组件库尚未提供的组件",
+    "readonly": true,
+    "hiddenReason": "界面内部协议不对远程暴露"
+  },
+  {
+    "name": "aurora.ui.panelreload",
+    "summary": "重读面板 JSON 配置并原地重建(新增面板需重启)"
+  },
+  {
+    "name": "aurora.ui.panels",
+    "summary": "列出全部控制面板及其窗口状态",
+    "readonly": true
+  },
+  {
+    "name": "aurora.ui.panelset",
+    "summary": "程序向面板控件回写值(P-07)",
+    "example": "aurora.ui.panelset panel=my-panel control=speed value=800",
+    "parameters": [
+      {
+        "name": "panel",
+        "description": "面板 id",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "control",
+        "description": "控件 id",
+        "required": true,
+        "position": 1
+      },
+      {
+        "name": "value",
+        "description": "写给该控件的值，按控件类型的文本形式：数值如 800、开关 true/false、下拉为候选 value",
+        "required": true,
+        "position": 2
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.panelshow",
+    "summary": "显示控制面板(等价 aurora.ui.show)",
+    "example": "aurora.ui.panelshow id=my-panel",
+    "parameters": [
+      {
+        "name": "id",
+        "description": "面板 id(aurora.ui.panels 可查)",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.ratio",
+    "summary": "调整窗口占主窗体的比例",
+    "example": "aurora.ui.ratio name=console value=0.3",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      },
+      {
+        "name": "value",
+        "description": "四边停靠比例，须严格位于 (0,1)",
+        "type": "double",
+        "required": true,
+        "position": 1
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.refreshdata",
+    "summary": "重新拉取页面数据（可按页或按节点）",
+    "example": "aurora.ui.refreshdata page=rules",
+    "parameters": [
+      {
+        "name": "page",
+        "description": "只刷这一页；省略则全部",
+        "position": 0
+      },
+      {
+        "name": "node",
+        "description": "只刷这一个节点 id",
+        "position": 1
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.reloadactions",
+    "summary": "重新向全部模块拉取动作声明，并按新声明重建面板",
+    "hiddenReason": "界面内部协议不对远程暴露"
+  },
+  {
+    "name": "aurora.ui.reloadpages",
+    "summary": "重新向全部模块拉取页面描述并建页",
+    "hiddenReason": "界面内部协议不对远程暴露"
+  },
+  {
+    "name": "aurora.ui.reset",
+    "summary": "把窗口复位到注册时的默认位置",
+    "example": "aurora.ui.reset name=console",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.selectdirectory",
+    "summary": "选择本地目录"
+  },
+  {
+    "name": "aurora.ui.selectfile",
+    "summary": "选择本地文件"
+  },
+  {
+    "name": "aurora.ui.show",
+    "summary": "显示窗口(隐藏则唤出,已显示则激活)",
+    "example": "aurora.ui.show name=console",
+    "parameters": [
+      {
+        "name": "name",
+        "description": "窗口名(aurora.ui.windows 可查)",
+        "required": true,
+        "position": 0
+      }
+    ]
+  },
+  {
+    "name": "aurora.ui.windows",
+    "summary": "列出全部窗口及状态",
+    "readonly": true
+  }
+]

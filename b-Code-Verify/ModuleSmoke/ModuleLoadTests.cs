@@ -1,13 +1,17 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
 using HistoryAurora.Module;
+using HistoryVulcan.Core.Logging;
 using Xunit;
 
 namespace HistoryAurora.Verify.ModuleSmoke;
 
 /// <summary>
-/// VERIFY-MODULE-LOAD：模块能被宿主发现、装载并取得宿主上下文。送审时与契约测试一起跑（1.40.0）。
+/// VERIFY-MODULE-LOAD：模块能被宿主发现、装载并取得宿主上下文；2.1.0 起再加 Aurora Web 子进程的真实往返。
 /// </summary>
 public sealed class ModuleLoadTests
 {
@@ -21,9 +25,7 @@ public sealed class ModuleLoadTests
         composition.Dispose();
     }
 
-    /// <summary>
-    /// VERIFY-HOST-CONTRACT：清单是宿主识别模块身份的唯一权威，字段错了模块根本不会被发现。
-    /// </summary>
+    /// <summary>VERIFY-HOST-CONTRACT：清单是宿主识别模块身份的唯一权威。2.1.0 起不再随包带任何界面库。</summary>
     [Fact]
     public void ManifestDeclaresHostModuleIdentity()
     {
@@ -35,61 +37,94 @@ public sealed class ModuleLoadTests
 
         Assert.Equal("HistoryVulcan.Module", root.GetProperty("type").GetString());
         Assert.Equal("HistoryAurora", root.GetProperty("name").GetString());
-        // DEC-008：独立 exe 退役后不再有同名程序集，产物名取回 HistoryAurora——
-        // Shell 的 pack URI 按程序集短名解析，名字对上才不用逐条改。
         Assert.Equal("HistoryAurora.dll", root.GetProperty("artifact").GetString());
+        Assert.Equal("frontend", root.GetProperty("role").GetString());
+        // ui=true 仍要：宿主据此只在有桌面运行时的执行目标里装它（它要拉起子进程、开浏览器）。
         Assert.True(root.GetProperty("ui").GetBoolean());
-
-        // 可热重载：宿主先拆界面再装新包，XAML 经默认上下文返回可回收 ALC 里的程序集。
-        // pinned 缺省即 false；写明是为了防止再被钉回 Default 而锁死 DLL。
+        // 可热重载：pinned 缺省即 false；写明是为了防止再被钉回 Default 而锁死 DLL。
         Assert.False(root.GetProperty("pinned").GetBoolean());
-
-        // AvalonDock 要随包走：模块的装载上下文只在包目录内解析依赖。
-        var deps = root.GetProperty("deps").EnumerateArray().Select(item => item.GetString()).ToList();
-        Assert.Contains("AvalonDock.dll", deps);
+        Assert.Empty(root.GetProperty("deps").EnumerateArray());
     }
 
+    /// <summary>模块在可回收上下文里装得上，内嵌的界面指令清单读得出来。</summary>
     [Fact]
-    public void LayoutSnapshotCodecRunsInsideACollectibleModuleContext()
+    public void ModuleLoadsInACollectibleContextAndReadsItsCommandManifest()
     {
         var modulePath = Path.Combine(AppContext.BaseDirectory, "HistoryAurora.dll");
         Assert.True(File.Exists(modulePath), $"HistoryAurora.dll 不存在: {modulePath}");
 
-        RunCollectibleLayoutProbe(modulePath);
-    }
-
-    private static void RunCollectibleLayoutProbe(string modulePath)
-    {
         var context = new ModuleProbeLoadContext(modulePath);
         var assembly = context.LoadFromAssemblyPath(modulePath);
-        var avalonDock = context.LoadFromAssemblyName(new AssemblyName("AvalonDock"));
         Assert.True(assembly.IsCollectible);
-        Assert.True(avalonDock.IsCollectible);
-        Assert.True(context.IsCollectible);
-
-        var snapshotType = assembly.GetType(
-            "HistoryAurora.Shell.Base.Docking.DockLayoutSnapshot", throwOnError: true)!;
-        var nodeType = assembly.GetType(
-            "HistoryAurora.Shell.Base.Docking.DockLayoutNodeSnapshot", throwOnError: true)!;
-        var kindType = assembly.GetType(
-            "HistoryAurora.Shell.Base.Docking.DockLayoutNodeKind", throwOnError: true)!;
-        var codecType = assembly.GetType(
-            "HistoryAurora.Shell.Base.Docking.DockLayoutSnapshotCodec", throwOnError: true)!;
-
-        var snapshot = Activator.CreateInstance(snapshotType)!;
-        var root = Activator.CreateInstance(nodeType)!;
-        nodeType.GetProperty("Kind")!.SetValue(root, Enum.Parse(kindType, "Panel"));
-        snapshotType.GetProperty("Root")!.SetValue(snapshot, root);
-        var serialize = codecType.GetMethod(
-            "Serialize", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var deserialize = codecType.GetMethod(
-            "Deserialize", BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        var payload = Assert.IsType<string>(serialize.Invoke(null, [snapshot]));
-        Assert.Contains("\"schemaVersion\": 1", payload, StringComparison.Ordinal);
-        Assert.NotNull(deserialize.Invoke(null, [payload]));
-
+        using (var stream = assembly.GetManifestResourceStream(AuroraCommands.ManifestResource))
+        {
+            Assert.NotNull(stream);
+            using var document = JsonDocument.Parse(stream!);
+            Assert.True(document.RootElement.GetArrayLength() > 40);
+        }
         context.Unload();
+    }
+
+    /// <summary>
+    /// 真起一个 Aurora Web 子进程：标准输入输出协议能往返；网页本体从内嵌资源送出；
+    /// 没有网页连着时界面指令明确失败而不是挂住；Dispose 后子进程退出、端口释放。
+    /// </summary>
+    [Fact]
+    public async Task WebChildProcessAnswersOverStdioAndExitsOnDispose()
+    {
+        var executable = Path.Combine(RepositoryRoot(), "b-Code-Studio", "Module", "bin", "Release", "net8.0-windows", "web", "HistoryAurora.Web.exe");
+        Assert.True(File.Exists(executable), $"模块构建没有带出 Aurora Web：{executable}");
+        var port = FreePort();
+        var log = new RecordingLog();
+
+        using (var web = new WebProcess(executable, log, port))
+        {
+            web.EnsureStarted();
+            Assert.True(await web.WaitReadyAsync(TimeSpan.FromSeconds(30)), "Aurora Web 未就绪：" + string.Join(" | ", log.Lines));
+
+            using (var http = new HttpClient())
+            {
+                var page = await http.GetStringAsync(web.Url);
+                Assert.Contains("<html", page, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("frontend-link", await http.GetStringAsync(web.Url + "app.js"), StringComparison.Ordinal);
+            }
+
+            var result = await web.InvokeAsync("aurora.ui.dialog",
+                new Dictionary<string, string> { ["kind"] = "confirm", ["body"] = "冒烟" }, CancellationToken.None);
+            Assert.False(result.Success);
+            Assert.Contains("没有打开的 Aurora 网页", result.Message, StringComparison.Ordinal);
+        }
+
+        using var probe = new TcpListener(IPAddress.Loopback, port);
+        probe.Start();
+        probe.Stop();
+    }
+
+    private static int FreePort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static string RepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "project.manifest.json")))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("未找到 HistoryAurora 仓库根目录");
+    }
+
+    private sealed class RecordingLog : IModuleLog
+    {
+        public ConcurrentQueue<string> Lines { get; } = new();
+
+        public void Log(ShellLogLevel level, string category, string message) => Lines.Enqueue($"{level} {category} {message}");
     }
 
     private sealed class ModuleProbeLoadContext(string modulePath)

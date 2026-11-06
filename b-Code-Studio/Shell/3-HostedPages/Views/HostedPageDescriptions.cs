@@ -9,7 +9,7 @@ namespace HistoryAurora.Shell.HostedPages.Views;
 /// 界面自己不用这套协议，就永远不会先撞到墙。
 ///
 /// 现在改成自己消费自己：这几页与 Mercury、Janus 的页走**同一个解析器、同一个渲染器、
-/// 同一个注册器**（<see cref="HistoryAurora.Shell.Components.Pages.PageRegistrar"/>），
+/// 同一个注册器**（<c>PageRegistrar</c>），
 /// 唯一的区别是描述从这个常量来，而不是从 <c>&lt;域&gt;.ui.describe</c> 回来。
 ///
 /// 因此这里表达不出来的东西，就是组件层真正缺的东西——而且是界面自己先疼。
