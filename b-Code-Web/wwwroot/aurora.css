@@ -1,8 +1,20 @@
 /* REQ-WEB-007: OneHistoryID serif typography, enlarged and strengthened for the UI.
    Local font fallbacks also work offline. Layout keeps the existing 96-dpi density. */
+/* Latin 600 resolves to Bold in Times New Roman/Tinos. Map that face to the
+   shared body weight 500 so mixed text keeps Chinese at 500 without DOM spans. */
+@font-face{
+  font-family:"Aurora Latin";font-style:normal;font-weight:500;
+  src:local("Times New Roman Bold"),local("TimesNewRomanPS-BoldMT"),local("Tinos Bold"),local("Tinos-Bold");
+  unicode-range:U+0000-024F,U+1E00-1EFF;
+}
+@font-face{
+  font-family:"Aurora Latin";font-style:normal;font-weight:700;
+  src:local("Times New Roman Bold"),local("TimesNewRomanPS-BoldMT"),local("Tinos Bold"),local("Tinos-Bold");
+  unicode-range:U+0000-024F,U+1E00-1EFF;
+}
 :root{
   color-scheme:light;
-  --font-family:"Times New Roman",Tinos,"Noto Serif SC","Source Han Serif SC",SimSun,"Songti SC",serif;
+  --font-family:"Aurora Latin","Times New Roman",Tinos,"Noto Serif SC","Source Han Serif SC",SimSun,"Songti SC",serif;
   --font-mono-family:Consolas,"Courier New",monospace;
   --font-body:15px;--font-small:13px;--font-mono:13px;--font-chat-heading:19px;
   --font-weight-body:500;--font-weight-heading:700;
