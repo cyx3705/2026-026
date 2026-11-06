@@ -52,7 +52,7 @@ async function fixture(browser,{mobile=false,native=false}={}) {
       if(domain==='alpha'&&mode.badActions)data=mode.badActions;
     }
     if(name==='tools.ui.actions')data={schemaVersion:1,owner:'HistoryTools',actions:[{id:'tools.ping',title:'无页面动作',command:'tools.ping'}]};
-    if(name==='aurora.ui.actions')data=[{id:'preview.node',title:'本地动作',command:'aurora.log.prefill',args:{text:'本地动作仍在'}}];
+    if(name==='aurora.ui.hostedactions')data=[{id:'preview.node',title:'本地动作',command:'aurora.log.prefill',args:{text:'本地动作仍在'}}];
     if(name==='alpha.rows'||name==='beta.rows'){
       const domain=name.split('.')[0];data=[{id:`${domain}-1`,name:`${domain} 行 ${mode[domain]}`}];
     }
@@ -138,7 +138,7 @@ test('REQ-WEB-028: action reload rebinds buttons in place, keeps drafts and tabl
     assert.equal(await page.getByRole('textbox',{name:'beta 草稿',exact:true}).inputValue(),'动作刷新保留');
     assert.equal(await page.evaluate(()=>refs.input===document.querySelector('[data-panel=beta-panel] [data-control=draft]')&&refs.row===document.querySelector('[data-table=beta-rows] tbody tr')&&refs.button===document.querySelector('[data-panel=beta-panel] button')),true);
     assert.equal(await page.locator('[data-table=beta-rows] tbody tr').getAttribute('aria-selected'),'true');
-    assert.ok(!calls.slice(start).some(call=>call.name.endsWith('.ui.describe')||call.name.endsWith('.rows')||call.name==='aurora.ui.actions'));
+    assert.ok(!calls.slice(start).some(call=>call.name.endsWith('.ui.describe')||call.name.endsWith('.rows')||call.name==='aurora.ui.hostedactions'));
     await command('aurora.ui.actions');await page.locator('.console-result').getByText(/preview.node → aurora.log.prefill/).waitFor();
     assert.doesNotMatch(await page.locator('.console-result').innerText(),/alpha.run →/);
     await command('aurora.ui.invoke action=preview.node');assert.equal(await page.getByRole('combobox',{name:'指令'}).inputValue(),'本地动作仍在');

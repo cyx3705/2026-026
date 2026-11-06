@@ -41,6 +41,7 @@ internal static class AuroraCommands
         RegisterComponents(table);
         RegisterRequests(table, services.Requests);
         RegisterApp(table, services);
+        RegisterHostedActions(table);
         ComponentGalleryCommands.Register(table);
         HostedPageData.Register(table, new HostedPageData.Sources
         {
@@ -324,6 +325,31 @@ internal static class AuroraCommands
             }),
         }, FrontendCommandSource.Name);
     }
+
+    /// <summary>Aurora 自持页面引用的全部动作（命令集、模块管理、组件测试）。</summary>
+    internal static IReadOnlyList<HistoryAurora.Shell.Components.Actions.ActionDeclaration> HostedActions
+        => [.. HostedPageData.Actions, .. ComponentGalleryCommands.Actions];
+
+    /// <summary>
+    /// 自持页面的动作声明（2.1.1）。2.1.0 之前这批声明登记在 WPF 窗口的动作台账里，网页经
+    /// aurora.ui.actions 读那份台账；台账随 WPF 删除后 aurora.ui.actions 转给网页自己，网页就读不到了，
+    /// 原生页面的按钮全部变成「缺少动作」。声明的权威源一直是这两份 C# 清单，这里直接交出去。
+    /// </summary>
+    private static void RegisterHostedActions(CommandTable table)
+        => table.Register(new CommandDescriptor
+        {
+            Name = "aurora.ui.hostedactions",
+            HiddenReason = "界面内部协议不对远程暴露",
+            Domain = "aurora",
+            CommandClass = "ui",
+            Summary = "Aurora 自持页面（命令集、模块管理、组件测试）的动作声明，供网页装配原生页面",
+            Example = "aurora.ui.hostedactions",
+            Readonly = true,
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(
+                $"共 {HostedActions.Count} 条自持页面动作：\n"
+                    + string.Join("\n", HostedActions.Select(action => $"{action.Id} → {action.Command}")),
+                HostedActions)),
+        }, FrontendCommandSource.Name);
 
     private static void RegisterApp(CommandTable table, Services services)
     {

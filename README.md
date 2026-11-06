@@ -56,9 +56,11 @@ HistoryAurora 是 HistoryVulcan 的前端模块，经 `RegisterFrontend` 登记�
 | 路径 | 职责 |
 | --- | --- |
 | `b-Code-Studio/Module/` | 模块工程与程序集元数据 |
-| `b-Code-Studio/Shell/` | 界面源码，按层分目录（见「要点」） |
+| `b-Code-Shell/AuroraShell/` | 壳：一套 MAUI 代码出电脑 exe 与安卓 apk，只装一个网页视图（不引用 Aurora，几乎不用更新） |
+| `b-Code-Web/` | Aurora Web：网页与服务（模块的子进程） |
+| `b-Code-Studio/Shell/` | 模块与 Web 共用的纯 C# 层，按层分目录（见「要点」） |
 | `b-Code-Studio/eng/` | 构建与门禁脚本 |
-| `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟 |
+| `b-Code-Verify/` | `Contracts` 合同测试、`ModuleSmoke` 模块装载冒烟、`Web` 网页测试 |
 | `b-Office/` | `current/现行约定.md`，仅此一份 |
 | `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入；纳入 git，排除规则不得触碰 |
 
@@ -89,6 +91,7 @@ Aurora 是装在宿主上的**无界面服务**：模块拉起 `b-Code-Web`（Au
 | --- | --- |
 | `b-Code-Web/` | Aurora Web：ASP.NET Core 服务 + `wwwroot/` 网页（随程序集内嵌）；推送通道与父进程链路 |
 | `b-Code-Studio/Module/` | 模块：拉起 Web、登记前端、`aurora.*` 指令（转给网页的清单 `AuroraCommands.json` + 模块自持的取数） |
+| `b-Code-Shell/AuroraShell/` | 壳：一套 MAUI 代码出电脑 exe 与安卓 apk，只装一个网页视图（不引用 Aurora，几乎不用更新） |
 | `b-Code-Studio/Shell/` | 纯 C# 共享层 `0-Neutral` / `2-Components` / `3-HostedPages`，依赖只能向下；Web 直接链接其中的描述解析与泳道布局 |
 
 - 加一条界面指令：网页 `browser-commands.js` 实现 + `AuroraCommands.json` 加一条自描述；`HeadlessServiceContractTests` 对账。

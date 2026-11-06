@@ -24,8 +24,8 @@ test('REQ-WEB-013: reconnect restores desktop history after native registration 
     ]}}}}}));
     await page.route('**/api/command',route=>{
       const text=route.request().postDataJSON().text;
-      if(text==='aurora.ui.actions'&&failRegistration)return route.fulfill({json:{success:false,message:'模拟注册暂时不可用'}});
-      return route.fulfill({json:{success:true,data:text==='vulcan.command.list'?[{commandName:'aurora.ui.data'}]:text==='aurora.ui.actions'?actions:[]}});
+      if(text==='aurora.ui.hostedactions'&&failRegistration)return route.fulfill({json:{success:false,message:'模拟注册暂时不可用'}});
+      return route.fulfill({json:{success:true,data:text==='vulcan.command.list'?[{commandName:'aurora.ui.data'}]:text==='aurora.ui.hostedactions'?actions:[]}});
     });
     const ready=()=>page.waitForFunction(()=>!document.getElementById('reload').disabled);
     await page.goto(base);await ready();
@@ -77,7 +77,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
       const text=route.request().postDataJSON().text;calls.push(text);
       let data=[];
       if(text==='vulcan.command.list')data=catalog;
-      else if(text==='aurora.ui.actions')data=actions;
+      else if(text==='aurora.ui.hostedactions')data=actions;
       else if(text.includes('view="domains"'))data=['全部','demo'];
       else if(text.includes('view="classes"'))data=['全部'];
       else if(text.includes('view="commands"'))data=[{name:'demo.safe',domain:'demo',class:'test',method:'safe',readonly:'是',summary:'安全测试'},{name:'demo.write',domain:'demo',method:'write',summary:'写操作'}];

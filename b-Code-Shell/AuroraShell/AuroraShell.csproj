@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Aurora 壳（REQ-SHELL-001）：一套代码编出电脑（Windows）与手机（Android）两个安装包。
+    壳是消费 Aurora Web 的中间件：一个网页视图、只认一个地址。功能全在网页里，随 Aurora 模块热装更新，
+    壳本身应当几乎永远不用重装。因此这里刻意不引用 Aurora、宿主或任何 OneHistory 程序集，
+    也不加业务功能（HeadlessServiceContractTests.ShellIsAPureConsumer 守着）——要新能力先问网页能不能做。
+    不进 HistoryAurora.sln 与模块包：宿主管线不需要 MAUI 工作负载，模块热装也不动壳。
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net9.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AuroraShell</RootNamespace>
+    <AssemblyName>AuroraShell</AssemblyName>
+    <NuGetAudit>false</NuGetAudit>
+
+    <ApplicationTitle>Aurora</ApplicationTitle>
+    <ApplicationId>com.onehistory.aurora</ApplicationId>
+    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <!-- 电脑版是免安装的普通 exe（不打 MSIX 包），拷到哪都能跑。 -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <!-- 直接出可侧载安装的 apk，不出商店用的 aab。 -->
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="..\..\Logo.png" Link="Resources\AppIcon\appicon.png" Color="#FBFAF7" />
+    <MauiSplashScreen Include="..\..\Logo.png" Link="Resources\Splash\splash.png" Color="#FBFAF7" BaseSize="256,256" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+  </ItemGroup>
+</Project>

@@ -31,7 +31,7 @@ async function fixture(browser,{hideCatalog=false}={}) {
     const {name,args}=parseCommand(text);let data=[];
     if(mode.results?.[name])return route.fulfill({json:mode.results[name]});
     if(name==='vulcan.command.list')data=mode.catalog;
-    else if(name==='aurora.ui.actions')data=actions;
+    else if(name==='aurora.ui.hostedactions')data=actions;
     else if(name==='aurora.log.snapshot')data={frontendInstanceId:'fixture',nextAfter:3,entries:[
       {sequence:1,timestamp:'09:00',level:'Info',source:'demo.alpha',message:'日志甲'},
       {sequence:2,timestamp:'09:01',level:'Info',source:'demo.beta',message:'日志乙'},

@@ -20,6 +20,7 @@ public sealed class HeadlessServiceContractTests
         "aurora.component.list", "aurora.component.show",
         "aurora.preview.chat", "aurora.preview.echo", "aurora.preview.rows", "aurora.preview.graph",
         "aurora.ui.request", "aurora.ui.requests", "aurora.app.opendata", "aurora.host.ready",
+        "aurora.ui.hostedactions",
     ];
 
     private static IReadOnlyList<CommandDescriptor> Forwarded()
@@ -42,7 +43,7 @@ public sealed class HeadlessServiceContractTests
         Assert.Empty(missing);
     }
 
-    /// <summary>转给网页的与模块自持的不重叠，合起来就是原先界面登记的那 66 条（去掉了两条窗口指令）。</summary>
+    /// <summary>转给网页的与模块自持的不重叠；合起来是原先界面登记的 66 条（去掉两条窗口指令）加 2.1.1 的 hostedactions。</summary>
     [Fact]
     public void ForwardedAndModuleOwnedCommandsPartitionTheDomain()
     {
@@ -58,7 +59,40 @@ public sealed class HeadlessServiceContractTests
         Assert.Empty(names.Intersect(ModuleOwned, StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain("aurora.app.window", names);
         Assert.DoesNotContain("aurora.ui.autohide", names);
-        Assert.Equal(66, names.Count + ModuleOwned.Length);
+        Assert.Equal(67, names.Count + ModuleOwned.Length);
+    }
+
+    /// <summary>
+    /// 2.1.1 回归：Aurora 原生页面引用的每个动作 id 都必须由 aurora.ui.hostedactions 交出，
+    /// 否则网页装配原生页面时整份报「Aurora 缺少动作」（2.1.0 删 WPF 后就是这样）。
+    /// </summary>
+    [Fact]
+    public void EveryActionTheNativePagesReferenceIsDeclared()
+    {
+        using var document = JsonDocument.Parse(HistoryAurora.Shell.HostedPages.Views.HostedPageDescriptions.Json);
+        var required = new HashSet<string>(StringComparer.Ordinal) { "preview.node" };
+        void Collect(JsonElement node)
+        {
+            if (node.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in node.EnumerateObject())
+                {
+                    if (property.Name is "action" or "cellAction" or "cellEditAction" && property.Value.ValueKind == JsonValueKind.String)
+                        required.Add(property.Value.GetString()!);
+                    else
+                        Collect(property.Value);
+                }
+            }
+            else if (node.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in node.EnumerateArray())
+                    Collect(item);
+            }
+        }
+        Collect(document.RootElement);
+
+        var declared = AuroraCommands.HostedActions.Select(action => action.Id).ToHashSet(StringComparer.Ordinal);
+        Assert.Empty(required.Where(id => !declared.Contains(id)).Order());
     }
 
     /// <summary>允许未声明参数的指令（ui.invoke 的占位参数）要把全部参数原样交给网页。</summary>
@@ -117,6 +151,32 @@ public sealed class HeadlessServiceContractTests
         Assert.DoesNotContain(
             Directory.GetFiles(Path.Combine(root, "b-Code-Studio"), "*.xaml", SearchOption.AllDirectories),
             path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// REQ-SHELL-001：壳是消费网页的中间件，越少更新越好。它不引用 Aurora、宿主或任何本地工程，
+    /// 包依赖只有 MAUI 本身；源码里也不出现 aurora.* 指令名——功能要进网页，不进壳。
+    /// </summary>
+    [Fact]
+    public void ShellIsAPureConsumer()
+    {
+        var shell = Path.Combine(RepositoryRoot(), "b-Code-Shell", "AuroraShell");
+        var project = System.Xml.Linq.XDocument.Load(Path.Combine(shell, "AuroraShell.csproj"));
+        Assert.Empty(project.Descendants("ProjectReference"));
+        Assert.Empty(project.Descendants("Reference"));
+        Assert.All(project.Descendants("PackageReference"),
+            package => Assert.StartsWith("Microsoft.Maui.", (string?)package.Attribute("Include") ?? "", StringComparison.Ordinal));
+
+        var sources = Directory.GetFiles(shell, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+        Assert.All(sources, path =>
+        {
+            var text = File.ReadAllText(path);
+            Assert.DoesNotContain("aurora.", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("HistoryVulcan", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("HistoryAurora", text, StringComparison.Ordinal);
+        });
     }
 
     private static string RepositoryRoot()

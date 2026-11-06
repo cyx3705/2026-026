@@ -307,7 +307,8 @@ async function connectCore() {
           else if(value&&typeof value==='object') { if(Array.isArray(value))value.forEach(collect);else collect(value); }
         }};
         set.pages.forEach(collect); required.add('preview.node');
-        const registry=rowsOf(await invoke('aurora.ui.actions'));
+        // 2.1.1: the module hands out the native pages' declarations; aurora.ui.actions now lists this page's own state.
+        const registry=rowsOf(await invoke('aurora.ui.hostedactions'));
         const ownActions=[...required].map(id=>{const a=registry.find(a=>a.id===id); if(!a)throw new Error(`Aurora 缺少动作：${id}`); return a;});
         for(const p of set.pages) if(pages.some(page=>page.id===p.id)) throw new Error(`页面 id 冲突：${p.id}`);
         pages.push(...set.pages.map(p=>({...p,owner:set.owner})));
