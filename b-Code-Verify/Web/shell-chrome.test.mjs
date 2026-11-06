@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inShell,adoptTitleRow} from '../../b-Code-Web/wwwroot/shell-chrome.js';
+import {inShell,adoptTitleRow,addResizeEdges} from '../../b-Code-Web/wwwroot/shell-chrome.js';
 
 function fakeRow(win) {
   const listeners={},children=[];
@@ -35,4 +35,17 @@ test('REQ-WEB-044: inside the shell the row drops its text, gains three window b
   listeners.dblclick({target:{closest:()=>null}});
   assert.deepEqual(posted,[{oneHistoryWindow:'close'},{oneHistoryWindow:'drag'},{oneHistoryWindow:'maximize'}]);
   assert.equal(adoptTitleRow(row),false,'adopting twice does nothing');
+});
+
+test('REQ-WEB-044: in the shell eight edge handles ask the shell to resize from their edge', () => {
+  const posted=[],appended=[];
+  const win={oneHistoryShell:{version:1},chrome:{webview:{postMessage:message=>posted.push(message)}}};
+  const doc={defaultView:win,querySelector:()=>appended[0]??null,body:{append:node=>appended.push(node)},
+    createElement:()=>({className:'',listeners:{},setAttribute(){},addEventListener(name,handler){this.listeners[name]=handler;}})};
+  assert.equal(addResizeEdges(doc),true);
+  assert.equal(appended.length,8);
+  appended.find(node=>node.className.endsWith('-se')).listeners.mousedown({button:0,preventDefault(){}});
+  assert.deepEqual(posted,[{oneHistoryWindow:'resize',edge:'se'}]);
+  assert.equal(addResizeEdges(doc),false,'only once per document');
+  assert.equal(addResizeEdges({defaultView:{},querySelector:()=>null}),false,'nothing outside the shell');
 });
