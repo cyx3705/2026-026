@@ -44,7 +44,13 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = webFiles });
-app.UseStaticFiles(new StaticFileOptions { FileProvider = webFiles });
+// REQ-WEB-043: the page changes with every hot install while browsers and shells stay open,
+// so every load revalidates instead of trusting a heuristic cache (a stale app.js broke 2.1.1's native pages).
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = webFiles,
+    OnPrepareResponse = file => file.Context.Response.Headers.CacheControl = "no-cache",
+});
 // REQ-WEB-040: host-originated UI commands reach the most recently active page over SSE.
 app.MapGet("/api/events", async (HttpContext context) =>
 {
