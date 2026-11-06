@@ -1,3 +1,4 @@
+import {adoptTitleRow} from './shell-chrome.js';
 import {el,button} from './dom.js';
 import {floatStorageKey,floatRecords,floatBounds} from './float-model.js';
 
@@ -49,6 +50,8 @@ export function createFloatHost({mobile,getPage,openDialog,closeDialogs=()=>{},m
     if(!heading||!body)throw new Error('浮窗已离开页面入口');
     doc.title=`${record.page.title} · OneHistory`;doc.documentElement.dataset.theme=document.documentElement.dataset.theme;
     heading.replaceChildren(el('h1',record.page.title),button('还原',()=>set(record.page,false),report));
+    // REQ-WEB-044: the shell's float window has no title or address bar; its heading row carries the window buttons.
+    delete heading.dataset.shellChrome;adoptTitleRow(heading,{keep:[...heading.children]});
     if(record.element&&record.element.ownerDocument!==document){closeDialogs(record.element.ownerDocument);transfer(record.element,()=>body.append(record.element));}
     else mount(record,body);
     if(record.document!==doc){

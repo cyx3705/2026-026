@@ -23,6 +23,7 @@ public sealed class ShellPage : ContentPage
     private readonly Entry _address = new() { Keyboard = Keyboard.Url, FontSize = 14, MinimumWidthRequest = 280 };
     private readonly HttpClient _probe = new() { Timeout = TimeSpan.FromSeconds(3) };
     private CancellationTokenSource? _connecting;
+    private bool _chromeAttached;
 
     public ShellPage()
     {
@@ -142,6 +143,11 @@ public sealed class ShellPage : ContentPage
 #if WINDOWS
         if (_web.Handler.PlatformView is Microsoft.UI.Xaml.Controls.WebView2 view)
         {
+            if (!_chromeAttached && Window is { } window)
+            {
+                await WindowChrome.AttachAsync(view, window);
+                _chromeAttached = true;
+            }
             await view.EnsureCoreWebView2Async();
             await view.CoreWebView2.Profile.ClearBrowsingDataAsync(Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache);
         }
