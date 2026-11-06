@@ -552,7 +552,9 @@ public sealed partial class PanelView : UserControl
         if (!binding.Ok)
         {
             // 声明缺失是面板作者与模块作者之间的事实不一致，必须当场说出来。
-            _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
+            // 「等待」不算：模块刚接上、声明在下一轮拉取后到，面板会随之整体重建（冷启动每次都会有一批）。
+            _log.Log(binding.Pending ? ShellLogLevel.Debug : ShellLogLevel.Error,
+                "panel", "面板 " + _definition.Id + ": " + binding.Error);
             return Warning(binding.Error!);
         }
 
@@ -724,7 +726,9 @@ public sealed partial class PanelView : UserControl
         var binding = _actions.Resolve(actionId);
         if (!binding.Ok)
         {
-            _log.Error("panel", "面板 " + _definition.Id + ": " + binding.Error);
+            // 等待中被点到（选项条、快捷键）：说明情况，但不是声明错误。
+            _log.Log(binding.Pending ? ShellLogLevel.Warn : ShellLogLevel.Error,
+                "panel", "面板 " + _definition.Id + ": " + binding.Error);
             return Task.FromResult(false);
         }
 

@@ -653,17 +653,20 @@ internal static class HostedPageData
         var catalog = devices.Success && CommandResultData.TryRead<NodeDeviceCatalog>(devices.Data, out var parsed)
             ? parsed
             : new NodeDeviceCatalog([], []);
-        return Rows(ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices));
+        return Rows(ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices, catalog.Installed));
     }
 
     /// <summary>
     /// 模块页的行。装载列写当前设备：本机、对端或不装载。界面自己那一格留空。
-    /// 没装在本机、但归属里还有的模块留在表上，方便改回本机或继续不装载。
+    /// 行来自模块区扫描（<paramref name="installed"/>）加已装载模块：包在、本机没装上的模块留在表上，方便改回本机或继续不装载。
+    /// 归属账本只填装载列——它只增不减，卸掉的模块还留着记录，不能拿来决定有哪些行（DEC-079）。
+    /// 旧宿主不给 installed（null）时退回旧行为：归属里出现过的都列出。
     /// </summary>
     internal static List<Dictionary<string, string>> ModuleRows(
         IReadOnlyList<ModuleMeta> loaded,
         IReadOnlyList<ModulePlacement> placements,
-        IReadOnlyList<NodeDeviceInfo> devices)
+        IReadOnlyList<NodeDeviceInfo> devices,
+        IReadOnlyList<string>? installed = null)
     {
         var placementByModule = placements
             .GroupBy(item => item.Module, StringComparer.OrdinalIgnoreCase)
@@ -674,11 +677,12 @@ internal static class HostedPageData
             .Select(module => new ModuleRow(module.ModuleName, module.Version, module.Description, LoadLabel(module.ModuleName, true)))
             .ToList();
         var known = new HashSet<string>(rows.Select(row => row.Module), StringComparer.OrdinalIgnoreCase);
-        foreach (var placement in placements)
+        var candidates = installed ?? placements.Select(placement => placement.Module).ToList();
+        foreach (var module in candidates)
         {
-            if (!known.Add(placement.Module) || placement.Module.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
+            if (!known.Add(module) || module.Equals(SelfModule, StringComparison.OrdinalIgnoreCase))
                 continue;
-            rows.Add(new ModuleRow(placement.Module, "", "（未在本机运行）", LoadLabel(placement.Module, false)));
+            rows.Add(new ModuleRow(module, "", "（未在本机运行）", LoadLabel(module, false)));
         }
 
         return rows

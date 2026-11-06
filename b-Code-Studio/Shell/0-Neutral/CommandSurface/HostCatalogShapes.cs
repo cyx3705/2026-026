@@ -59,10 +59,14 @@ public sealed record NodeDeviceInfo(string Id, string Label, string HostVersion,
 /// <summary>模块当前装在哪一台。OwnerNodeId 为空表示不装载。</summary>
 public sealed record ModulePlacement(string Module, string? OwnerNodeId, bool Conflict);
 
-/// <summary><c>vulcan.node.devices</c> 的数据。</summary>
+/// <summary>
+/// <c>vulcan.node.devices</c> 的数据。Installed 是模块区现有包的模块名（宿主 8.0.2 起）；
+/// 旧宿主不给，读出来是 null。
+/// </summary>
 public sealed record NodeDeviceCatalog(
     IReadOnlyList<NodeDeviceInfo> Devices,
-    IReadOnlyList<ModulePlacement> Placements);
+    IReadOnlyList<ModulePlacement> Placements,
+    IReadOnlyList<string>? Installed = null);
 
 /// <summary><c>vulcan.module.list</c> 的一项。</summary>
 public sealed record ModuleMeta(

@@ -165,6 +165,42 @@ public sealed class ActionDeclarationContractTests
         Assert.Contains("nobody.declared.this", binding.Error);
     }
 
+    /// <summary>
+    /// 冷启动：模块逐个接上，面板随接随建，早于下一轮拉取。上一轮拉取时还不在目录里的域只算「等待」，
+    /// 不当「未声明」记错误；已在目录里、却查不到的 id 才是真的漏声明（1.42.2）。
+    /// </summary>
+    [Fact]
+    public async Task Resolve_WaitsForModulesThatAttachedAfterTheLastReload()
+    {
+        var registry = new CommandTable();
+        Declare(registry, "demo", MinimalActions);
+        var actions = new ActionRegistry(TestShell.Bus(registry), new MemoryLog());
+
+        // 一轮都还没拉：一律等待。
+        Assert.True(actions.Resolve("demo.rename").Pending);
+
+        await actions.ReloadAsync();
+        Assert.True(actions.Resolve("demo.rename").Ok);
+        var missing = actions.Resolve("demo.missing");
+        Assert.False(missing.Ok);
+        Assert.False(missing.Pending);
+        Assert.Contains("未声明的动作", missing.Error);
+
+        // 这一轮之后才接上的模块：按钮先等待。
+        Declare(registry, "late", """
+            { "schemaVersion": 1, "owner": "HistoryLate",
+              "actions": [ { "id": "late.go", "title": "走", "command": "late.ui.actions" } ] }
+            """);
+        var waiting = actions.Resolve("late.go");
+        Assert.True(waiting.Pending);
+        Assert.Contains("等待 late", waiting.Error);
+
+        // 下一轮拉取后正常解析；该域里确实没有的 id 回到报错。
+        await actions.ReloadAsync();
+        Assert.True(actions.Resolve("late.go").Ok);
+        Assert.False(actions.Resolve("late.nothing").Pending);
+    }
+
     [Fact]
     public void BuildCommandText_SubstitutesPlaceholdersAndQuotes()
     {
