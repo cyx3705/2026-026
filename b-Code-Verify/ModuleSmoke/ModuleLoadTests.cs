@@ -87,9 +87,9 @@ public sealed class ModuleLoadTests
                 var page = await http.GetStringAsync(web.Url);
                 Assert.Contains("<html", page, StringComparison.OrdinalIgnoreCase);
                 Assert.Contains("frontend-link", await http.GetStringAsync(web.Url + "app.js"), StringComparison.Ordinal);
-                // REQ-WEB-043：热装后网页要立刻换新，静态文件一律要求重新校验。
+                // REQ-WEB-043：热装后网页要立刻换新，静态文件一律不缓存。
                 using var script = await http.GetAsync(web.Url + "app.js");
-                Assert.True(script.Headers.CacheControl?.NoCache, "app.js 必须带 Cache-Control: no-cache");
+                Assert.True(script.Headers.CacheControl?.NoStore, "app.js 必须带 Cache-Control: no-store");
             }
 
             var result = await web.InvokeAsync("aurora.ui.dialog",

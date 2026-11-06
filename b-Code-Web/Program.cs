@@ -45,11 +45,12 @@ app.Use(async (context, next) =>
 });
 app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = webFiles });
 // REQ-WEB-043: the page changes with every hot install while browsers and shells stay open,
-// so every load revalidates instead of trusting a heuristic cache (a stale app.js broke 2.1.1's native pages).
+// so nothing is stored: a stale app.js broke 2.1.1's native pages, and embedded files carry a fixed
+// Last-Modified, which makes ETags collide whenever an edit keeps the file length.
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = webFiles,
-    OnPrepareResponse = file => file.Context.Response.Headers.CacheControl = "no-cache",
+    OnPrepareResponse = file => file.Context.Response.Headers.CacheControl = "no-store",
 });
 // REQ-WEB-040: host-originated UI commands reach the most recently active page over SSE.
 app.MapGet("/api/events", async (HttpContext context) =>
