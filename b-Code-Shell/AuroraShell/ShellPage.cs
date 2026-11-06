@@ -104,10 +104,11 @@ public sealed class ShellPage : ContentPage
                 using var response = await _probe.GetAsync(address, cancellation);
                 if (response.IsSuccessStatusCode)
                 {
-                    MainThread.BeginInvokeOnMainThread(() =>
+                    await MainThread.InvokeOnMainThreadAsync(async () =>
                     {
                         if (cancellation.IsCancellationRequested)
                             return;
+                        await BypassCacheAsync();
                         _web.Source = new UrlWebViewSource { Url = address };
                         _web.IsVisible = true;
                         _overlay.IsVisible = false;
@@ -127,6 +128,30 @@ public sealed class ShellPage : ContentPage
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// REQ-SHELL-004：壳不信任网页缓存。网页随 Aurora 模块热装随时变，壳却一直开着、几乎不更新；
+    /// 缓存策略若交给服务端，服务端哪次给错了头（2.1.1 之前就是），壳就会一直用旧脚本。
+    /// 所以每次加载前清掉网页视图的磁盘缓存（Windows），或让它不用缓存（Android）。
+    /// </summary>
+    private async Task BypassCacheAsync()
+    {
+        if (_web.Handler?.PlatformView is null)
+            return;
+#if WINDOWS
+        if (_web.Handler.PlatformView is Microsoft.UI.Xaml.Controls.WebView2 view)
+        {
+            await view.EnsureCoreWebView2Async();
+            await view.CoreWebView2.Profile.ClearBrowsingDataAsync(Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache);
+        }
+#elif ANDROID
+        if (_web.Handler.PlatformView is Android.Webkit.WebView view)
+            view.Settings.CacheMode = Android.Webkit.CacheModes.NoCache;
+        await Task.CompletedTask;
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     private void ShowOverlay(string message)
