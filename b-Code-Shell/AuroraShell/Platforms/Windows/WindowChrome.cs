@@ -25,25 +25,24 @@ internal static class WindowChrome
     private const string Marker = "globalThis.oneHistoryShell = Object.freeze({ version: 1 });";
 
     /// <summary>
-    /// 去掉系统标题栏，保留可拖边改大小的边框；再收起 MAUI 自己盖在内容顶部的 32px 标题行
-    /// （<c>AppTitleBarContainer</c>，里面是窗口标题文字）。MAUI 会在映射标题时把它重新显示，
-    /// 所以登记一个可见性回调把它钉成折叠。
+    /// 窗口不要任何系统边框：没有标题栏、没有可拖边框，整个窗口都是网页。
+    /// 再收起 MAUI 自己盖在内容顶部的 32px 标题行（<c>AppTitleBarContainer</c>），MAUI 会在映射标题时把它重新显示，
+    /// 所以登记一个可见性回调把它钉成折叠。拖动与拉伸都由网页发起、壳跟随光标完成（见 <see cref="FollowCursor"/>）。
     /// </summary>
     public static void MakeFrameless(Microsoft.UI.Xaml.Window window)
     {
         window.ExtendsContentIntoTitleBar = true;
         if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-            presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
-        // Windows 10 上只关 WinUI 的标题栏，窗口仍带 WS_CAPTION，DWM 照样在顶部画一条 32px 的黑色标题区；
-        // 直接去掉这个样式（保留 WS_THICKFRAME 以便拖边改大小）并让框架重算。
+            presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
+        // Windows 10 上：只关 WinUI 标题栏时 WS_CAPTION 还在，DWM 照样画一条 32px 黑色标题区；
+        // 留着 WS_THICKFRAME 则激活时顶边是白条、四周是系统强调色细线。三种样式全去掉，并让非客户区为零。
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        // 可拖边框的顶边在 Windows 10 上会画成一条强调色细线：把顶边让给内容，左右下边框照留（不可见，仍能拖边改大小）。
         if (Subclassed.Add(handle))
-            SetWindowSubclass(handle, KeepTopEdge, SubclassId, IntPtr.Zero);
+            SetWindowSubclass(handle, NoFrame, SubclassId, IntPtr.Zero);
         var style = GetWindowLong(handle, GwlStyle);
-        if ((style & WsCaption) != 0)
+        if ((style & (WsCaption | WsThickFrame | WsBorder)) != 0)
         {
-            SetWindowLong(handle, GwlStyle, (style & ~WsCaption) | WsThickFrame);
+            SetWindowLong(handle, GwlStyle, style & ~(WsCaption | WsThickFrame | WsBorder));
             SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SwpFrameChanged | SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
         }
         if (window.Content is not Microsoft.UI.Xaml.FrameworkElement root)
@@ -282,17 +281,12 @@ internal static class WindowChrome
 
     private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data);
 
-    /// <summary>静态字段持有委托，免得被回收后系统回调到已释放的函数。</summary>
-    private static readonly SubclassProc KeepTopEdge = (hWnd, msg, wParam, lParam, _, _) =>
-    {
-        if (msg != WmNcCalcSize || wParam == IntPtr.Zero)
-            return DefSubclassProc(hWnd, msg, wParam, lParam);
-        // lParam 指向 NCCALCSIZE_PARAMS，第一个 RECT 就是建议的客户区；默认处理后把顶边改回原值。
-        var top = Marshal.ReadInt32(lParam, 4);
-        var result = DefSubclassProc(hWnd, msg, wParam, lParam);
-        Marshal.WriteInt32(lParam, 4, top);
-        return result;
-    };
+    /// <summary>
+    /// 非客户区为零：整个窗口矩形都是客户区，样式残留也不会再画任何边。
+    /// 静态字段持有委托，免得被回收后系统回调到已释放的函数。
+    /// </summary>
+    private static readonly SubclassProc NoFrame = (hWnd, msg, wParam, lParam, _, _) =>
+        msg == WmNcCalcSize && wParam != IntPtr.Zero ? IntPtr.Zero : DefSubclassProc(hWnd, msg, wParam, lParam);
 
     [DllImport("comctl32.dll")]
     private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc proc, UIntPtr id, IntPtr data);
@@ -303,6 +297,7 @@ internal static class WindowChrome
     private const int GwlStyle = -16;
     private const int WsCaption = 0x00C00000;
     private const int WsThickFrame = 0x00040000;
+    private const int WsBorder = 0x00800000;
     private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010, SwpFrameChanged = 0x0020;
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
