@@ -25,8 +25,10 @@ export function pushedResult(command,value) {
 
 export function connectFrontendLink({run,report=()=>{},win=globalThis,doc=globalThis.document,kind}) {
   const id=clientId(win.sessionStorage);
-  const mode=kind??(win.matchMedia?.('(max-width: 767px)').matches?'mobile':'desktop');
-  const source=new win.EventSource(`/api/events?client=${id}&kind=${mode}`);
+  // REQ-WEB-045: inside the app shell the page reports the shell's own path, so the host can start the shell next time.
+  const launch=typeof win.oneHistoryShell?.launch==='string'?win.oneHistoryShell.launch:'';
+  const mode=kind??(launch?'shell':win.matchMedia?.('(max-width: 767px)').matches?'mobile':'desktop');
+  const source=new win.EventSource(`/api/events?client=${id}&kind=${mode}${launch?`&launch=${encodeURIComponent(launch)}`:''}`);
   const post=(path,body)=>win.fetch(path,{method:'POST',headers,body:JSON.stringify(body)}).catch(()=>undefined);
   const active=()=>post('/api/events/active',{client:id,visible:doc.visibilityState!=='hidden'});
   source.addEventListener('open',active);

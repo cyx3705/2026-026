@@ -32,3 +32,11 @@ test('REQ-WEB-040: an invoke event runs locally and posts exactly one reply', as
   await listeners.invoke({data:JSON.stringify({id:'',command:'aurora.ui.reloadpages',args:{}})});
   assert.equal(posts.length,before,'broadcasts need no reply');
 });
+
+test('REQ-WEB-045: inside the app shell the page reports the shell path', () => {
+  class FakeSource {constructor(url){this.url=url;FakeSource.last=this;} addEventListener(){} close(){}}
+  const win={EventSource:FakeSource,sessionStorage:null,matchMedia:()=>({matches:true}),addEventListener(){},fetch:async()=>({ok:true}),
+    oneHistoryShell:{version:1,launch:'C:/Tools/Aurora Shell/AuroraShell.exe'}};
+  const link=connectFrontendLink({win,doc:{visibilityState:'visible',addEventListener(){}},run:async()=>true});
+  assert.equal(FakeSource.last.url,`/api/events?client=${link.id}&kind=shell&launch=${encodeURIComponent('C:/Tools/Aurora Shell/AuroraShell.exe')}`);
+});

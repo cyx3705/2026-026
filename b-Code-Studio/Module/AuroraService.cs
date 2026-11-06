@@ -67,7 +67,9 @@ internal sealed class AuroraService : IDisposable
         _subscriptions.Add(context.Subscribe("vulcan.module.changed", _ =>
             _web.Broadcast("aurora.ui.refreshdata", new Dictionary<string, string> { ["page"] = "modules" })));
 
-        _frontend = context.RegisterFrontend(new WebFrontend(new DispatcherSynchronizationContext(_dispatcher), _web, context.Log));
+        var shell = new ShellLauncher(environment.DataDirectory, context.Log);
+        _web.ShellSeen += shell.Remember;
+        _frontend = context.RegisterFrontend(new WebFrontend(new DispatcherSynchronizationContext(_dispatcher), _web, shell, context.Log));
         _web.EnsureStarted();
     }
 

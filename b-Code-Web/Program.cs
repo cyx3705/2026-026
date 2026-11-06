@@ -56,13 +56,13 @@ app.UseStaticFiles(new StaticFileOptions
 app.MapGet("/api/events", async (HttpContext context) =>
 {
     var id = context.Request.Query["client"].ToString();
-    var kind = context.Request.Query["kind"].ToString() == "mobile" ? "mobile" : "desktop";
+    var kind = context.Request.Query["kind"].ToString() switch { "mobile" => "mobile", "shell" => "shell", _ => "desktop" };
     if (id.Length is < 8 or > 64 || !id.All(char.IsAsciiLetterOrDigit))
     {
         context.Response.StatusCode = 400;
         return;
     }
-    await channel.StreamAsync(context, id, kind);
+    await channel.StreamAsync(context, id, kind, kind == "shell" ? context.Request.Query["launch"].ToString() : "");
 });
 app.MapPost("/api/events/active", async (HttpContext context) =>
 {

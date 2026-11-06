@@ -35,9 +35,14 @@ public sealed class FrontendChannel
     /// <summary>有网页连上或断开时触发；参数为当前连接数。</summary>
     public event Action<int>? ClientsChanged;
 
+    /// <summary>壳里的网页连上时触发；参数是壳报来的自身路径（REQ-WEB-045）。</summary>
+    public event Action<string>? ShellSeen;
+
     /// <summary>SSE 长连接：登记网页，持续写出推送，直到网页断开。</summary>
-    public async Task StreamAsync(HttpContext context, string id, string kind)
+    public async Task StreamAsync(HttpContext context, string id, string kind, string launch = "")
     {
+        if (kind == "shell" && !string.IsNullOrWhiteSpace(launch))
+            ShellSeen?.Invoke(launch);
         var client = new Client(id, kind) { ActiveStamp = Interlocked.Increment(ref _clock) };
         if (_clients.TryRemove(id, out var previous))
             Drop(previous, "同一网页重新连接");
@@ -155,7 +160,8 @@ public sealed class FrontendChannel
     private Client? PickTarget()
         => _clients.Values
             .OrderByDescending(client => client.Visible)
-            .ThenByDescending(client => client.Kind == "desktop")
+            .ThenByDescending(client => client.Kind != "mobile")
+            .ThenByDescending(client => client.Kind == "shell")
             .ThenByDescending(client => client.ActiveStamp)
             .FirstOrDefault();
 

@@ -11,7 +11,7 @@ namespace HistoryAurora.Web;
 /// <c>{"id":"…","op":"invoke","command":"aurora.ui.dialog","args":{…}}</c>、
 /// <c>{"op":"broadcast","command":"…","args":{…}}</c>。
 /// 本进程 → 模块（stdout，带 <see cref="Prefix"/> 前缀，别的输出一律被模块忽略）：
-/// <c>{"id":"…","result":{…}}</c>、<c>{"event":"ready","url":"…"}</c>、<c>{"event":"clients","count":n}</c>。
+/// <c>{"id":"…","result":{…}}</c>、<c>{"event":"ready","url":"…"}</c>、<c>{"event":"clients","count":n}</c>、<c>{"event":"shell","path":"…"}</c>（壳里的网页连上了，path 是壳的路径）。
 /// stdin 关闭就是模块没了：本进程随之退出，不留孤儿服务占着端口。
 /// </remarks>
 public static class ParentLink
@@ -31,6 +31,7 @@ public static class ParentLink
     {
         _out = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
         channel.ClientsChanged += count => Send(new { @event = "clients", count });
+        channel.ShellSeen += path => Send(new { @event = "shell", path });
         lifetime.ApplicationStarted.Register(() => Send(new { @event = "ready", url }));
         return Task.Run(async () =>
         {

@@ -47,6 +47,22 @@ internal sealed class WebProcess : IDisposable
     /// <summary>当前连着推送通道的网页数（子进程上报）。</summary>
     public int ClientCount { get; private set; }
 
+    /// <summary>壳里的网页连上时触发，参数是壳报来的自身路径（REQ-WEB-045）。</summary>
+    public event Action<string>? ShellSeen;
+
+    /// <summary>等到至少一个网页连上推送通道；超时返回 false。</summary>
+    public async Task<bool> WaitClientAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (ClientCount == 0)
+        {
+            if (DateTime.UtcNow >= deadline || !Running)
+                return false;
+            await Task.Delay(200).ConfigureAwait(false);
+        }
+        return true;
+    }
+
     /// <summary>子进程是否在跑。</summary>
     public bool Running
     {
@@ -233,6 +249,9 @@ internal sealed class WebProcess : IDisposable
                         break;
                     case "clients" when root.TryGetProperty("count", out var count) && count.TryGetInt32(out var value):
                         ClientCount = value;
+                        break;
+                    case "shell" when root.TryGetProperty("path", out var path) && path.GetString() is { Length: > 0 } shell:
+                        ShellSeen?.Invoke(shell);
                         break;
                 }
                 return;

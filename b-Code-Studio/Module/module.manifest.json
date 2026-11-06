@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryAurora",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "前端服务：浏览器访问的界面、布局、控制台与主题",
   "artifact": "HistoryAurora.dll",
   "docs": "HistoryAurora.xml",

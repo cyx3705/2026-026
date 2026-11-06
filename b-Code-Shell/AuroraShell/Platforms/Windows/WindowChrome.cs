@@ -12,7 +12,7 @@ namespace AuroraShell;
 /// <remarks>
 /// <para>壳只提供一座通用的「窗口桥」，不认识网页内容：</para>
 /// <list type="bullet">
-/// <item>每个文档创建时注入 <c>globalThis.oneHistoryShell = { version: 1 }</c>，网页据此知道自己在壳里；</item>
+/// <item>每个文档创建时注入 <c>globalThis.oneHistoryShell = { version: 1, launch }</c>，网页据此知道自己在壳里，launch 是壳自己的路径；</item>
 /// <item>网页 <c>chrome.webview.postMessage({ oneHistoryWindow: "minimize" | "maximize" | "close" | "drag" })</c>，
 /// 壳对发消息的那个窗口照做（maximize 在最大化与还原之间切换，drag 开始一次系统拖动）；</item>
 /// <item>网页 <c>window.open</c> 打开的窗口由壳接成同样无边框的窗口（保留 opener 关系，浮窗搬 DOM 照常工作），
@@ -22,7 +22,9 @@ namespace AuroraShell;
 /// </remarks>
 internal static class WindowChrome
 {
-    private const string Marker = "globalThis.oneHistoryShell = Object.freeze({ version: 1 });";
+    // launch：本壳可执行文件的位置。网页把它报给 Aurora，宿主下次 vulcan.app.show 时直接拉起壳而不是开浏览器标签。
+    private static readonly string Marker = "globalThis.oneHistoryShell = Object.freeze({ version: 1, launch: "
+        + JsonSerializer.Serialize(Environment.ProcessPath ?? "") + " });";
 
     /// <summary>
     /// 窗口不要任何系统边框：没有标题栏、没有可拖边框，整个窗口都是网页。

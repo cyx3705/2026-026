@@ -96,6 +96,35 @@ public sealed class ModuleLoadTests
                 new Dictionary<string, string> { ["kind"] = "confirm", ["body"] = "冒烟" }, CancellationToken.None);
             Assert.False(result.Success);
             Assert.Contains("没有打开的 Aurora 网页", result.Message, StringComparison.Ordinal);
+
+            // REQ-WEB-045：壳里的网页连上时把壳路径经子进程报给模块，模块记下、只认 AuroraShell.exe。
+            var data = Directory.CreateTempSubdirectory("aurora-shell-");
+            try
+            {
+                var fake = Path.Combine(data.FullName, ShellLauncher.ExecutableName);
+                File.WriteAllText(fake, "");
+                var seen = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                web.ShellSeen += path => seen.TrySetResult(path);
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.Add("X-Aurora-Web", "1");
+                using var stream = await http.GetAsync(
+                    $"{web.Url}api/events?client=shellsmoke01&kind=shell&launch={Uri.EscapeDataString(fake)}",
+                    HttpCompletionOption.ResponseHeadersRead);
+                Assert.Same(seen.Task, await Task.WhenAny(seen.Task, Task.Delay(10000)));
+                var reported = await seen.Task;
+                Assert.Equal(fake, reported);
+                Assert.True(await web.WaitClientAsync(TimeSpan.FromSeconds(5)));
+
+                var launcher = new ShellLauncher(data.FullName, log);
+                launcher.Remember(Path.Combine(data.FullName, "notepad.exe"));
+                Assert.False(File.Exists(Path.Combine(data.FullName, "shell.json")), "非 AuroraShell.exe 的路径不能被记下");
+                launcher.Remember(reported);
+                Assert.Contains(fake.Replace("\\", "\\\\"), File.ReadAllText(Path.Combine(data.FullName, "shell.json")), StringComparison.Ordinal);
+            }
+            finally
+            {
+                data.Delete(recursive: true);
+            }
         }
 
         using var probe = new TcpListener(IPAddress.Loopback, port);

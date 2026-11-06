@@ -11,13 +11,14 @@ namespace HistoryAurora.Module;
 /// <remarks>
 /// <list type="bullet">
 /// <item>确认：推一个 confirm 弹窗给最近活跃的网页；没有网页时按宿主缺省拒绝。</item>
-/// <item><c>vulcan.app.show / focusconsole</c>：有网页就让它到前台，没有就用系统浏览器打开地址。</item>
+/// <item><c>vulcan.app.show / focusconsole</c>（REQ-WEB-045）：记得壳在哪就拉起壳（壳单实例，已开着就到前台）；
+/// 否则有网页就推给它，没有就用系统浏览器打开地址。focusconsole 拉起壳后等网页连上再切到控制台。</item>
 /// <item><c>vulcan.app.hide / close</c>：网页窗口归浏览器管，这里只回成功不关页面。</item>
 /// <item><see cref="UiContext"/>：仍是一条 STA 线程。别的模块（Minerva 工作窗等）声明 RequiresUiThread
 /// 的指令要在 STA 上建自己的 WPF 窗口，宿主把它们编组到这里。</item>
 /// </list>
 /// </remarks>
-internal sealed class WebFrontend(SynchronizationContext uiContext, WebProcess web, IModuleLog log) : IFrontend
+internal sealed class WebFrontend(SynchronizationContext uiContext, WebProcess web, ShellLauncher shell, IModuleLog log) : IFrontend
 {
     private static readonly TimeSpan ConfirmTimeout = TimeSpan.FromMinutes(10);
 
@@ -49,6 +50,17 @@ internal sealed class WebFrontend(SynchronizationContext uiContext, WebProcess w
             || commandName.Equals("vulcan.app.focusconsole", StringComparison.OrdinalIgnoreCase))
         {
             web.EnsureStarted();
+            var console = commandName.Equals("vulcan.app.focusconsole", StringComparison.OrdinalIgnoreCase);
+            // 壳自带「连不上就重试」的遮罩，不必等 Web 子进程就绪再拉起它。
+            if (shell.TryLaunch())
+            {
+                if (!console)
+                    return CommandResult.Ok("已唤起 Aurora");
+                if (!await web.WaitClientAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false))
+                    return CommandResult.Ok("Aurora 正在启动");
+                return await web.InvokeAsync("vulcan.app.focusconsole", new Dictionary<string, string>(), cancellation)
+                    .ConfigureAwait(false);
+            }
             if (web.ClientCount > 0)
                 return await web.InvokeAsync(commandName.ToLowerInvariant(), new Dictionary<string, string>(), cancellation)
                     .ConfigureAwait(false);

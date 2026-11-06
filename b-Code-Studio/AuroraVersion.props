@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <HistoryAuroraVersion>2.1.1</HistoryAuroraVersion>
+    <HistoryAuroraVersion>2.2.0</HistoryAuroraVersion>
     <!-- Aurora 消费的 HistoryVulcan 正式宿主版本。这是宿主契约的唯一真源：
          质量门禁从此读取，代码不得再硬编码该字面量；包由宿主管线按 project.manifest.json 的 publish 段生成。
          5.0.0 拆除宿主模块领域 SDK，冻结面只留注册器、总线和开发总线。
