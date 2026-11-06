@@ -37,6 +37,9 @@ internal static class WindowChrome
         // Windows 10 上只关 WinUI 的标题栏，窗口仍带 WS_CAPTION，DWM 照样在顶部画一条 32px 的黑色标题区；
         // 直接去掉这个样式（保留 WS_THICKFRAME 以便拖边改大小）并让框架重算。
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        // 可拖边框的顶边在 Windows 10 上会画成一条强调色细线：把顶边让给内容，左右下边框照留（不可见，仍能拖边改大小）。
+        if (Subclassed.Add(handle))
+            SetWindowSubclass(handle, KeepTopEdge, SubclassId, IntPtr.Zero);
         var style = GetWindowLong(handle, GwlStyle);
         if ((style & WsCaption) != 0)
         {
@@ -97,14 +100,16 @@ internal static class WindowChrome
 
     private static void OnMessage(Window? owner, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        string? verb;
+        string? verb, edge = null;
         try
         {
             using var message = JsonDocument.Parse(e.WebMessageAsJson);
-            verb = message.RootElement.ValueKind == JsonValueKind.Object
-                   && message.RootElement.TryGetProperty("oneHistoryWindow", out var value)
+            var root = message.RootElement;
+            verb = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("oneHistoryWindow", out var value)
                 ? value.GetString()
                 : null;
+            if (verb == "resize" && root.TryGetProperty("edge", out var side) && side.ValueKind == JsonValueKind.String)
+                edge = side.GetString();
         }
         catch (JsonException)
         {
@@ -127,6 +132,9 @@ internal static class WindowChrome
                 break;
             case "drag":
                 FollowCursor(window);
+                break;
+            case "resize" when edge is "n" or "s" or "e" or "w" or "ne" or "nw" or "se" or "sw":
+                ResizeWithCursor(window, edge);
                 break;
         }
     }
@@ -159,6 +167,48 @@ internal static class WindowChrome
                 return;
             }
             app.Move(new Windows.Graphics.PointInt32(origin.X + now.X - start.X, origin.Y + now.Y - start.Y));
+        };
+        timer.Start();
+    }
+
+    /// <summary>
+    /// 从某条边或某个角拉伸窗口：左键按住期间跟着光标改位置与大小，最小 480×320。
+    /// 网页视图的窗口盖在边框上，系统的拉伸收不到鼠标，所以由网页边缘的细手柄发起、壳来跟随（REQ-SHELL-005）。
+    /// </summary>
+    private static void ResizeWithCursor(Microsoft.UI.Xaml.Window window, string edge)
+    {
+        const int minWidth = 480, minHeight = 320;
+        var app = window.AppWindow;
+        if (!GetCursorPos(out var start))
+            return;
+        Restored.Remove(app);
+        var origin = new Windows.Graphics.RectInt32(app.Position.X, app.Position.Y, app.Size.Width, app.Size.Height);
+        var timer = window.DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(8);
+        timer.Tick += (_, _) =>
+        {
+            if ((GetAsyncKeyState(VkLeftButton) & 0x8000) == 0 || !GetCursorPos(out var now))
+            {
+                timer.Stop();
+                return;
+            }
+            int dx = now.X - start.X, dy = now.Y - start.Y;
+            int left = origin.X, top = origin.Y, width = origin.Width, height = origin.Height;
+            if (edge.Contains('e'))
+                width = Math.Max(minWidth, origin.Width + dx);
+            if (edge.Contains('s'))
+                height = Math.Max(minHeight, origin.Height + dy);
+            if (edge.Contains('w'))
+            {
+                width = Math.Max(minWidth, origin.Width - dx);
+                left = origin.X + origin.Width - width;
+            }
+            if (edge.Contains('n'))
+            {
+                height = Math.Max(minHeight, origin.Height - dy);
+                top = origin.Y + origin.Height - height;
+            }
+            app.MoveAndResize(new Windows.Graphics.RectInt32(left, top, width, height));
         };
         timer.Start();
     }
@@ -225,6 +275,30 @@ internal static class WindowChrome
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int key);
+
+    private const int WmNcCalcSize = 0x0083;
+    private static readonly UIntPtr SubclassId = new(0x4F48);
+    private static readonly HashSet<IntPtr> Subclassed = [];
+
+    private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data);
+
+    /// <summary>静态字段持有委托，免得被回收后系统回调到已释放的函数。</summary>
+    private static readonly SubclassProc KeepTopEdge = (hWnd, msg, wParam, lParam, _, _) =>
+    {
+        if (msg != WmNcCalcSize || wParam == IntPtr.Zero)
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
+        // lParam 指向 NCCALCSIZE_PARAMS，第一个 RECT 就是建议的客户区；默认处理后把顶边改回原值。
+        var top = Marshal.ReadInt32(lParam, 4);
+        var result = DefSubclassProc(hWnd, msg, wParam, lParam);
+        Marshal.WriteInt32(lParam, 4, top);
+        return result;
+    };
+
+    [DllImport("comctl32.dll")]
+    private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc proc, UIntPtr id, IntPtr data);
+
+    [DllImport("comctl32.dll")]
+    private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     private const int GwlStyle = -16;
     private const int WsCaption = 0x00C00000;

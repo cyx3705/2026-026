@@ -328,3 +328,9 @@ nav{overflow:auto;min-height:80px;flex:1}nav button{width:100%;text-align:left;m
 .shell-controls button{width:32px;height:26px;padding:0;border:0;border-radius:var(--radius-inner);background:transparent;color:inherit;font-size:var(--font-small);line-height:1}
 .shell-controls button:hover{background:var(--line)}
 .shell-controls button[data-verb="close"]:hover{background:var(--danger);color:var(--on-ink)}
+.shell-resize{position:fixed;z-index:2147483647}
+.shell-resize-n,.shell-resize-s{left:8px;right:8px;height:5px;cursor:ns-resize}.shell-resize-n{top:0}.shell-resize-s{bottom:0}
+.shell-resize-e,.shell-resize-w{top:8px;bottom:8px;width:5px;cursor:ew-resize}.shell-resize-e{right:0}.shell-resize-w{left:0}
+.shell-resize-ne,.shell-resize-nw,.shell-resize-se,.shell-resize-sw{width:8px;height:8px}
+.shell-resize-ne{top:0;right:0;cursor:nesw-resize}.shell-resize-sw{bottom:0;left:0;cursor:nesw-resize}
+.shell-resize-nw{top:0;left:0;cursor:nwse-resize}.shell-resize-se{bottom:0;right:0;cursor:nwse-resize}

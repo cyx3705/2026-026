@@ -6,8 +6,21 @@ export function inShell(win=globalThis) {
   return win?.oneHistoryShell?.version===1&&typeof win.chrome?.webview?.postMessage==='function';
 }
 
-export function windowCommand(win,verb) {
-  if(inShell(win))win.chrome.webview.postMessage({oneHistoryWindow:verb});
+export function windowCommand(win,verb,extra={}) {
+  if(inShell(win))win.chrome.webview.postMessage({oneHistoryWindow:verb,...extra});
+}
+
+// The web view's own window covers the frame, so edge resizing is asked of the shell from thin handles on the page edges.
+const edges=['n','s','e','w','ne','nw','se','sw'];
+export function addResizeEdges(doc=globalThis.document) {
+  const win=doc?.defaultView;
+  if(!inShell(win)||doc.querySelector('.shell-resize'))return false;
+  for(const edge of edges){
+    const handle=doc.createElement('div');handle.className=`shell-resize shell-resize-${edge}`;handle.setAttribute('aria-hidden','true');
+    handle.addEventListener('mousedown',event=>{if(event.button===0){event.preventDefault();windowCommand(win,'resize',{edge});}});
+    doc.body.append(handle);
+  }
+  return true;
 }
 
 // Turns `row` into the window's title row: its text goes away, the three buttons sit at its end,
