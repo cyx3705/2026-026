@@ -79,6 +79,7 @@ public static partial class ComponentCatalog
             [
                 "动作缺失或写错时按钮渲染成写明原因的警示牌，aurora.ui.actions 列出断链",
                 "面板成功操作会等本页数据刷新完成再结束运行态",
+                "Web 运行中按钮四周显示主题金色呼吸光晕、文字保持清晰；减少动态效果时常亮，完成或失败后熄灭，运行中禁止重复点击",
                 "Web 文字和图标不拆行，空间不足整按钮移至下一行；超过整行才省略，悬停提示保留全文；字体加载或标题变化后重新测宽",
                 "Web 在动作声明暂时移除再恢复时保留同一按钮落点的运行态；旧提交结束前不重复执行，结束后仍检查当前选择条件",
                 "想让按钮调 Aurora 自己的能力（浮窗、刷新），声明一条指向 aurora.* 指令的动作即可，不需要新组件",
@@ -102,6 +103,7 @@ public static partial class ComponentCatalog
             ],
             Example = """{ "kind": "switch", "id": "topmost", "label": "置顶", "value": "false", "commitAction": "mymodule.topmost" }""",
             Rules = ["只支持 id / label / value / action / commitAction；无标签时最小宽 48",
+                "Web 提交期间四周显示主题金色光晕并禁止重复点击，结束后恢复",
                 "Web 标签保持单行；minWidth 不压缩完整标签，空间不足整开关折行，超过整行才省略并提示全文"],
         },
         new()
@@ -158,7 +160,7 @@ public static partial class ComponentCatalog
             [
                 "与 select 选项框取数同形：重取候选尽量留住选中项，还在就留着，否则退到 value，再否则第一项；程序回写不触发 commitAction",
                 "面板上任何动作成功后会重取全部候选：菜单里删掉、新增一项后不必另外刷新",
-                "Web 提交期间选项暂时禁用，程序回写仍可更新显示与通道，不触发另一次提交；完成后恢复选择",
+                "Web 提交期间选项四周显示主题金色光晕并暂时禁用，程序回写仍可更新显示与通道，不触发另一次提交；完成后恢复选择",
                 "右键落在选项条上只开它自己的菜单，不再唤起页面的 context 弹出层",
                 "选项条不是表格：候选多到要滚动、要排序筛选时用 table",
             ],

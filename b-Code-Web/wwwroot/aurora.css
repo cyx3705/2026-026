@@ -103,7 +103,11 @@ label{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:var(--co
 .control-panel .panel-choices{display:flex;gap:4px;flex-wrap:wrap}
 .control-panel .panel-choice{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .control-panel .panel-icon{margin-right:6px}
-.control-panel .is-running{cursor:wait;opacity:.55;outline:1px solid var(--header-divider)}
+/* REQ-WEB-048: all four edges glow; inset light survives clipped table cells.
+   Keep text at full opacity and use the authoritative accent in both themes. */
+.is-running:not(.panel-choices){cursor:wait;opacity:1;box-shadow:inset 0 0 0 1px var(--oh-color-accent),inset 0 0 6px color-mix(in srgb,var(--oh-color-accent) 55%,transparent),0 0 8px color-mix(in srgb,var(--oh-color-accent) 70%,transparent);animation:running-glow 1.4s ease-in-out infinite alternate}
+@keyframes running-glow{to{box-shadow:inset 0 0 0 1px var(--oh-color-accent),inset 0 0 9px color-mix(in srgb,var(--oh-color-accent) 75%,transparent),0 0 12px color-mix(in srgb,var(--oh-color-accent) 90%,transparent)}}
+@media(prefers-reduced-motion:reduce){.is-running:not(.panel-choices){animation:none}}
 .source-browser{display:flex;flex-direction:column;gap:12px}
 .source-path{display:flex;gap:6px;flex-wrap:wrap}.source-path input{flex:1;min-width:120px}
 .source-entries{max-height:45dvh;overflow:auto;display:flex;flex-direction:column;gap:3px}

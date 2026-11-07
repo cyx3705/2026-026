@@ -1,4 +1,4 @@
-import {isVisible} from './dom.js';
+import {isVisible,setRunning} from './dom.js';
 import {bindArgs, rowsOf} from './protocol.js';
 import {showMenu, closeMenu} from './menu.js';
 import {widgetKind, booleanValue, normalizeOptions, chooseOption, panelLines, validatePanel} from './panel-model.js';
@@ -30,10 +30,8 @@ export function renderPanel(node, page, hooks) {
   }
   function updateBusy(control,busy) {
     if (!control) return;
-    control.setAttribute('aria-busy',String(busy));
-    control.classList.toggle('is-running',busy);
-    if ('disabled' in control) control.disabled=busy || !!control.gated;
-    else for(const button of control.querySelectorAll('button'))button.disabled=busy;
+    setRunning(control,busy);
+    if (!('disabled' in control)) for(const button of control.querySelectorAll('button'))setRunning(button,busy);
   }
   function updateActionTitle(cell) {
     const button=cell.element;
@@ -121,7 +119,7 @@ export function renderPanel(node, page, hooks) {
         input.replaceChildren(...options.map(option => {
           const b=el('button',option.text,'panel-choice'); b.type='button'; b.dataset.value=option.value;
           b.setAttribute('aria-pressed',String(option.value===value)); b.title=option.value;
-          b.disabled=pending.has(activity);
+          setRunning(b,pending.has(activity));
           b.onclick=() => set(option.value,true);
           b.oncontextmenu=e => menu(spec,b,option.value,e);
           b.onkeydown=e => { if(e.key==='ContextMenu' || e.key==='F10' && e.shiftKey) { e.preventDefault(); menu(spec,b,option.value); } };

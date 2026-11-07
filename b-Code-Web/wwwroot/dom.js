@@ -9,10 +9,16 @@ export function button(text,handler,report=()=>{}) {
   const node=el('button',text);node.type='button';
   node.onclick=async()=>{
     if(node.disabled)return;
-    node.disabled=true;
-    try {await handler();}catch(error){report(error);}finally{node.disabled=false;}
+    setRunning(node,true);
+    try {await handler();}catch(error){report(error);}finally{setRunning(node,false);}
   };
   return node;
+}
+// REQ-WEB-048: one visible activity state for every asynchronous button entry point.
+export function setRunning(node,running) {
+  node.setAttribute('aria-busy',String(running));
+  node.classList.toggle('is-running',running);
+  if('disabled' in node)node.disabled=running||!!node.gated;
 }
 export function isVisible(node) {
   const view=node.ownerDocument.defaultView;

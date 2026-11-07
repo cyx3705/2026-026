@@ -1,4 +1,4 @@
-import {isVisible} from './dom.js';
+import {isVisible,setRunning} from './dom.js';
 import {bindArgs} from './protocol.js';
 import {applyTableUpdate,validateTableSource} from './table-data.js';
 import {columnWeight, columnOrder, allocateWidths, resizeWidths} from './table-layout.js';
@@ -87,12 +87,14 @@ export async function renderTable(node, context, hooks) {
     if(!declaration(spec.action))throw new Error(`未声明的动作：${spec.action}`);
     const snapshot = {...row}, additions = resolveOverrides(spec);
     pending.add(key);
+    for(const button of scroll.querySelectorAll('button[data-pending-key]'))
+      if(button.dataset.pendingKey===key)setRunning(button,true);
     try { await hooks.action(spec.action, snapshot, additions);return true; }
     finally {
       pending.delete(key);
       // Successful actions can rebuild the rows while this action is still pending.
       for (const button of scroll.querySelectorAll('button[data-pending-key]'))
-        if (button.dataset.pendingKey === key) button.disabled=false;
+        if (button.dataset.pendingKey === key) setRunning(button,false);
     }
   }
   function rowMenu(row, index, tr, x, y) {
@@ -249,7 +251,8 @@ export async function renderTable(node, context, hooks) {
           signature=next;
         }
         const b=td.querySelector('button');
-        if(b){b.classList.toggle('danger',!!binding.danger);b.title=binding.summary;}
+        if(b){b.classList.toggle('danger',!!binding.danger);b.title=binding.summary;
+          b.dataset.pendingKey=pendingKey(row,view.index,binding.id);setRunning(b,pending.has(b.dataset.pendingKey));}
       };
     });
     view.rebind=()=>{
@@ -263,8 +266,8 @@ export async function renderTable(node, context, hooks) {
         const b=existing.get(key)??el('button');b.type='button';b.dataset.binding=key;
         b.dataset.action=spec.action.toLowerCase();b.textContent=spec.title;b.title=spec.summary||spec.action;
         b.classList.toggle('danger',!!spec.danger);b.dataset.pendingKey=pendingKey(row,view.index,spec.action);
-        b.disabled=pending.has(b.dataset.pendingKey);
-        b.onclick=async()=>{select(row,view.index,tr);b.disabled=true;try{await run(spec,row,view.index);}catch(e){hooks.report(e);}finally{b.disabled=false;}};
+        setRunning(b,pending.has(b.dataset.pendingKey));
+        b.onclick=async()=>{select(row,view.index,tr);try{await run(spec,row,view.index);}catch(e){hooks.report(e);}};
         return b;
       });
       for(const button of [...td.children])if(!buttons.includes(button))button.remove();

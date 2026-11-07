@@ -9,7 +9,7 @@ import {renderGraph} from './graph.js';
 import {createBrowserCommands} from './browser-commands.js';
 import {requestCommand,invoke} from './bridge.js';
 import {renderConsole} from './console.js';
-import {el,button as domButton,isVisible} from './dom.js';
+import {el,button as domButton,isVisible,setRunning} from './dom.js';
 import {selectSource} from './source-picker.js';
 import {createDialogHost} from './dialog-host.js';
 import {allCommands,normalizeCatalogFilter,setCatalogFilter} from './catalog-model.js';
@@ -284,10 +284,10 @@ async function renderPage(page, target, modal = null) {
 }
 let connection=Promise.resolve(),pendingConnections=0;
 function enqueueRegistration(work) {
-  pendingConnections++;$('reload').disabled=true;
+  pendingConnections++;setRunning($('reload'),true);
   const current=connection.then(work);
   connection=current.catch(()=>{});
-  return current.finally(()=>{if(!--pendingConnections)$('reload').disabled=false;});
+  return current.finally(()=>{if(!--pendingConnections)setRunning($('reload'),false);});
 }
 function connect() {return enqueueRegistration(connectCore);}
 async function connectCore() {

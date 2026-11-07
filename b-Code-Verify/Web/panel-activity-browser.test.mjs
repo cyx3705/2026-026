@@ -27,6 +27,62 @@ async function fixture(browser,widgets) {
   return page;
 }
 
+// REQ-WEB-048: disabled alone hid activity; verify rendered light and real delayed actions.
+test('REQ-WEB-048: running controls glow in both themes, survive repaint and stop on failure',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    const page=await fixture(browser,[{kind:'button',action:'submit'},
+      {kind:'switch',id:'toggle',label:'开关',commitAction:'submit'},
+      {kind:'choices',id:'choice',options:['a','b'],commitAction:'submit'}]);
+    const glow=locator=>locator.evaluate(node=>{const s=getComputedStyle(node);return {busy:node.getAttribute('aria-busy'),shadow:s.boxShadow,opacity:s.opacity,animation:s.animationName};});
+    for(const theme of ['light','dark']) {
+      await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+      for(const control of [page.getByRole('button',{name:'提交',exact:true}),page.getByRole('switch'),page.getByRole('button',{name:'b',exact:true})]) {
+        await control.click();
+        const style=await glow(control);assert.equal(style.busy,'true');assert.equal(style.opacity,'1');assert.match(style.shadow,/inset/);assert.equal(style.animation,'running-glow');
+        assert.equal(await control.isDisabled(),true);
+        if(await control.getAttribute('data-value'))await page.evaluate(()=>activity.context.panels[0].inputs.get('choice').setValue('a'));
+        assert.equal((await glow(control)).busy,'true');
+        await page.emulateMedia({reducedMotion:'reduce'});assert.equal((await glow(control)).animation,'none');
+        await page.evaluate(()=>{activity.fail(true);activity.release();});
+        await page.waitForFunction(()=>!document.querySelector('[data-panel=activity] .is-running'));
+        assert.equal((await glow(control)).shadow,'none');assert.equal(await control.isDisabled(),false);
+        await page.emulateMedia({reducedMotion:'no-preference'});
+      }
+    }
+  } finally {await browser.close();}
+});
+
+test('REQ-WEB-048: generic, table and keyboard console actions share activity and restore after rejection',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    const page=await fixture(browser,[]);
+    await page.evaluate(async()=>{
+      const {button}=await import('/dom.js'),{renderTable}=await import('/table.js'),{renderConsole}=await import('/console.js');
+      const hold=()=>new Promise((resolve,reject)=>window.finishRunning=()=>reject(new Error('模拟失败')));
+      const context={owner:'Fixture',pageId:'running',tables:new Map(),disposers:[],refreshers:[],followers:[],initializers:[]};
+      const root=document.getElementById('main');root.append(button('通用操作',hold,()=>{}));
+      const table=await renderTable({id:'running',dataSource:{command:'fixture.rows',rowKey:'id'},columns:[{key:'name',cellAction:'submit'}],rowActions:[{action:'submit',title:'行操作'}]},context,
+        {active:()=>true,selection:()=>({}),invoke:async()=>[{id:'1',name:'单元格'}],declaration:()=>({}),action:hold,report:()=>{},publish:()=>{}});
+      root.append(table);
+      const consoleTarget=document.createElement('section');root.append(consoleTarget);
+      renderConsole(consoleTarget,{}, {catalog:()=>[],logsAvailable:()=>false,execute:hold,report:()=>{},context:{disposers:[]}});
+      await Promise.all(context.initializers.map(f=>f()));
+    });
+    assert.equal(await page.locator('[data-table=running] tbody tr').count(),1,await page.locator('[data-table=running]').innerText());
+    for(const name of ['通用操作','行操作','单元格','执行']) {
+      const target=page.getByRole('button',{name,exact:true});
+      if(name==='执行'){await page.getByRole('combobox',{name:'指令'}).fill('fixture.run');await page.getByRole('combobox',{name:'指令'}).press('Enter');}
+      else await target.click();
+      assert.equal(await target.getAttribute('aria-busy'),'true');assert.equal(await target.isDisabled(),true);
+      assert.notEqual(await target.evaluate(n=>getComputedStyle(n).boxShadow),'none');
+      await page.evaluate(()=>finishRunning());
+      await page.waitForFunction(()=>![...document.querySelectorAll('button')].some(b=>b.getAttribute('aria-busy')==='true'));
+      assert.equal(await target.isDisabled(),false);
+    }
+  } finally {await browser.close();}
+});
+
 test('REQ-WEB-031: removing and restoring an action while it runs keeps the same submission lock and current gate',async()=>{
   const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
   try {

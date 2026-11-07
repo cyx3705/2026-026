@@ -1,4 +1,4 @@
-import {el,button,isVisible,bindDocumentEvent} from './dom.js';
+import {el,button,isVisible,bindDocumentEvent,setRunning} from './dom.js';
 import {showMenu,closeMenu} from './menu.js';
 import {mergeLogSnapshot,filteredLogs,formatLog,focusedCommand,commandCompletions} from './console-model.js';
 import {catalogDomains} from './catalog-model.js';
@@ -66,7 +66,7 @@ export function renderConsole(target,model,hooks) {
   const run=button('执行',submit,hooks.report);
   async function submit(){
     const draft=input.value.trim();if(!draft||executing)return;
-    executing=true;run.disabled=true;
+    executing=true;setRunning(run,true);
     const execution=model.execution=(model.execution??0)+1;
     const text=focusedCommand(draft,model.domain,catalog());
     model.history=[...model.history.filter(item=>item!==text),text].slice(-100);
@@ -78,7 +78,7 @@ export function renderConsole(target,model,hooks) {
     }catch(error){
       if(model.execution===execution){hooks.report(error);model.commandResult={error:true,message:error.message};paint();hooks.onResult?.();}
     }
-    finally {executing=false;run.disabled=false;}
+    finally {executing=false;setRunning(run,false);}
   }
   form.onsubmit=e=>{e.preventDefault();void submit();};form.append(el('span','>','console-prompt'),input,run,suggestions);
   function paint(){
