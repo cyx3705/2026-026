@@ -1,3 +1,4 @@
+@import url("onehistory-colors.css");
 @import url("onehistory-typography.css");
 /* REQ-WEB-007: OneHistoryID serif typography, enlarged for the UI with distinct heading weight.
    Local font fallbacks also work offline. Layout keeps the existing 96-dpi density. */
@@ -15,18 +16,23 @@
   --control-height:28px;--table-row-height:30px;--row-action-height:20px;
   --radius-page:20px;--radius-inner:8px;--radius-bar:5px;
   --page-inset:12px;--component-gap:12px;--panel-row-gap:8px;
-  --canvas:#FBFAF7;--surface:#F3F1EC;--surface-alt:#EBE9E4;
-  --line:#E5E3DE;--control-border:#D5D1C8;--pressed:#DDD9D1;
-  --ink:#38352F;--ink-block:#26231E;--on-ink:#FBFAF7;--header-divider:#ACA593;--danger:#C42525;--danger-soft:#FBE9E9;
-  --text-disabled:#9E998D;--scroll-thumb:rgb(158 153 141 / .55);--scroll-thumb-hover:rgb(158 153 141 / .85);
+  --canvas:var(--oh-color-canvas);
+  --surface:var(--oh-color-surface);
+  --surface-alt:var(--oh-color-surface-2);
+  --line:var(--oh-color-hairline);
+  --control-border:var(--oh-color-hairline-2);
+  --pressed:var(--oh-color-pressed);
+  --ink:var(--oh-color-text);
+  --ink-block:var(--oh-color-ink);
+  --on-ink:var(--oh-color-on-ink);
+  --header-divider:var(--oh-color-text-2-on-ink);
+  --danger:var(--oh-color-danger);
+  --danger-soft:var(--oh-color-danger-soft);
+  --text-disabled:var(--oh-color-text-disabled);
+  --scroll-thumb:var(--oh-color-scroll-thumb);
+  --scroll-thumb-hover:var(--oh-color-scroll-thumb-hover);
 }
-:root[data-theme=dark]{
-  color-scheme:dark;
-  --canvas:#121414;--surface:#1D201F;--surface-alt:#242625;
-  --line:#2A2D2C;--control-border:#343736;--pressed:#343736;
-  --ink:#DAD7CE;--ink-block:#E2DAC6;--on-ink:#121414;--header-divider:#6A6458;--danger:#E06C6C;--danger-soft:#3A2320;
-  --text-disabled:#77746A;--scroll-thumb:rgb(119 116 106 / .55);--scroll-thumb-hover:rgb(119 116 106 / .85);
-}
+:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box}
 /* Native: 12px track, 3px inset, radius 3; transparent track without arrows. */
 ::-webkit-scrollbar{width:12px;height:12px}

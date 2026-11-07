@@ -1,0 +1,49 @@
+/* Generated from 2026-031-OneHistorySite/z-OneHistoryID/colors.json
+   SHA-256: 00595EEBF13EA57BD5C6B79572370736B01AFBC85E1BE32355D9522F845DAE8A; do not edit. */
+:root{
+  --oh-color-accent:#A97F22;
+  --oh-color-accent-soft:rgba(169,127,34,.42);
+  --oh-color-accent-wash:rgba(169,127,34,.10);
+}
+:root,:root[data-theme=light]{
+  --oh-color-canvas:#FBFAF7;
+  --oh-color-surface:#F3F1EC;
+  --oh-color-surface-2:#EBE9E4;
+  --oh-color-surface-hover:#E5E3DE;
+  --oh-color-text:#38352F;
+  --oh-color-text-2:#38352F;
+  --oh-color-ink:#26231E;
+  --oh-color-on-ink:#FBFAF7;
+  --oh-color-hairline:#E5E3DE;
+  --oh-color-hairline-2:#D5D1C8;
+  --oh-color-code-bg:#EBE9E4;
+  --oh-color-text-2-on-ink:#ACA593;
+  --oh-color-pressed:#DDD9D1;
+  --oh-color-danger:#C42525;
+  --oh-color-danger-soft:#FBE9E9;
+  --oh-color-text-disabled:#9E998D;
+  --oh-color-scroll-thumb:rgba(158,153,141,.55);
+  --oh-color-scroll-thumb-hover:rgba(158,153,141,.85);
+  --oh-color-selection-fill:#EFE8D7;
+}
+:root[data-theme=dark]{
+  --oh-color-canvas:#121414;
+  --oh-color-surface:#1D201F;
+  --oh-color-surface-2:#191C1B;
+  --oh-color-surface-hover:#2A2D2C;
+  --oh-color-text:#DAD7CE;
+  --oh-color-text-2:#DAD7CE;
+  --oh-color-ink:#E2DAC6;
+  --oh-color-on-ink:#121414;
+  --oh-color-hairline:#2A2D2C;
+  --oh-color-hairline-2:#343736;
+  --oh-color-code-bg:#171A19;
+  --oh-color-text-2-on-ink:#6A6458;
+  --oh-color-pressed:#343736;
+  --oh-color-danger:#E06C6C;
+  --oh-color-danger-soft:#3A2320;
+  --oh-color-text-disabled:#77746A;
+  --oh-color-scroll-thumb:rgba(119,116,106,.55);
+  --oh-color-scroll-thumb-hover:rgba(119,116,106,.85);
+  --oh-color-selection-fill:#3C3218;
+}
