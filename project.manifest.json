@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "2.2.6",
+    "version": "2.2.7",
     "branch": "main"
   },
   "paths": {
@@ -59,18 +59,21 @@
     "conventions": "b-Office/现行约定.md"
   },
   "commands": {
+    "syncTypography": "node b-Code-Studio/eng/sync-typography.mjs",
+    "checkTypography": "node b-Code-Studio/eng/sync-typography.mjs --check",
     "setup": "dotnet restore .\\HistoryAurora.sln --locked-mode -p:NuGetAudit=false",
     "build": "dotnet build .\\HistoryAurora.sln -c Release --no-restore -p:NuGetAudit=false",
     "test": "dotnet test .\\b-Code-Verify\\Contracts\\Contracts.csproj -c Release -p:NuGetAudit=false",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code-Studio\\eng\\Test-QualityGate.ps1",
     "run": "dotnet run --project b-Code-Web/HistoryAurora.Web.csproj",
-    "testWeb": "node --test b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/registration.test.mjs b-Code-Verify/Web/page-tree.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/workspace-state.test.mjs b-Code-Verify/Web/selection.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/table-data.test.mjs b-Code-Verify/Web/panel.test.mjs b-Code-Verify/Web/panel-files.test.mjs b-Code-Verify/Web/console.test.mjs b-Code-Verify/Web/catalog.test.mjs b-Code-Verify/Web/float.test.mjs b-Code-Verify/Web/chat.test.mjs b-Code-Verify/Web/dialog.test.mjs b-Code-Verify/Web/frontend-link.test.mjs b-Code-Verify/Web/shell-chrome.test.mjs",
+    "testWeb": "node --test b-Code-Verify/Web/typography.test.mjs b-Code-Verify/Web/protocol.test.mjs b-Code-Verify/Web/registration.test.mjs b-Code-Verify/Web/page-tree.test.mjs b-Code-Verify/Web/layout.test.mjs b-Code-Verify/Web/workspace-state.test.mjs b-Code-Verify/Web/selection.test.mjs b-Code-Verify/Web/table.test.mjs b-Code-Verify/Web/table-data.test.mjs b-Code-Verify/Web/panel.test.mjs b-Code-Verify/Web/panel-files.test.mjs b-Code-Verify/Web/console.test.mjs b-Code-Verify/Web/catalog.test.mjs b-Code-Verify/Web/float.test.mjs b-Code-Verify/Web/chat.test.mjs b-Code-Verify/Web/dialog.test.mjs b-Code-Verify/Web/frontend-link.test.mjs b-Code-Verify/Web/shell-chrome.test.mjs",
     "testWebBrowser": "node --test --test-concurrency=4 b-Code-Verify/Web/browser.test.mjs b-Code-Verify/Web/*-browser.test.mjs",
     "buildShellWindows": "dotnet publish b-Code-Shell/AuroraShell/AuroraShell.csproj -f net9.0-windows10.0.19041.0 -c Release -p:NuGetAudit=false",
     "buildShellAndroid": "dotnet publish b-Code-Shell/AuroraShell/AuroraShell.csproj -f net9.0-android -c Release -p:NuGetAudit=false",
     "package": "HistoryVulcan.Cli.exe --cli vulcan.dev.submit worktree=<工作区>"
   },
   "externalDependencies": [
+    "OneHistorySite/z-OneHistoryID/typography.json (WEB-FONT-002): acquired with diana.z.read by commands.syncTypography; generated snapshots are included for offline builds and runtime; Node.js >= 20 and a live Aurora/Diana command bridge are needed only for syncTypography/checkTypography",
     "Bundled Noto Serif Variable Latin font from @fontsource-variable/noto-serif 5.3.0 (SIL OFL 1.1); font and license in b-Code-Web/wwwroot, embedded for offline use",
     "Node.js >= 20 for Web protocol tests",
     "Shell only (b-Code-Shell): .NET 9 SDK with maui-windows and maui-android workloads, Android SDK and JDK 17; not needed by the module pipeline",

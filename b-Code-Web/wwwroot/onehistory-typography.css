@@ -1,0 +1,9 @@
+/* Generated from 2026-031-OneHistorySite/z-OneHistoryID/typography.json
+   SHA-256: CCB8EA2D74D9C955730AB040F2A44A8E1210C1264B7989713AF6D22BBD396670; do not edit. */
+:root{
+  --oh-font-family-serif:"Noto Serif","Noto Serif SC","Source Han Serif SC","Times New Roman","Tinos","SimSun","Songti SC",serif;
+  --oh-font-family-numerals:"Noto Serif","Times New Roman",serif;
+  --oh-font-family-mono:"Consolas","Courier New",monospace;
+  --oh-font-weight-body:400;
+  --oh-font-weight-heading:600;
+}

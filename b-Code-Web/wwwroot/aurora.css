@@ -1,3 +1,4 @@
+@import url("onehistory-typography.css");
 /* REQ-WEB-007: OneHistoryID serif typography, enlarged for the UI with distinct heading weight.
    Local font fallbacks also work offline. Layout keeps the existing 96-dpi density. */
 /* REQ-WEB-007: bundled variable Latin face; Chinese uses local serif fallbacks. */
@@ -7,10 +8,10 @@
 }
 :root{
   color-scheme:light;
-  --font-family:"Aurora Noto Serif","Times New Roman",Tinos,"Noto Serif SC","Source Han Serif SC",SimSun,"Songti SC",serif;
-  --font-mono-family:Consolas,"Courier New",monospace;
+  --font-family:"Aurora Noto Serif",var(--oh-font-family-serif);
+  --font-mono-family:var(--oh-font-family-mono);
   --font-body:15px;--font-small:13px;--font-mono:13px;--font-chat-heading:19px;
-  --font-weight-body:400;--font-weight-heading:600;
+  --font-weight-body:var(--oh-font-weight-body);--font-weight-heading:var(--oh-font-weight-heading);
   --control-height:28px;--table-row-height:30px;--row-action-height:20px;
   --radius-page:20px;--radius-inner:8px;--radius-bar:5px;
   --page-inset:12px;--component-gap:12px;--panel-row-gap:8px;
@@ -350,3 +351,5 @@ nav{overflow:auto;min-height:80px;flex:1}nav button{width:100%;text-align:left;m
 .shell-resize-ne,.shell-resize-nw,.shell-resize-se,.shell-resize-sw{width:8px;height:8px}
 .shell-resize-ne{top:0;right:0;cursor:nesw-resize}.shell-resize-sw{bottom:0;left:0;cursor:nesw-resize}
 .shell-resize-nw{top:0;left:0;cursor:nwse-resize}.shell-resize-se{bottom:0;right:0;cursor:nwse-resize}
+
+b,strong{font-weight:var(--font-weight-heading)}
