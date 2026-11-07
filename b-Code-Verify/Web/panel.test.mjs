@@ -25,3 +25,17 @@ test('REQ-WEB-010: invalid panel declarations fail as a whole',() => {
   assert.throws(()=>validatePanel(panel([{kind:'source',id:'x'}])));
   assert.doesNotThrow(()=>validatePanel(panel([{kind:'source-picker',id:'x',selectCommand:'aurora.ui.selectfile'}])));
 });
+
+// REQ-WEB-047: fractional CSS widths must not squeeze even one action below its measured minimum.
+test('REQ-WEB-047: exact boundaries, fractional surplus and oversized controls preserve minima',() => {
+  const cells=[{min:50.4},{min:50.4},{min:50.4}];
+  for(const mode of ['flex','even']) {
+    const exact=50.4*3+24;
+    assert.equal(panelLines(cells,exact,mode).length,1);
+    assert.equal(panelLines(cells,exact-.001,mode).length,2);
+    const line=panelLines(cells,exact+.1,mode)[0];
+    for(const {index,width}of line)assert.ok(width>=cells[index].min);
+    assert.ok(Math.abs(line.reduce((sum,c)=>sum+c.width,24)-(exact+.1))<1e-8);
+    assert.deepEqual(panelLines([{min:600},{min:45}],100,mode),[[{index:0,width:100}],[{index:1,width:100}]]);
+  }
+});

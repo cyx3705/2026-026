@@ -4,6 +4,110 @@ import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)('playwright');
 const base=process.env.AURORA_WEB_URL || 'http://127.0.0.1:5280';
 
+// REQ-WEB-047: DPR alone does not reduce CSS space. Exercise it independently from logical widths,
+// then move the same live component between documents while a submission is still pending.
+test('REQ-WEB-047: whole actions wrap across pixel ratios, fonts, titles and document moves',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    for(const deviceScaleFactor of [1,1.25,1.5,1.75,2]) {
+      const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor});
+      const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
+      await page.route('**/api/command',route=>route.fulfill({json:{success:true,data:[]}}));
+      await page.goto(base);await page.waitForFunction(()=>!document.getElementById('reload').disabled);
+      await page.evaluate(async()=>{
+        const {renderPanel}=await import('/panel.js');
+        const state={owner:'Test',pageId:'widths',panels:[],inputs:new Map(),disposers:[],refreshers:[],followers:[],initializers:[]};
+        const selection={item:{id:'retained'}},declarations={refresh:{title:'刷新',command:'test.refresh'},rename:{title:'改名',command:'test.rename'},create:{title:'新建',command:'test.create'}};
+        let release;
+        const section=renderPanel({id:'widths',rows:[{mode:'even',widgets:[
+          {kind:'button',action:'refresh',icon:'refresh-cw',minWidth:1},
+          {kind:'button',action:'rename',minWidth:1},{kind:'button',action:'create',minWidth:1},
+          {kind:'switch',id:'flag',label:'立即生效',action:'refresh',minWidth:1}
+        ]},{widgets:[{kind:'button',action:'create',text:'完整内容'.repeat(30),minWidth:1}]},
+        {widgets:[{kind:'textbox',id:'draft',label:'',multiline:true}]}]},state,{
+          active:()=>true,selection:()=>selection,publish:()=>{},declaration:id=>declarations[id],report:e=>{throw e;},
+          action:()=>new Promise(done=>release=done)
+        });
+        section.style.width='300.25px';document.getElementById('main').replaceChildren(section);
+        window.widthFixture={section,state,selection,declarations,release:()=>release()};
+      });
+      const panel=page.locator('[data-panel=widths]');
+      const settled=()=>page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+      await settled();await panel.locator('textarea').fill('未提交草稿');
+      await panel.locator('.panel-action').first().click();
+      for(const width of [500.5,240.25,130.5,390,70.25]) {
+        await panel.evaluate((e,width)=>e.style.width=`${width}px`,width);await settled();
+        const result=await panel.evaluate(section=>{
+          const row=section.firstElementChild,bounds=row.getBoundingClientRect();
+          const controls=[...row.children].map(wrapper=>{
+            const button=wrapper.firstElementChild,rect=wrapper.getBoundingClientRect();
+            return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,height:button.getBoundingClientRect().height,whiteSpace:getComputedStyle(button).whiteSpace,overflow:button.scrollWidth>button.clientWidth+1};
+          });
+          return {bounds:{left:bounds.left,right:bounds.right,bottom:bounds.bottom},controls,scroll:section.scrollWidth,client:section.clientWidth};
+        });
+        assert.ok(result.scroll<=result.client+1);
+        for(const c of result.controls) {
+          assert.equal(c.whiteSpace,'nowrap');assert.equal(c.height,28);
+          assert.ok(c.left>=result.bounds.left-.1&&c.right<=result.bounds.right+.1&&c.bottom<=result.bounds.bottom+.1);
+          if(width>=130)assert.equal(c.overflow,false);
+        }
+        for(let i=1;i<result.controls.length;i++) {
+          const previous=result.controls[i-1],current=result.controls[i];
+          assert.ok(current.top>=previous.bottom||current.left>=previous.right);
+        }
+        assert.equal(await panel.locator('textarea').inputValue(),'未提交草稿');
+        assert.equal(await panel.locator('.panel-action').first().isDisabled(),true);
+      }
+      assert.ok((await panel.locator('.panel-action').nth(3).getAttribute('title')).includes('完整内容'.repeat(30)));
+      // Rebinding uses the new title's full width, even when the declaration requests only 1px.
+      await panel.evaluate(()=>{
+        widthFixture.section.style.width='500px';widthFixture.declarations.rename.title='修改项目名称和其他信息';
+        widthFixture.state.panels[0].rebindActions(new Set(['rename']));
+      });await settled();
+      assert.equal(await panel.getByRole('button',{name:'修改项目名称和其他信息',exact:true}).evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
+      // The title measurement cache must not survive a font that loads after the first layout.
+      if(deviceScaleFactor===1) {
+        let releaseFont;
+        await page.route('**/noto-serif-latin-wght-normal.woff2?panel-delayed',async route=>{
+          await new Promise(done=>releaseFont=done);await route.continue();
+        });
+        await page.evaluate(()=>{
+          const face=new FontFace('PanelDelayed','url(/noto-serif-latin-wght-normal.woff2?panel-delayed)');
+          document.fonts.add(face);widthFixture.font=face;
+          widthFixture.declarations.rename.title='WWWWiiii';widthFixture.section.style.fontFamily='PanelDelayed,monospace';
+          widthFixture.state.panels[0].rebindActions(new Set(['rename']));void face.load();
+        });await settled();
+        const before=await panel.getByRole('button',{name:'WWWWiiii',exact:true}).evaluate(e=>e.parentElement.offsetWidth);
+        assert.equal(typeof releaseFont,'function');releaseFont();
+        await page.evaluate(()=>widthFixture.font.loaded);await settled();
+        const after=await panel.getByRole('button',{name:'WWWWiiii',exact:true}).evaluate(e=>e.parentElement.offsetWidth);
+        assert.notEqual(after,before);
+      }
+      const popup=page.waitForEvent('popup');
+      await page.evaluate(()=>{widthFixture.child=window.open('/float.html','_blank','width=700,height=600');});
+      const child=await popup;child.on('pageerror',e=>errors.push(e.message));await child.waitForLoadState();
+      await page.evaluate(()=>{
+        widthFixture.child.document.getElementById('float-body').append(widthFixture.section);
+        widthFixture.state.relocators.forEach(move=>move());
+      });await settled();
+      const childPanel=child.locator('[data-panel=widths]');
+      assert.equal(await childPanel.locator('textarea').inputValue(),'未提交草稿');
+      assert.equal(await childPanel.locator('.panel-action').first().isDisabled(),true);
+      await childPanel.evaluate(section=>{section.style.width='200px';section.ownerDocument.fonts.dispatchEvent(new Event('loadingdone'));});await settled();
+      assert.equal(await childPanel.evaluate(section=>section.scrollWidth<=section.clientWidth+1),true);
+      await page.evaluate(()=>{
+        document.getElementById('main').append(widthFixture.section);widthFixture.state.relocators.forEach(move=>move());
+        widthFixture.child.close();widthFixture.state.revealers.forEach(reveal=>reveal());widthFixture.release();
+      });await settled();
+      assert.equal(await panel.locator('textarea').inputValue(),'未提交草稿');
+      assert.equal(await page.evaluate(()=>widthFixture.selection.item.id),'retained');
+      assert.equal(await panel.locator('.panel-action').first().isDisabled(),false);
+      await page.evaluate(()=>widthFixture.state.disposers.forEach(dispose=>dispose()));
+      assert.deepEqual(errors,[]);await context.close();
+    }
+  }finally{await browser.close();}
+});
+
 test('REQ-WEB-009/010: panel gestures, scoped args, channels, menus, busy state and safe clearing',async () => {
   const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL || 'msedge',headless:true});
   try {

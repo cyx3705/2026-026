@@ -93,6 +93,8 @@ label{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:var(--co
 .control-panel .panel-cell-separated::before{content:"";position:absolute;left:-6px;top:6px;bottom:6px;width:1px;background:var(--line)}
 .control-panel .panel-label{display:block;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .control-panel .panel-text{overflow-wrap:anywhere}
+/* REQ-WEB-047: wrap complete actions; only a control wider than its entire line is ellipsized. */
+.control-panel .panel-action,.control-panel .panel-switch{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .control-panel button,.control-panel input,.control-panel textarea{background:transparent}
 .control-panel button:hover,.control-panel input:hover,.control-panel textarea:hover{background:var(--line)}
 .control-panel .panel-option{text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:4px 8px}

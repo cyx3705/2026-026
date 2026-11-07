@@ -15,7 +15,7 @@ export function panelLines(cells, width, mode = 'flex') {
   width=Math.max(1,width); const lines=[]; let current=[], used=0;
   cells.forEach((cell,i) => {
     const next=used+(current.length ? 12 : 0)+cell.min;
-    if (current.length && next>width+.01) { lines.push(current); current=[]; used=0; }
+    if (current.length && next>width) { lines.push(current); current=[]; used=0; }
     used+=(current.length ? 12 : 0)+cell.min; current.push(i);
   });
   if (current.length) lines.push(current);
@@ -25,8 +25,9 @@ export function panelLines(cells, width, mode = 'flex') {
     if (indices.length === 1) widths[0]=width;
     else if (content>sum) {
       if (mode.toLowerCase() === 'even') {
-        let used=0;
-        widths.forEach((w,j) => { widths[j]=j===widths.length-1 ? content-used : Math.round(content*w/sum); used+=widths[j]; });
+        // Distribute only the surplus: rounding a proportional total can shrink a cell below its minimum.
+        const extra=content-sum;
+        widths.forEach((w,j) => { widths[j]=w+extra*w/sum; });
       } else {
         const flex=indices.findIndex(i => cells[i].flex);
         widths[flex<0 ? widths.length-1 : flex]+=content-sum;

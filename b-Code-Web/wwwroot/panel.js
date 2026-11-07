@@ -10,7 +10,7 @@ export function renderPanel(node, page, hooks) {
   try { validatePanel(node); } catch(error) { section.append(el('p',error.message,'notice')); hooks.report(error); return section; }
   const scope={...page,pageContext:page,inputs:new Map(),panelId:node.id ?? 'page-panel',panelSpec:node,panelElement:section,bindingRevision:0};
   page.panels.push(scope);
-  let disposed=false, frame,frameWindow;
+  let disposed=false, frame,frameWindow,fontDocument;
   const active=() => !disposed && hooks.active();
   const rows=[], pending=new Set(), activators=[],bindings=[];
   scope.rebindActions=changed=>{
@@ -34,6 +34,10 @@ export function renderPanel(node, page, hooks) {
     control.classList.toggle('is-running',busy);
     if ('disabled' in control) control.disabled=busy || !!control.gated;
     else for(const button of control.querySelectorAll('button'))button.disabled=busy;
+  }
+  function updateActionTitle(cell) {
+    const button=cell.element;
+    button.title=[button.scrollWidth>button.clientWidth?button.textContent:null,cell.hint].filter(Boolean).join('\n');
   }
   function register(spec,input,set,get=() => input.value,sync=set) {
     if (input.tagName !== 'INPUT' && input.tagName !== 'TEXTAREA') Object.defineProperty(input,'value',{get,set:value => set(String(value))});
@@ -74,7 +78,8 @@ export function renderPanel(node, page, hooks) {
       const sync=()=>{
         if(!declaration)return;
         b.gated=!!spec.enabledWhen?.selected&&!selectionRow(hooks.selection(),spec.enabledWhen.selected);updateBusy(b,pending.has(cell));
-        b.title=b.gated?`请先选择条目（${spec.enabledWhen.selected}）`:declaration.summary||`${spec.action} → ${declaration.command}`;
+        cell.hint=b.gated?`请先选择条目（${spec.enabledWhen.selected}）`:declaration.summary||`${spec.action} → ${declaration.command}`;
+        updateActionTitle(cell);
       };
       const bind=()=>{
         declaration=hooks.declaration(spec.action);
@@ -82,7 +87,7 @@ export function renderPanel(node, page, hooks) {
         if(b?.tagName!==tag){const next=el(tag.toLowerCase());b?.replaceWith(next);b=next;}
         cell.element=b;cell.min=spec.minWidth;
         if(declaration){
-          b.type='button';b.classList.remove('notice');b.classList.toggle('danger',!!declaration.danger);
+          b.type='button';b.classList.remove('notice');b.classList.add('panel-action');b.classList.toggle('danger',!!declaration.danger);
           b.textContent=spec.text??(declaration.title||spec.action);
           if(spec.icon==='refresh-cw'){const icon=el('span','↻','panel-icon');icon.setAttribute('aria-hidden','true');b.prepend(icon);}
           b.onclick=()=>void run(spec.action,{},cell);sync();
@@ -92,6 +97,7 @@ export function renderPanel(node, page, hooks) {
     }
     if(kind==='switch') {
       let value=booleanValue(spec.value); const b=el('button',spec.label ?? spec.id ?? '', 'panel-switch'); b.type='button'; b.setAttribute('role','switch');
+      b.title=b.textContent;
       const activity={element:b};
       const set=next => { value=booleanValue(next); b.setAttribute('aria-checked',String(value)); publish(spec,String(value)); };
       register(spec,b,set,() => String(value)); set(String(value));
@@ -216,17 +222,26 @@ export function renderPanel(node, page, hooks) {
   }
   function layout() {
     frame=null; if(!active() || !section.isConnected || !section.clientWidth) return;
-    const width=Math.max(1,section.clientWidth-16);
+    const view=section.ownerDocument.defaultView;
     for(const row of rows) {
-      for(const cell of row.cells) if(cell.min===undefined) {
-        const clone=cell.element.cloneNode(true); clone.removeAttribute('id'); clone.inert=true;
-        clone.style.position='fixed'; clone.style.visibility='hidden'; clone.style.width='max-content'; clone.style.maxWidth='260px';
-        section.append(clone); cell.min=Math.max(1,Math.min(260,clone.getBoundingClientRect().width)); clone.remove();
-      }
+      // REQ-WEB-047: measure in the actual document and wrapper, after fonts/styles have settled.
+      // Keep declared minima separate; every layout can follow font changes and document adoption.
+      const width=Math.max(1,parseFloat(view.getComputedStyle(row.element).width));
+      const cells=row.cells.map(cell=>{
+        const singleLine=cell.element.matches('.panel-action,.panel-switch');
+        if(cell.min!==undefined&&!singleLine)return cell;
+        const probe=section.ownerDocument.createElement('div');probe.className='panel-cell';probe.inert=true;probe.setAttribute('aria-hidden','true');
+        Object.assign(probe.style,{position:'fixed',visibility:'hidden',width:'max-content',left:'0',top:'0',pointerEvents:'none'});
+        const clone=cell.element.cloneNode(true);clone.removeAttribute('id');
+        Object.assign(clone.style,{width:'max-content',maxWidth:singleLine?'none':'260px'});
+        probe.append(clone);row.element.append(probe);
+        const measured=Math.ceil(clone.getBoundingClientRect().width);probe.remove();
+        return {...cell,min:Math.max(1,cell.min??0,singleLine?measured:Math.min(260,measured))};
+      });
       let top=0;
-      for(const line of panelLines(row.cells,width,row.mode)) {
+      for(const line of panelLines(cells,width,row.mode)) {
         let left=0;
-        for(const {index,width} of line) { const c=row.cells[index]; c.wrapper.style.width=`${width}px`; c.wrapper.style.left=`${left}px`; c.wrapper.classList.toggle('panel-cell-separated',left>0); left+=width+12; }
+        for(const {index,width} of line) { const c=row.cells[index]; c.wrapper.style.width=`${width}px`; c.wrapper.style.left=`${left}px`; c.wrapper.classList.toggle('panel-cell-separated',left>0);if(c.element.matches('.panel-action'))updateActionTitle(c);left+=width+12; }
         const height=Math.max(28,...line.map(({index}) => row.cells[index].wrapper.offsetHeight));
         for(const {index} of line) { const c=row.cells[index]; c.wrapper.style.top=`${top+(height-c.wrapper.offsetHeight)/2}px`; }
         top+=height+3;
@@ -234,7 +249,15 @@ export function renderPanel(node, page, hooks) {
       row.element.style.height=`${Math.max(0,top-3)}px`;
     }
   }
-  function scheduleLayout() { if(frame==null) {frameWindow=section.ownerDocument.defaultView;frame=frameWindow.requestAnimationFrame(layout);} }
+  function bindFonts() {
+    const doc=section.ownerDocument;if(fontDocument===doc)return;
+    fontDocument?.fonts.removeEventListener('loadingdone',scheduleLayout);
+    fontDocument?.fonts.removeEventListener('loadingerror',scheduleLayout);
+    fontDocument=doc;
+    doc.fonts.addEventListener('loadingdone',scheduleLayout);doc.fonts.addEventListener('loadingerror',scheduleLayout);
+    void doc.fonts.ready.then(()=>{if(!disposed&&fontDocument===doc)scheduleLayout();});
+  }
+  function scheduleLayout() { if(disposed)return;bindFonts();if(frame==null) {frameWindow=section.ownerDocument.defaultView;frame=frameWindow.requestAnimationFrame(layout);} }
   for(const row of node.rows) {
     const element=el('div',undefined,'panel-row'), cells=row.widgets.flatMap(build);
     for(const cell of cells) { cell.wrapper=el('div',undefined,'panel-cell'); cell.wrapper.append(cell.element); element.append(cell.wrapper); }
@@ -243,6 +266,6 @@ export function renderPanel(node, page, hooks) {
   const observer=new ResizeObserver(()=>{scheduleLayout();for(const activate of activators)activate();}); observer.observe(section);
   (page.revealers??=[]).push(()=>{if(isVisible(section)){scheduleLayout();for(const activate of activators)activate();}});
   (page.relocators??=[]).push(()=>{frameWindow?.cancelAnimationFrame(frame);frame=null;closeMenu(scope);scheduleLayout();for(const activate of activators)activate();});
-  scope.disposers.push(() => { disposed=true; observer.disconnect(); frameWindow?.cancelAnimationFrame(frame); closeMenu(scope); });
+  scope.disposers.push(() => { disposed=true; observer.disconnect(); frameWindow?.cancelAnimationFrame(frame);fontDocument?.fonts.removeEventListener('loadingdone',scheduleLayout);fontDocument?.fonts.removeEventListener('loadingerror',scheduleLayout);closeMenu(scope); });
   scheduleLayout(); return section;
 }

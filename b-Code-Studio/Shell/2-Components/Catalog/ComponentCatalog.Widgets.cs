@@ -7,7 +7,7 @@ public static partial class ComponentCatalog
 {
     private static ComponentField WidgetKind => new("kind", "string", "小组件种类，大小写不敏感") { Required = true };
 
-    private static ComponentField WidgetMinWidth => new("minWidth", "number", "最窄宽度（像素，正数）；按钮与说明文字按字宽自动量，文本框不写按 120");
+    private static ComponentField WidgetMinWidth => new("minWidth", "number", "最窄宽度（CSS 像素，正数）；Web 按钮与布尔开关取此值与完整单行内容宽度的较大值；说明文字自动量，文本框不写按 120");
 
     private static ComponentField WidgetFlex => new("flex", "bool", "本行的可变宽度元素，余量全给它；even 行忽略") { Default = "false" };
 
@@ -79,6 +79,7 @@ public static partial class ComponentCatalog
             [
                 "动作缺失或写错时按钮渲染成写明原因的警示牌，aurora.ui.actions 列出断链",
                 "面板成功操作会等本页数据刷新完成再结束运行态",
+                "Web 文字和图标不拆行，空间不足整按钮移至下一行；超过整行才省略，悬停提示保留全文；字体加载或标题变化后重新测宽",
                 "Web 在动作声明暂时移除再恢复时保留同一按钮落点的运行态；旧提交结束前不重复执行，结束后仍检查当前选择条件",
                 "想让按钮调 Aurora 自己的能力（浮窗、刷新），声明一条指向 aurora.* 指令的动作即可，不需要新组件",
             ],
@@ -100,7 +101,8 @@ public static partial class ComponentCatalog
                 WidgetFlex,
             ],
             Example = """{ "kind": "switch", "id": "topmost", "label": "置顶", "value": "false", "commitAction": "mymodule.topmost" }""",
-            Rules = ["只支持 id / label / value / action / commitAction；无标签时最小宽 48"],
+            Rules = ["只支持 id / label / value / action / commitAction；无标签时最小宽 48",
+                "Web 标签保持单行；minWidth 不压缩完整标签，空间不足整开关折行，超过整行才省略并提示全文"],
         },
         new()
         {
