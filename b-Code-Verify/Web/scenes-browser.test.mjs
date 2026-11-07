@@ -33,13 +33,14 @@ test('REQ-WEB-021: saved scenes, titles, usage, deletion and revival persist whi
     assert.equal(await page.getByRole('textbox',{name:'场景共享草稿',exact:true}).inputValue(),'保持这一份草稿');
     await run('aurora.scene.hide id=WORK');assert.equal(await page.locator('#pages [data-scene=work]').count(),0);
     await page.locator('#nav-search').click();
-    await page.locator('#nav-query').fill('工作 场景');assert.equal(await page.locator('#pages [data-scene=work]').count(),1);await page.locator('#nav-query').fill('');
+    await page.locator('#nav-query').fill('工作 场景');assert.equal(await page.locator('#pages [data-scene=work]').count(),1);await page.locator('#nav-query').press('Escape');
     await run('aurora.scene.move id=work before=HistoryAurora');assert.equal((await stored()).order[0],'work');assert.ok((await stored()).hidden.includes('work'));
     await run('aurora.scene.hide id=work hidden=false');
     await run('aurora.scene.go id=Other');assert.equal((await stored()).lastScene,'HistoryOther');
     await run('aurora.scene.reset scene="工作 场景"');await page.getByText(/请先切到它再重置/).first().waitFor();
+    await page.locator('#nav-search').click();
     await page.locator('#nav-query').fill('工作 场景');await page.locator('#nav-query').press('Enter');
-    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='work');await page.locator('#nav-query').fill('');
+    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='work');assert.equal(await page.locator('#nav-query').isVisible(),false);
     assert.equal(await page.getByRole('textbox',{name:'场景共享草稿',exact:true}).inputValue(),'保持这一份草稿');
     await run('aurora.scene.go id=WORK');assert.equal((await stored()).sceneUsage.work.count,3);
     await run('aurora.scene.list');assert.match(await page.locator('.console-result').innerText(),/工作 场景 \[work\] 另存.*用过 3 次/);

@@ -17,6 +17,15 @@ export class Workspace {
     $('nav-query').oninput=()=>this.drawRail();
     $('nav-search').onclick=()=>this.setSearch(true);
     $('nav-search-close').onclick=()=>this.setSearch(false);
+    const dismissSearch=event=>{
+      if(!$('nav-search-bar').hidden&&!event.target.closest('.rail-header'))this.setSearch(false,{restoreFocus:false});
+    };
+    document.addEventListener('pointerdown',event=>{
+      // Result buttons must receive their click before clearing the filter rebuilds them.
+      // Background clicks close immediately, before the shell starts its native drag loop.
+      if(!event.target.closest('#pages button,#page-library button,#scene-tray button'))dismissSearch(event);
+    });
+    document.addEventListener('click',dismissSearch);
     $('nav-query').onkeydown=e=> {
       if(e.key==='Enter')document.querySelector('#pages button, #page-library button')?.click();
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();this.setSearch(false);}
@@ -42,13 +51,13 @@ export class Workspace {
       if (!pageIds(this.tree).length) { e.preventDefault(); this.place(this.drag.id,null,'center'); }
     });
   }
-  setSearch(open) {
+  setSearch(open,{restoreFocus=true}={}) {
     document.body.classList.toggle('rail-searching',open);
     if(open)document.body.classList.add('rail-open');
     $('nav-search-bar').hidden=!open;
     $('nav-search').setAttribute('aria-expanded',String(open));
     if(open){$('nav-query').focus();$('nav-query').select();}
-    else {$('nav-query').value='';this.drawRail();$('nav-search').focus();}
+    else {$('nav-query').value='';this.drawRail();if(restoreFocus)$('nav-search').focus();}
   }
   control(text,handler,cls) {
     const button=el('button',text,cls); button.type='button';

@@ -438,7 +438,7 @@ function setTheme(mode) {
 $('theme').onclick=()=>setTheme('toggle');
 try {setTheme(localStorage.getItem('aurora.web.theme')||'light');}catch {setTheme('light');}
 // REQ-WEB-044: in the shell the rail's text row becomes the window title row with the three window buttons.
-adoptTitleRow(document.querySelector('.rail-brand'),{keep:[document.querySelector('.rail-tools')]});addResizeEdges(document);
+adoptTitleRow(document.querySelector('.rail-brand'),{keep:[document.querySelector('.rail-tools')],dragRegion:$('rail')});addResizeEdges(document);
 connect();
 // REQ-WEB-040: the host reaches this page through the Aurora module; window verbs map onto the page.
 connectFrontendLink({report,run:async(command,args)=>{

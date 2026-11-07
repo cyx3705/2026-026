@@ -49,3 +49,22 @@ test('REQ-WEB-044: in the shell eight edge handles ask the shell to resize from 
   assert.equal(addResizeEdges(doc),false,'only once per document');
   assert.equal(addResizeEdges({defaultView:{},querySelector:()=>null}),false,'nothing outside the shell');
 });
+
+test('REQ-WEB-044: the whole rail background drags while controls and page dragging keep their own gestures',()=>{
+  const posted=[],win={oneHistoryShell:{version:1},chrome:{webview:{postMessage:message=>posted.push(message)}}};
+  const {row,listeners}=fakeRow(win),railListeners={};
+  const rail={addEventListener(name,handler){railListeners[name]=handler;}};
+  adoptTitleRow(row,{dragRegion:rail});
+  assert.equal(listeners.mousedown,undefined,'title row does not register a second drag handler');
+  railListeners.mousedown({button:0,detail:1,target:{closest:()=>null}});
+  railListeners.mousedown({button:2,detail:1,target:{closest:()=>null}});
+  railListeners.mousedown({button:0,detail:2,target:{closest:()=>null}});
+  railListeners.mousedown({button:0,detail:1,defaultPrevented:true,target:{closest:()=>null}});
+  for(const selector of ['button','input','select','textarea','a','[contenteditable]','[draggable="true"]','[role="separator"]']){
+    const target={closest:query=>query.includes(selector)?{}:null};
+    railListeners.mousedown({button:0,detail:1,target});railListeners.dblclick({target});
+  }
+  assert.deepEqual(posted,[{oneHistoryWindow:'drag'}]);
+  railListeners.dblclick({target:{closest:()=>null}});
+  assert.deepEqual(posted.at(-1),{oneHistoryWindow:'maximize'});
+});

@@ -151,7 +151,7 @@ test('REQ-WEB-046: icon controls precede window buttons, full-row search finds c
   try {
     const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.addInitScript(()=>{
-      window.oneHistoryShell={version:1};window.chrome??={};window.chrome.webview={postMessage:()=>{}};
+      window.oneHistoryShell={version:1};window.chrome??={};window.windowMessages=[];window.chrome.webview={postMessage:message=>window.windowMessages.push(message)};
       localStorage.setItem('aurora.web.workspace.v1',JSON.stringify({hidden:['HistoryDemo']}));
     });
     await page.route('**/api/command',route=>route.fulfill({json:{success:true,data:route.request().postDataJSON().text==='vulcan.command.list'?[{commandName:'demo.ui.describe'}]:{schemaVersion:1,owner:'HistoryDemo',pages:[{id:'sample',title:'示例页',scene:'HistoryDemo',content:{type:'text',text:'示例内容'}}]}}}));
@@ -168,8 +168,33 @@ test('REQ-WEB-046: icon controls precede window buttons, full-row search finds c
     const search=await page.locator('#nav-search-bar').boundingBox(),header=await page.locator('.rail-header').boundingBox();assert.equal(search.width,header.width);
     await page.locator('#nav-query').fill('Demo');assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),1);
     await page.locator('#nav-query').press('Enter');await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='HistoryDemo');
-    await page.locator('#nav-query').press('Escape');assert.equal(await page.locator('#nav-query').isVisible(),false);assert.equal(await page.locator('#nav-query').inputValue(),'');assert.equal(await page.locator('.shell-controls').isVisible(),true);
-    await page.setViewportSize({width:390,height:844});await page.locator('#rail-toggle').click();await page.locator('#nav-search').click();await page.locator('#nav-query').fill('Demo');assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),1);
+    assert.equal(await page.locator('#nav-query').isVisible(),false);
+    await page.locator('#nav-search').click();await page.locator('#nav-query').press('Escape');assert.equal(await page.locator('#nav-query').isVisible(),false);assert.equal(await page.locator('#nav-query').inputValue(),'');assert.equal(await page.locator('.shell-controls').isVisible(),true);
+    // Clicking a search result must still execute it before the filtered result DOM is removed.
+    await page.locator('#nav-search').click();await page.locator('#nav-query').fill('Aurora');
+    await page.locator('#pages [data-scene=HistoryAurora]').click();
+    await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='HistoryAurora');
+    assert.equal(await page.locator('#nav-query').isVisible(),false);
+    await page.locator('#nav-search').click();await page.locator('#nav-query').fill('Demo');
+    await page.getByRole('combobox',{name:'指令'}).click();
+    assert.equal(await page.locator('#nav-query').isVisible(),false);
+    assert.equal(await page.getByRole('combobox',{name:'指令'}).evaluate(n=>n===document.activeElement),true);
+    assert.equal(await page.locator('#nav-query').inputValue(),'');
+    // Both the nav's empty background and the rail's outer padding start a shell drag.
+    await page.evaluate(()=>window.windowMessages=[]);
+    await page.locator('#pages').click({position:{x:10,y:150}});
+    await page.locator('#rail').click({position:{x:2,y:250}});
+    assert.deepEqual(await page.evaluate(()=>window.windowMessages),[{oneHistoryWindow:'drag'},{oneHistoryWindow:'drag'}]);
+    await page.locator('#theme').click();await page.locator('#pages [data-scene=HistoryAurora]').click();
+    assert.equal(await page.evaluate(()=>window.windowMessages.filter(m=>m.oneHistoryWindow==='drag').length),2);
+    await page.locator('#nav-search').click();await page.locator('#nav-query').click();
+    assert.equal(await page.locator('#nav-query').isVisible(),true);
+    await page.locator('#nav-query').press('Escape');
+    await page.locator('#nav-search').click();
+    const rail=await page.locator('#rail').boundingBox();await page.mouse.move(rail.x+2,rail.y+250);await page.mouse.down();
+    assert.equal(await page.locator('#nav-query').isVisible(),false,'background dismisses search before native dragging captures the mouse');
+    await page.mouse.up();
+    await page.setViewportSize({width:390,height:844});if(!await page.locator('#nav-search').isVisible())await page.locator('#rail-toggle').click();await page.locator('#nav-search').click();await page.locator('#nav-query').fill('Demo');assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),1);
     await page.locator('#nav-search-close').click();assert.equal(await page.locator('#nav-query').isVisible(),false);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.deepEqual(errors,[]);
   }finally{await browser.close();}

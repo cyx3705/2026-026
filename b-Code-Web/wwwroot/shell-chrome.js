@@ -24,8 +24,8 @@ export function addResizeEdges(doc=globalThis.document) {
 }
 
 // Turns `row` into the window's title row: its text goes away, the three buttons sit at its end,
-// pressing elsewhere on the row drags the window and a double click maximizes or restores it.
-export function adoptTitleRow(row,{keep=[]}={}) {
+// Background dragging can cover a larger region without intercepting its controls.
+export function adoptTitleRow(row,{keep=[],dragRegion=row}={}) {
   const doc=row?.ownerDocument,win=doc?.defaultView;
   if(!inShell(win)||row.dataset.shellChrome)return false;
   row.dataset.shellChrome='1';
@@ -38,8 +38,9 @@ export function adoptTitleRow(row,{keep=[]}={}) {
     controls.append(button);
   }
   row.append(controls);row.classList.add('shell-title-row');
-  const interactive='button,input,select,textarea,a,[contenteditable="true"]';
-  row.addEventListener('mousedown',event=>{if(event.button===0&&!event.target.closest(interactive)&&event.detail===1)windowCommand(win,'drag');});
-  row.addEventListener('dblclick',event=>{if(!event.target.closest(interactive))windowCommand(win,'maximize');});
+  const interactive='button,input,select,textarea,a,[contenteditable],[draggable="true"],[role="separator"]';
+  const background=event=>!event.defaultPrevented&&!event.target.closest(interactive);
+  dragRegion.addEventListener('mousedown',event=>{if(event.button===0&&event.detail===1&&background(event))windowCommand(win,'drag');});
+  dragRegion.addEventListener('dblclick',event=>{if(background(event))windowCommand(win,'maximize');});
   return true;
 }
