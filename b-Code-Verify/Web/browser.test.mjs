@@ -206,7 +206,7 @@ test('REQ-WEB-007: bundled serif font, weight and sizes survive control upgrades
     const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/api/command',route=>route.fulfill({json:{success:true,data:route.request().postDataJSON().text==='vulcan.command.list'?[]:{}}}));
     await page.goto(base);await page.waitForSelector('.console-input');
-    await page.evaluate(()=>document.fonts.load('500 15px "Aurora Noto Serif"','Aurora 012345'));
+    await page.evaluate(()=>document.fonts.load('400 15px "Aurora Noto Serif"','Aurora 012345'));
     const font=await page.request.get(base+'/noto-serif-latin-wght-normal.woff2');assert.equal(font.status(),200);assert.ok((await font.body()).length>30000);
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:900});
@@ -214,10 +214,11 @@ test('REQ-WEB-007: bundled serif font, weight and sizes survive control upgrades
         await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
         const actual=await page.evaluate(()=>{
           const body=getComputedStyle(document.body),input=getComputedStyle(document.querySelector('.console-input input')),log=getComputedStyle(document.querySelector('.console-log'));
-          return {bodyFamily:body.fontFamily,bodySize:body.fontSize,bodyWeight:body.fontWeight,inputFamily:input.fontFamily,inputWeight:input.fontWeight,logFamily:log.fontFamily,logSize:log.fontSize,loaded:document.fonts.check('500 15px "Aurora Noto Serif"'),overflow:document.documentElement.scrollWidth>innerWidth};
+          const heading=getComputedStyle(document.querySelector('.rail-identity strong'));
+          return {bodyFamily:body.fontFamily,bodySize:body.fontSize,bodyWeight:body.fontWeight,headingWeight:heading.fontWeight,inputFamily:input.fontFamily,inputWeight:input.fontWeight,logFamily:log.fontFamily,logSize:log.fontSize,loaded:document.fonts.check('400 15px "Aurora Noto Serif"'),overflow:document.documentElement.scrollWidth>innerWidth};
         });
-        assert.match(actual.bodyFamily,/^"Aurora Noto Serif"/);assert.match(actual.bodyFamily,/SimSun/);assert.equal(actual.bodySize,'15px');assert.equal(actual.bodyWeight,'500');
-        assert.equal(actual.inputFamily,actual.bodyFamily);assert.equal(actual.inputWeight,'500');assert.match(actual.logFamily,/Consolas/);assert.equal(actual.logSize,'13px');assert.equal(actual.loaded,true);assert.equal(actual.overflow,false);
+        assert.match(actual.bodyFamily,/^"Aurora Noto Serif"/);assert.match(actual.bodyFamily,/SimSun/);assert.equal(actual.bodySize,'15px');assert.equal(actual.bodyWeight,'400');assert.equal(actual.headingWeight,'600');
+        assert.equal(actual.inputFamily,actual.bodyFamily);assert.equal(actual.inputWeight,'400');assert.match(actual.logFamily,/Consolas/);assert.equal(actual.logSize,'13px');assert.equal(actual.loaded,true);assert.equal(actual.overflow,false);
       }
     }
     assert.deepEqual(errors,[]);

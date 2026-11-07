@@ -1,4 +1,4 @@
-/* REQ-WEB-007: OneHistoryID serif typography, enlarged and strengthened for the UI.
+/* REQ-WEB-007: OneHistoryID serif typography, enlarged for the UI with distinct heading weight.
    Local font fallbacks also work offline. Layout keeps the existing 96-dpi density. */
 /* REQ-WEB-007: bundled variable Latin face; Chinese uses local serif fallbacks. */
 @font-face{
@@ -10,7 +10,7 @@
   --font-family:"Aurora Noto Serif","Times New Roman",Tinos,"Noto Serif SC","Source Han Serif SC",SimSun,"Songti SC",serif;
   --font-mono-family:Consolas,"Courier New",monospace;
   --font-body:15px;--font-small:13px;--font-mono:13px;--font-chat-heading:19px;
-  --font-weight-body:500;--font-weight-heading:700;
+  --font-weight-body:400;--font-weight-heading:600;
   --control-height:28px;--table-row-height:30px;--row-action-height:20px;
   --radius-page:20px;--radius-inner:8px;--radius-bar:5px;
   --page-inset:12px;--component-gap:12px;--panel-row-gap:8px;

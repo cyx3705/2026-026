@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <Version>2.2.5</Version>
+    <Version>2.2.6</Version>
     <!-- The module package carries only the assembly; the page ships inside it (REQ-WEB-042). -->
     <RootNamespace>HistoryAurora.Web</RootNamespace>
   </PropertyGroup>
