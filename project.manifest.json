@@ -15,7 +15,7 @@
       "appshell-module"
     ],
     "status": "active",
-    "version": "2.2.0",
+    "version": "2.2.5",
     "branch": "main"
   },
   "paths": {
@@ -71,6 +71,7 @@
     "package": "HistoryVulcan.Cli.exe --cli vulcan.dev.submit worktree=<工作区>"
   },
   "externalDependencies": [
+    "Bundled Noto Serif Variable Latin font from @fontsource-variable/noto-serif 5.3.0 (SIL OFL 1.1); font and license in b-Code-Web/wwwroot, embedded for offline use",
     "Node.js >= 20 for Web protocol tests",
     "Shell only (b-Code-Shell): .NET 9 SDK with maui-windows and maui-android workloads, Android SDK and JDK 17; not needed by the module pipeline",
     "Optional browser validation: Playwright available to Node through NODE_PATH; installed Microsoft Edge by default (AURORA_BROWSER_CHANNEL overrides)",

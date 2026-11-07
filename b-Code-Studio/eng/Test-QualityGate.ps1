@@ -34,7 +34,8 @@ if (-not $minMatch.Success) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
         $files = Get-ChildItem -LiteralPath $root -Recurse -File -Include *.ps1, *.cs, *.csproj, *.props
         foreach ($file in $files) {
-            if ($file.FullName -match '\\(bin|obj)\\') { continue }
+            # TestResults contains generated execution receipts, not source declarations.
+            if ($file.FullName -match '\\(bin|obj|TestResults)\\') { continue }
             if ($file.FullName -eq $versionProps) { continue }
             $lineNumber = 0
             foreach ($line in [IO.File]::ReadAllLines($file.FullName)) {

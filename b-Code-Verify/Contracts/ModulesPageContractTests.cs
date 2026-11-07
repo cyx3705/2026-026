@@ -118,7 +118,7 @@ public sealed class ModulesPageContractTests
     public void ModuleRowsComeFromTheScannedModuleAreaNotTheOwnershipLedger()
     {
         var aurora = new ModuleMeta("HistoryAurora", "前端", "", "1.42.0", false, "HistoryAurora.dll", 68);
-        var devices = new NodeDeviceInfo[] { new("local-id", "本机", "8.0.2", true, true) };
+        var devices = new NodeDeviceInfo[] { new("local-id", "本机", "0.0.0", true, true) };
         var placements = new ModulePlacement[]
         {
             new("HistoryApollo", null, false),

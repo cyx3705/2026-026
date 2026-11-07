@@ -54,6 +54,7 @@ public static partial class ComponentCatalog
                 "Web 与桌面共用页面描述模型和解析器：字段名忽略大小写，数字字段可读字符串数字，缺省值一致；pages 不可为空或含 null，显式 placement=null 明确拒绝",
                 "退役的独立 button / input / select 节点提示改用 panel / popup，不进入缺件清单；缺件按组件名忽略大小写归并，并列出引用页面",
                 "描述里没有外观：不接受样式键与颜色。缺组件用 aurora.ui.request 申请，不要在模块里自建",
+                "Web 字体由 aurora.css 统一管理：按用户选定，正文与控件使用随包内嵌的西文 Noto Serif Variable（500）、中文宋体（500），辅助文字同族，标题加粗；仅多行代码和控制台日志保留等宽。模块不声明字体、字号或字重",
                 "Aurora 自持的命令集、模块管理、组件测试几页也走这套协议，b-Code-Studio/Shell/3-HostedPages/Views/HostedPageDescriptions.cs 是真在跑的范例",
             ],
         },
