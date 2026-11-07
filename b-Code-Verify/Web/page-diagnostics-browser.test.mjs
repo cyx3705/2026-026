@@ -53,7 +53,7 @@ test('REQ-WEB-035: initially malformed module is rejected as a whole while the o
       return route.fulfill({json:{success:true,data}});
     });
     await page.goto(base);await page.waitForFunction(()=>!document.getElementById('reload').disabled);
-    await page.getByText('正常模块内容',{exact:true}).waitFor();assert.match(await page.locator('#status').innerText(),/alpha.ui.describe.*children/);
+    await page.getByText('正常模块内容',{exact:true}).waitFor();assert.match(await page.locator('.console-result').first().innerText(),/alpha.ui.describe.*children/);
     assert.equal(await page.getByText('半份',{exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'不应出现的半份页面',exact:true}).count(),0);
     await page.getByRole('combobox',{name:'指令'}).fill('aurora.ui.missing');await page.getByRole('combobox',{name:'指令'}).press('Enter');
     await page.locator('.console-result').getByText('无缺件',{exact:true}).waitFor();assert.deepEqual(errors,[]);

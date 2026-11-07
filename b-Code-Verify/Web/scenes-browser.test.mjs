@@ -32,6 +32,7 @@ test('REQ-WEB-021: saved scenes, titles, usage, deletion and revival persist whi
     let saved=await stored();assert.equal(saved.lastScene,'work');assert.equal(saved.userScenes.work.title,'工作 场景');assert.equal(saved.sceneUsage.work.count,1);
     assert.equal(await page.getByRole('textbox',{name:'场景共享草稿',exact:true}).inputValue(),'保持这一份草稿');
     await run('aurora.scene.hide id=WORK');assert.equal(await page.locator('#pages [data-scene=work]').count(),0);
+    await page.locator('#nav-search').click();
     await page.locator('#nav-query').fill('工作 场景');assert.equal(await page.locator('#pages [data-scene=work]').count(),1);await page.locator('#nav-query').fill('');
     await run('aurora.scene.move id=work before=HistoryAurora');assert.equal((await stored()).order[0],'work');assert.ok((await stored()).hidden.includes('work'));
     await run('aurora.scene.hide id=work hidden=false');

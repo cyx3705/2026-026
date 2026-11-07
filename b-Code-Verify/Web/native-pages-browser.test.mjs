@@ -93,7 +93,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     });
     await page.goto(base+'/?desktopLayout=HistoryAurora');await page.waitForFunction(()=>!document.getElementById('reload').disabled);
     assert.equal(new URL(page.url()).searchParams.has('desktopLayout'),false);
-    assert.match(await page.locator('#status').innerText(),/5 个页面/);
+    assert.match(await page.locator('.console-result').first().innerText(),/5 个页面/);
     assert.equal(await page.locator('.scene-page:visible').count(),4);
     assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).desktopHistory.HistoryAurora),true);
     await page.reload();await page.waitForFunction(()=>!document.getElementById('reload').disabled);
@@ -115,7 +115,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     await page.getByRole('button',{name:'复制示例',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.copiedExample),'demo.safe');
     await page.getByRole('button',{name:'运行（仅只读）',exact:true}).click();
-    await page.waitForFunction(()=>document.getElementById('status').textContent==='操作完成');
+    await page.waitForFunction(()=>document.querySelector('.console-result')?.textContent==='操作完成');
     assert.ok(calls.includes('demo.safe'));
     await page.getByRole('cell',{name:'write',exact:true}).click();
     await page.getByRole('button',{name:'运行（仅只读）',exact:true}).click();
@@ -144,8 +144,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     await page.getByRole('button',{name:/演示会话/}).click();
     await page.getByText('消息正文',{exact:true}).waitFor();
     await page.getByRole('tab',{name:'泳道图',exact:true}).click();
-    await page.getByRole('button',{name:'节点一',exact:true}).click();
-    await page.waitForFunction(()=>document.getElementById('status').textContent==='操作完成');
+    await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/command')&&response.request().postDataJSON().text==='aurora.preview.echo node="n1"'),page.getByRole('button',{name:'节点一',exact:true}).click()]);
     assert.ok(calls.includes('aurora.preview.echo node="n1"'));
     await page.getByRole('tab',{name:'切换与弹出',exact:true}).click();
     await page.getByRole('button',{name:'页面选项',exact:true}).click();

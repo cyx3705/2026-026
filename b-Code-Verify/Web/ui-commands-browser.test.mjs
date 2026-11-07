@@ -133,7 +133,7 @@ test('REQ-WEB-027: a disposed console completion cannot overwrite a newer comman
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
     await command('aurora.command.history');
     assert.equal(await page.locator('.console-notice').isVisible(),false);
-    assert.doesNotMatch(await page.locator('#status').innerText(),/迟到错误/);assert.deepEqual(errors,[]);
+    assert.doesNotMatch(await page.locator('.console-result').first().innerText(),/迟到错误/);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
 
@@ -154,7 +154,7 @@ test('REQ-WEB-027: overlapping reloads serialize and a failed connection release
     });
     await page.getByRole('textbox',{name:'保留草稿',exact:true}).fill('目录失败保留旧页');
     await page.evaluate(()=>window.previousInput=document.querySelector('[data-control=draft]'));
-    await page.locator('#reload').click();await ready();await page.locator('#status').getByText('模拟目录故障',{exact:true}).waitFor();
+    await page.locator('#reload').click();await ready();await page.locator('.console-result').first().getByText('模拟目录故障',{exact:true}).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'保留草稿',exact:true}).inputValue(),'目录失败保留旧页');
     assert.equal(await page.evaluate(()=>previousInput===document.querySelector('[data-control=draft]')),true);
     fail=false;await page.locator('#reload').click();await ready();await page.getByText('页面版本 3',{exact:true}).waitFor();

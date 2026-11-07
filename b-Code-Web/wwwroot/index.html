@@ -7,9 +7,20 @@
   <aside id="rail" aria-label="控制栏">
     <button id="rail-toggle" type="button" aria-label="展开或收起控制栏">☰</button>
     <div class="rail-content">
-      <div class="rail-brand"><strong>OneHistory</strong><span>Aurora 2.2</span></div>
-      <div class="rail-tools"><button id="reload">重新连接</button><button id="theme">深浅主题</button></div>
-      <input id="nav-query" type="search" aria-label="搜索场景与页面" placeholder="搜索场景与页面">
+      <div class="rail-header">
+        <div class="rail-brand">
+          <div class="rail-tools">
+            <button id="reload" type="button" title="重新连接" aria-label="重新连接"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg></button>
+            <button id="theme" type="button" title="深浅主题" aria-label="深浅主题"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button>
+            <button id="nav-search" type="button" title="搜索场景与页面" aria-label="搜索场景与页面" aria-expanded="false" aria-controls="nav-search-bar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+          </div>
+          <div class="rail-identity"><strong>OneHistory</strong><span>Aurora 2.2</span></div>
+        </div>
+        <div id="nav-search-bar" hidden>
+          <input id="nav-query" type="search" aria-label="搜索场景与页面" placeholder="搜索场景与页面">
+          <button id="nav-search-close" type="button" title="收起搜索" aria-label="收起搜索">✕</button>
+        </div>
+      </div>
       <nav aria-label="场景" id="pages"></nav>
       <h2 class="rail-heading">常用页面</h2>
       <div id="page-library" aria-label="常用页面"></div>
@@ -18,7 +29,6 @@
       <button id="layout-reset" type="button" hidden>恢复默认排列</button>
     </div>
     <button id="adjust" type="button" aria-label="页面调整" aria-pressed="false"><span class="wide">页面调整：关</span><span class="compact">调整</span></button>
-    <footer role="status" id="status">连接中</footer>
   </aside>
 </div>
 <script type="module" src="app.js"></script>

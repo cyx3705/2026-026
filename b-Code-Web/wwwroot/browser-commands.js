@@ -213,7 +213,7 @@ export function createBrowserCommands({state,workspace,dialog:openDialog,dialogF
     if(command==='aurora.nav.open'){
       const query=(ownerDocument??document).getElementById('nav-query')??document.getElementById('nav-query');
       if(!query)throw new Error('当前窗口没有场景与页面搜索框');
-      query.focus();query.select?.();return {success:true,message:'已聚焦场景与页面搜索'};
+      workspace.setSearch(true);return {success:true,message:'已聚焦场景与页面搜索'};
     }
     if(['aurora.ui.data','aurora.log.snapshot'].includes(command))return false;
     if(command.startsWith('aurora.ui.')||command.startsWith('aurora.app.')||command.startsWith('aurora.scene.')||command.startsWith('aurora.log.'))

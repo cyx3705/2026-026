@@ -128,13 +128,18 @@ function syncCatalog() {
   if(changed)for(const context of state.contexts)for(const update of context.followers)update();
   for(const view of state.consoleViews)view.paint();
 }
-function report(error,doc=document) { (doc?.getElementById('float-status')??$('status')).textContent = error.message ?? String(error); }
+function report(error,doc=document) {
+  const message=error.message??String(error),status=doc?.getElementById('float-status');
+  if(status)status.textContent=message;
+  state.consoleModel.commandResult={browser:true,error:error instanceof Error,message};
+  for(const view of state.consoleViews)view.paint();
+}
 const pageReport=context=>error=>report(error,context.element?.ownerDocument);
 const button=(text,handler,reporter=report)=>domButton(text,handler,reporter);
 const browserCommand=createBrowserCommands({state,workspace,dialog,dialogFor,floatPage,floats,execute,invoke,reloadPages:connect,invalidateOwner,reloadActions,reloadPanels,report,button,setTheme,syncCatalog});
 async function execute(text,ownerDocument=document,trace=[],context) {
   const name=text.trim().split(/\s/)[0].toLowerCase();
-  if(/^aurora\.(ui|app|scene|log|command|module)\./.test(name)) {
+  if(/^aurora\.(ui|app|scene|log|command|module|nav)\./.test(name)) {
     const {args}=parseCommand(text);
     const result=await browserCommand(name,args,ownerDocument,trace,context);
     if(result)return {...(result===true?{success:true,message:'操作完成'}:result),browser:true};
@@ -433,7 +438,7 @@ function setTheme(mode) {
 $('theme').onclick=()=>setTheme('toggle');
 try {setTheme(localStorage.getItem('aurora.web.theme')||'light');}catch {setTheme('light');}
 // REQ-WEB-044: in the shell the rail's text row becomes the window title row with the three window buttons.
-adoptTitleRow(document.querySelector('.rail-brand'));addResizeEdges(document);
+adoptTitleRow(document.querySelector('.rail-brand'),{keep:[document.querySelector('.rail-tools')]});addResizeEdges(document);
 connect();
 // REQ-WEB-040: the host reaches this page through the Aurora module; window verbs map onto the page.
 connectFrontendLink({report,run:async(command,args)=>{

@@ -131,6 +131,7 @@ test('REQ-WEB-006: right rail, drag docking, hide/restore, proportional resize a
     assert.equal(await page.locator('body.adjusting').count(),1);
     await page.keyboard.up('Control');
     assert.equal(await page.locator('body.adjusting').count(),0);
+    await page.getByRole('button',{name:'搜索场景与页面',exact:true}).click();
     await page.getByRole('searchbox',{name:'搜索场景与页面'}).fill('隐藏页');
     assert.equal(await page.locator('#page-library button').count(),1);
     await page.getByRole('searchbox',{name:'搜索场景与页面'}).fill('');
@@ -143,4 +144,33 @@ test('REQ-WEB-006: right rail, drag docking, hide/restore, proportional resize a
     assert.equal(await page.locator('#pages [data-scene]').first().getAttribute('data-scene'),'HistoryAurora');
     assert.deepEqual(errors,[]);
   } finally { await browser.close(); }
+});
+
+test('REQ-WEB-046: icon controls precede window buttons, full-row search finds collapsed scenes and closes with Escape',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.addInitScript(()=>{
+      window.oneHistoryShell={version:1};window.chrome??={};window.chrome.webview={postMessage:()=>{}};
+      localStorage.setItem('aurora.web.workspace.v1',JSON.stringify({hidden:['HistoryDemo']}));
+    });
+    await page.route('**/api/command',route=>route.fulfill({json:{success:true,data:route.request().postDataJSON().text==='vulcan.command.list'?[{commandName:'demo.ui.describe'}]:{schemaVersion:1,owner:'HistoryDemo',pages:[{id:'sample',title:'示例页',scene:'HistoryDemo',content:{type:'text',text:'示例内容'}}]}}}));
+    await page.goto(base);await page.waitForSelector('.scene-page');
+    assert.equal(await page.locator('#status').count(),0);
+    assert.equal(await page.locator('#nav-query').isVisible(),false);
+    const buttons=await page.locator('.rail-brand button').evaluateAll(nodes=>nodes.map(n=>({id:n.id,verb:n.dataset.verb,x:n.getBoundingClientRect().x,y:n.getBoundingClientRect().y,right:n.getBoundingClientRect().right})));
+    assert.deepEqual(buttons.map(n=>n.id||n.verb),['reload','theme','nav-search','minimize','maximize','close']);
+    assert.ok(buttons.every(n=>Math.abs(n.y-buttons[0].y)<2));assert.ok(buttons.at(-1).right<=1440);
+    const theme=await page.locator('html').getAttribute('data-theme');await page.locator('#theme').click();assert.notEqual(await page.locator('html').getAttribute('data-theme'),theme);
+    assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),0);
+    await page.locator('#nav-search').click();assert.equal(await page.locator('.shell-controls').isVisible(),false);
+    assert.equal(await page.locator('#nav-query').evaluate(n=>n===document.activeElement),true);
+    const search=await page.locator('#nav-search-bar').boundingBox(),header=await page.locator('.rail-header').boundingBox();assert.equal(search.width,header.width);
+    await page.locator('#nav-query').fill('Demo');assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),1);
+    await page.locator('#nav-query').press('Enter');await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='HistoryDemo');
+    await page.locator('#nav-query').press('Escape');assert.equal(await page.locator('#nav-query').isVisible(),false);assert.equal(await page.locator('#nav-query').inputValue(),'');assert.equal(await page.locator('.shell-controls').isVisible(),true);
+    await page.setViewportSize({width:390,height:844});await page.locator('#rail-toggle').click();await page.locator('#nav-search').click();await page.locator('#nav-query').fill('Demo');assert.equal(await page.locator('#pages [data-scene=HistoryDemo]').count(),1);
+    await page.locator('#nav-search-close').click();assert.equal(await page.locator('#nav-query').isVisible(),false);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    assert.deepEqual(errors,[]);
+  }finally{await browser.close();}
 });

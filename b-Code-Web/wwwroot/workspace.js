@@ -15,7 +15,12 @@ export class Workspace {
     $('layout-reset').onclick=()=>{try {this.resetLayout();}catch(error){hooks.report(error);}};
     $('layout-desktop').onclick=()=>{try {this.restoreDesktopLayout();hooks.report('已恢复桌面布局');}catch(error){hooks.report(error);}};
     $('nav-query').oninput=()=>this.drawRail();
-    $('nav-query').onkeydown=e=> { if(e.key==='Enter')document.querySelector('#pages button, #page-library button')?.click(); };
+    $('nav-search').onclick=()=>this.setSearch(true);
+    $('nav-search-close').onclick=()=>this.setSearch(false);
+    $('nav-query').onkeydown=e=> {
+      if(e.key==='Enter')document.querySelector('#pages button, #page-library button')?.click();
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();this.setSearch(false);}
+    };
     $('rail-toggle').onclick=()=>document.body.classList.toggle('rail-open');
     $('scene-tray').ondragover=e=> { if(this.drag?.kind==='scene') e.preventDefault(); };
     $('scene-tray').ondrop=e=> { e.preventDefault();try {if(this.drag?.kind==='scene')this.hideScene(this.drag.id,true);}catch(error){this.hooks.report(error);} };
@@ -36,6 +41,14 @@ export class Workspace {
       if(e.target.closest('.dock-target') || !this.adjust || this.drag?.kind!=='page') return;
       if (!pageIds(this.tree).length) { e.preventDefault(); this.place(this.drag.id,null,'center'); }
     });
+  }
+  setSearch(open) {
+    document.body.classList.toggle('rail-searching',open);
+    if(open)document.body.classList.add('rail-open');
+    $('nav-search-bar').hidden=!open;
+    $('nav-search').setAttribute('aria-expanded',String(open));
+    if(open){$('nav-query').focus();$('nav-query').select();}
+    else {$('nav-query').value='';this.drawRail();$('nav-search').focus();}
   }
   control(text,handler,cls) {
     const button=el('button',text,cls); button.type='button';
