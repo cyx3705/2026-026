@@ -198,6 +198,37 @@ internal static class HostedPageData
 
         Add(registry, new CommandDescriptor
         {
+            Name = "aurora.module.surface",
+            HiddenReason = "界面自持页面的组合指令",
+            Domain = "aurora",
+            CommandClass = "module",
+            Summary = "切换单个模块的 MCP 工具列法（精简/完整）",
+            Example = "aurora.module.surface name=Norma",
+            RequiresUiThread = true,
+            Parameters =
+            [
+                new ParameterSpec { Name = "name", Description = "模块名（模块页第一列），例如 Norma", Required = true, Position = 0 },
+            ],
+            Handler = async context =>
+            {
+                if (sources.Bus?.Invoke() is not { } bus)
+                    return CommandResult.Fail("命令总线尚未就绪");
+                var name = (context.GetString("name") ?? "").Trim();
+                if (name.Length == 0)
+                    return CommandResult.Fail("缺少 name");
+
+                var toggled = await bus.ExecuteAsync(
+                    "portunus.mcp.surface module=" + CommandParser.QuoteArg(name) + " mode=toggle", "UI").ConfigureAwait(true);
+                if (!toggled.Success)
+                    return CommandResult.Fail(FirstLine(toggled.Message));
+
+                await RefreshModulesAsync(bus).ConfigureAwait(true);
+                return CommandResult.Ok(FirstLine(toggled.Message));
+            },
+        });
+
+        Add(registry, new CommandDescriptor
+        {
             Name = "aurora.module.refreshdevices",
             HiddenReason = "界面自持页面的组合指令",
             Domain = "aurora",
@@ -288,6 +319,14 @@ internal static class HostedPageData
             Command = "aurora.module.place",
             Args = new Dictionary<string, string> { ["name"] = "{module}" },
             Summary = "选择装到本机、对端，或不装载",
+        },
+        new ActionDeclaration
+        {
+            Id = "modules.surface",
+            Title = "切换列法",
+            Command = "aurora.module.surface",
+            Args = new Dictionary<string, string> { ["name"] = "{module}" },
+            Summary = "切换该模块的 MCP 工具列法（精简/完整）",
         },
         new ActionDeclaration
         {
@@ -653,8 +692,82 @@ internal static class HostedPageData
         var catalog = devices.Success && CommandResultData.TryRead<NodeDeviceCatalog>(devices.Data, out var parsed)
             ? parsed
             : new NodeDeviceCatalog([], []);
-        return Rows(ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices, catalog.Installed));
+        var rows = ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices, catalog.Installed);
+
+        // 列法由 Portunus 管：取它当前的全局值与模块覆盖，失败就给「—」，不影响模块行本身。
+        var surfaces = await bus.ExecuteAsync("portunus.mcp.surface", "UI").ConfigureAwait(true);
+        JsonElement? payload = null;
+        if (surfaces.Success && surfaces.Data is not null)
+        {
+            try
+            {
+                payload = JsonSerializer.SerializeToElement(surfaces.Data);
+            }
+            catch (JsonException)
+            {
+                // 取不到就当没有列法数据，不拦模块页。
+            }
+        }
+
+        return Rows(ApplySurfaceRows(rows, payload));
     }
+
+    /// <summary>把 Portunus 的列法状态并进模块行：compact 显示「精简」，其余显示「完整」。</summary>
+    internal static List<Dictionary<string, string>> ApplySurfaceRows(
+        List<Dictionary<string, string>> rows, JsonElement? payload)
+    {
+        foreach (var row in rows)
+            row["surface"] = "—";
+
+        if (payload is not { ValueKind: JsonValueKind.Object } data)
+            return rows;
+
+        var global = Text(data, "global") ?? "full";
+        var modes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (TryRead(data, "modules", out var modules) && modules.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var module in modules.EnumerateArray())
+            {
+                var name = Text(module, "module");
+                var mode = Text(module, "mode");
+                if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(mode))
+                    modes[name] = mode;
+            }
+        }
+
+        foreach (var row in rows)
+        {
+            var mode = modes.TryGetValue(row.TryGetValue("module", out var module) ? module : "", out var found)
+                ? found
+                : global;
+            row["surface"] = mode.Equals("compact", StringComparison.OrdinalIgnoreCase) ? "精简" : "完整";
+        }
+
+        return rows;
+    }
+
+    private static bool TryRead(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string? Text(JsonElement element, string name)
+        => TryRead(element, name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     /// <summary>
     /// 模块页的行。装载列写当前设备：本机、对端或不装载。界面自己那一格留空。

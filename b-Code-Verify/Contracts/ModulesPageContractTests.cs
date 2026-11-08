@@ -49,7 +49,7 @@ public sealed class ModulesPageContractTests
             .EnumerateArray()
             .Select(column => column.GetProperty("key").GetString())
             .ToList();
-        Assert.Equal(["module", "version", "load", "description"], columns);
+        Assert.Equal(["module", "version", "load", "surface"], columns);
 
         var load = table.GetProperty("columns").EnumerateArray()
             .Single(column => column.GetProperty("key").GetString() == "load");
@@ -58,6 +58,40 @@ public sealed class ModulesPageContractTests
         Assert.Contains(HostedPageData.Actions, action => action.Id == "modules.place"
                                                           && action.Command == "aurora.module.place"
                                                           && action.Args!["name"] == "{module}");
+
+        var surface = table.GetProperty("columns").EnumerateArray()
+            .Single(column => column.GetProperty("key").GetString() == "surface");
+        Assert.Equal("modules.surface", surface.GetProperty("cellAction").GetString());
+        Assert.Equal("button", surface.GetProperty("cellStyle").GetString());
+        Assert.Contains(HostedPageData.Actions, action => action.Id == "modules.surface"
+                                                          && action.Command == "aurora.module.surface"
+                                                          && action.Args!["name"] == "{module}");
+    }
+
+    [Fact]
+    public void SurfaceRowsShowCompactAndFullFromPortunus()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "global": "full",
+              "modules": [
+                { "Module": "Norma", "Mode": "compact", "Override": "compact" },
+                { "Module": "Usus", "Mode": "full", "Override": "inherit" }
+              ]
+            }
+            """);
+        var rows = new List<Dictionary<string, string>>
+        {
+            new() { ["module"] = "Norma" },
+            new() { ["module"] = "Usus" },
+            new() { ["module"] = "Echo" },
+        };
+
+        var applied = HostedPageData.ApplySurfaceRows(rows, document.RootElement);
+        Assert.Equal(["精简", "完整", "完整"], applied.Select(row => row["surface"]));
+
+        applied = HostedPageData.ApplySurfaceRows(rows, null);
+        Assert.All(applied, row => Assert.Equal("—", row["surface"]));
     }
 
     [Fact]
