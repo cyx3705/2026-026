@@ -218,7 +218,7 @@ internal static class HostedPageData
                     return CommandResult.Fail("缺少 name");
 
                 var toggled = await bus.ExecuteAsync(
-                    "portunus.mcp.surface module=" + CommandParser.QuoteArg(name) + " mode=toggle", "UI").ConfigureAwait(true);
+                    "diana.surface module=" + CommandParser.QuoteArg(name) + " mode=toggle", "UI").ConfigureAwait(true);
                 if (!toggled.Success)
                     return CommandResult.Fail(FirstLine(toggled.Message));
 
@@ -695,7 +695,7 @@ internal static class HostedPageData
         var rows = ModuleRows(snapshot.Modules, catalog.Placements, catalog.Devices, catalog.Installed);
 
         // 列法由 Portunus 管：取它当前的全局值与模块覆盖，失败就给「—」，不影响模块行本身。
-        var surfaces = await bus.ExecuteAsync("portunus.mcp.surface", "UI").ConfigureAwait(true);
+        var surfaces = await bus.ExecuteAsync("diana.surface", "UI").ConfigureAwait(true);
         JsonElement? payload = null;
         if (surfaces.Success && surfaces.Data is not null)
         {
