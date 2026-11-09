@@ -61,7 +61,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     const description=await (await page.request.get(base+'/api/frontend',{headers:{'X-Aurora-Web':'1'}})).json();
     assert.deepEqual(description.pages.map(p=>p.id),['mcp','commanddetail','modules','components']);
     const actions=[
-      ['modules.reload','aurora.module.reloadall'],['modules.place','aurora.module.place',{name:'{module}'}],
+      ['modules.surface','aurora.module.surface',{name:'{module}'}],['modules.reload','aurora.module.reloadall'],['modules.place','aurora.module.place',{name:'{module}'}],
       ['modules.refreshdevices','aurora.module.refreshdevices'],['modules.opendir','vulcan.module.open'],
       ['mcp.detail','aurora.ui.show',{name:'commanddetail'}],['mcp.prefill','aurora.log.prefill',{text:'{name}'}],
       ['mcp.copyexample','aurora.command.copyexample',{name:'{name}'}],['mcp.run','aurora.command.runreadonly',{name:'{name}'}],

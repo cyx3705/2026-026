@@ -82,7 +82,7 @@ test('REQ-WEB-039: shared reader registers native-compatible pages, preserves ac
       return route.fulfill({json:{success:true,data}});
     });
     const ready=()=>page.waitForFunction(()=>!document.getElementById('reload').disabled);
-    const command=async text=>{const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled);await ready();};
+    const command=async text=>{const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');await ready();};
     await page.goto(base);await ready();await page.getByText('页面版本 1',{exact:true}).waitFor();
     await page.getByRole('textbox',{name:'原生草稿',exact:true}).fill('声明错误仍保留');
     await page.evaluate(()=>window.acceptedInput=document.querySelector('[data-control=draft]'));

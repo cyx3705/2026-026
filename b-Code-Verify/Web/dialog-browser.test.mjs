@@ -18,7 +18,7 @@ test('REQ-WEB-019: all native command dialog kinds, literal content, result valu
     });
     await page.goto(base);const input=page.getByRole('combobox',{name:'指令'}),run=page.locator('.console-input button');
     const start=async args=>{await input.fill(commandText('aurora.ui.dialog',args));await input.press('Enter');await page.locator('.command-dialog').waitFor();return page.getByRole('dialog');};
-    const settle=()=>run.waitFor({state:'visible'}).then(()=>page.waitForFunction(()=>!document.querySelector('.console-input button').disabled));
+    const settle=()=>run.waitFor({state:'visible'}).then(()=>page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false'));
     let modal=await start({title:'消息说明',body:'<img src=x onerror=alert(1)>\n原样文字'});
     assert.equal(await modal.locator('img').count(),0);await modal.getByText('<img src=x onerror=alert(1)>\n原样文字',{exact:true}).waitFor();
     assert.equal(await modal.getByRole('button').count(),1);await modal.getByRole('button',{name:'关闭',exact:true}).click();await settle();
@@ -116,7 +116,7 @@ test('REQ-WEB-019: server path chooser ignores late folders and cancels pending 
     assert.equal(await path.inputValue(),'C:\\Fast');
     await modal.getByRole('button',{name:'文件　entry.txt',exact:true}).click();await modal.getByRole('button',{name:'选择文件',exact:true}).click();
     await page.waitForTimeout(20);assert.equal(typeof releaseCommit,'function');assert.equal(await path.isDisabled(),true);
-    await page.keyboard.press('Escape');releaseCommit();await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled);
+    await page.keyboard.press('Escape');releaseCommit();await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
     assert.equal(await page.getByRole('dialog').count(),0);assert.equal(await page.locator('.console-result').innerText(),'已取消选择');assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

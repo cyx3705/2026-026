@@ -35,7 +35,7 @@ async function fixture(browser,{initialScene}={}) {
   if(!initialScene)await page.getByRole('cell',{name:'row-a',exact:true}).waitFor();
   const command=async text=>{
     const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');
-    await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled&&!document.getElementById('reload').disabled);
+    await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false'&&!document.getElementById('reload').disabled);
   };
   return {page,mode,calls,errors,command};
 }

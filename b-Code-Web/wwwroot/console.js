@@ -1,4 +1,4 @@
-import {el,button,isVisible,bindDocumentEvent,setRunning} from './dom.js';
+import {el,isVisible,bindDocumentEvent,setRunning} from './dom.js';
 import {showMenu,closeMenu} from './menu.js';
 import {mergeLogSnapshot,filteredLogs,formatLog,focusedCommand,commandCompletions} from './console-model.js';
 import {catalogDomains} from './catalog-model.js';
@@ -13,8 +13,10 @@ export function renderConsole(target,model,hooks) {
   output.tabIndex=0;output.setAttribute('role','log');output.setAttribute('aria-label','宿主日志');notice.hidden=true;
   input.placeholder='输入 OneHistory 指令';input.setAttribute('aria-label','指令');input.setAttribute('autocomplete','off');
   input.setAttribute('role','combobox');input.setAttribute('aria-controls',suggestions.id);input.setAttribute('aria-expanded','false');
-  let disposed=false,timer,busy=false,executing=false,historyIndex=-1,historyDraft='',matches=[],matchIndex=0,rendered='',readError='';
+  let disposed=false,timer,busy=false,historyIndex=-1,historyDraft='',matches=[],matchIndex=0,rendered='',readError='';
   model.entries??=[];model.history??=[];model.level??='info';model.domain??='全部';model.follow??=true;
+  const pending=model.pendingCommands??=new Set();
+  const activity=el('small');activity.setAttribute('role','status');activity.setAttribute('aria-label','运行中的指令');
   const controls=new Map();
   function option(label,values,key) {
     const choices=()=>typeof values==='function'?values():values;
@@ -30,7 +32,7 @@ export function renderConsole(target,model,hooks) {
   }
   option('级别',['trace','debug','info','warn','error','fatal'],'level');option('域',()=>catalogDomains(catalog()),'domain');
   input.value=model.draft??'';
-  const setInput=value=>{model.draft=value;input.value=value;hideCompletions();};
+  const setInput=value=>{model.draft=value;input.value=value;hideCompletions();syncRunning();};
   function hideCompletions(){suggestions.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
   function complete(){
     matches=commandCompletions(input.value,catalog(),model.domain);matchIndex=0;
@@ -45,7 +47,7 @@ export function renderConsole(target,model,hooks) {
     [...suggestions.children].forEach((n,i)=>n.setAttribute('aria-selected',String(i===matchIndex)));
     if(matches.length){input.setAttribute('aria-activedescendant',`${suggestions.id}-${matchIndex}`);suggestions.children[matchIndex]?.scrollIntoView({block:'nearest'});}
   }
-  input.oninput=()=>{model.draft=input.value;historyIndex=-1;complete();};
+  input.oninput=()=>{model.draft=input.value;historyIndex=-1;complete();syncRunning();};
   input.onblur=()=>hideCompletions();
   input.onkeydown=e=>{
     if(e.isComposing)return;
@@ -63,25 +65,34 @@ export function renderConsole(target,model,hooks) {
       if(historyIndex===model.history.length)historyIndex=-1;
     }
   };
-  const run=button('执行',submit,hooks.report);
+  // REQ-WEB-049: activity belongs to pending commands, not a global submission lock.
+  const run=el('button','执行');run.type='submit';toolbar.append(activity);
+  const command=()=>focusedCommand(input.value.trim(),model.domain,catalog());
+  function syncRunning(){
+    setRunning(run,pending.size>0);
+    run.disabled=pending.has(command());
+    activity.hidden=!pending.size;activity.textContent=pending.size?`运行中 ${pending.size}`:'';
+  }
+  function changed(){if(!disposed)paint();hooks.onResult?.();}
   async function submit(){
-    const draft=input.value.trim();if(!draft||executing)return;
-    executing=true;setRunning(run,true);
+    const draft=input.value.trim();if(disposed||!draft)return;
+    const text=command();if(pending.has(text))return;
+    pending.add(text);
     const execution=model.execution=(model.execution??0)+1;
-    const text=focusedCommand(draft,model.domain,catalog());
     model.history=[...model.history.filter(item=>item!==text),text].slice(-100);
-    setInput('');historyIndex=-1;
+    setInput('');historyIndex=-1;changed();
     try {
       const result=await hooks.execute(text);
-      if(model.execution===execution){model.commandResult=result;paint();hooks.onResult?.();}
+      if(model.execution===execution){model.commandResult=result;changed();}
       await refresh();
     }catch(error){
-      if(model.execution===execution){hooks.report(error);model.commandResult={error:true,message:error.message};paint();hooks.onResult?.();}
+      if(model.execution===execution){hooks.report(error);model.commandResult={error:true,message:error.message};changed();}
     }
-    finally {executing=false;setRunning(run,false);}
+    finally {pending.delete(text);changed();}
   }
   form.onsubmit=e=>{e.preventDefault();void submit();};form.append(el('span','>','console-prompt'),input,run,suggestions);
   function paint(){
+    syncRunning();
     resultView.hidden=!model.commandResult?.browser;
     resultView.textContent=model.commandResult?.browser?model.commandResult.message||'操作完成':'';
     const message=readError||(model.commandResult?.error?model.commandResult.message:'');

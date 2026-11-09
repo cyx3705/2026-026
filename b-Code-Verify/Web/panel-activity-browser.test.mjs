@@ -74,7 +74,7 @@ test('REQ-WEB-048: generic, table and keyboard console actions share activity an
       const target=page.getByRole('button',{name,exact:true});
       if(name==='执行'){await page.getByRole('combobox',{name:'指令'}).fill('fixture.run');await page.getByRole('combobox',{name:'指令'}).press('Enter');}
       else await target.click();
-      assert.equal(await target.getAttribute('aria-busy'),'true');assert.equal(await target.isDisabled(),true);
+      assert.equal(await target.getAttribute('aria-busy'),'true');assert.equal(await target.isDisabled(),name!=='执行');
       assert.notEqual(await target.evaluate(n=>getComputedStyle(n).boxShadow),'none');
       await page.evaluate(()=>finishRunning());
       await page.waitForFunction(()=>![...document.querySelectorAll('button')].some(b=>b.getAttribute('aria-busy')==='true'));

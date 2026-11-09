@@ -23,7 +23,7 @@ test('REQ-WEB-035: browser missing query follows accepted descriptions before mo
       return route.fulfill({json:{success:true,data}});
     });
     const ready=()=>page.waitForFunction(()=>!document.getElementById('reload').disabled);
-    const command=async text=>{const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled);await ready();};
+    const command=async text=>{const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');await ready();};
     await page.goto(base);await ready();await command('aurora.ui.dock name=b pos=right');
     await page.getByRole('textbox',{name:'Beta 草稿',exact:true}).fill('另一模块的草稿');
     await page.getByText('该组件待交付：FutureCard',{exact:true}).waitFor();

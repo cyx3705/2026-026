@@ -33,7 +33,7 @@ async function fixture(browser) {
   await page.getByRole('cell',{name:'demo.rows',exact:true}).waitFor();await page.getByRole('cell',{name:'demo.peer',exact:true}).waitFor();
   const command=async text=>{
     const input=page.getByRole('combobox',{name:'指令'});await input.fill(text);await input.press('Enter');
-    await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled);
+    await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
   };
   return {page,calls,errors,mode,command};
 }
@@ -55,8 +55,8 @@ test('REQ-WEB-034: refreshdata selects only data bindings, supports positional/c
     await command('aurora.ui.refreshdata page=console');await page.locator('.console-result').getByText(/没有匹配的取数节点/).waitFor();
     let enter,release;const entered=new Promise(resolve=>enter=resolve),promise=new Promise(resolve=>release=resolve);mode.gate={enter,promise};
     const input=page.getByRole('combobox',{name:'指令'});await input.fill('aurora.ui.refreshdata page=editor node=records');await input.press('Enter');await entered;
-    assert.equal(await page.locator('.console-input button').isDisabled(),true);release();
-    await page.waitForFunction(()=>!document.querySelector('.console-input button').disabled);
+    assert.equal(await page.locator('.console-input button').getAttribute('aria-busy'),'true');assert.equal(await page.locator('.console-input button').isEnabled(),true);release();
+    await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
     await page.locator('.console-result').getByText(/已触发 1 处页面数据刷新/).waitFor();
     // Cached hidden bindings are scheduled without reading until the page returns.
     await command('aurora.ui.hide name=peer');const before=count('demo.peer');
