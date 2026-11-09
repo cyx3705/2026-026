@@ -179,7 +179,8 @@ internal static class HostedPageDescriptions
                       { "key": "version", "title": "版本", "width": "66" },
                       { "key": "load", "title": "装载", "width": "88",
                         "cellAction": "modules.place", "cellStyle": "button" },
-                      { "key": "description", "title": "描述", "width": "*" }
+                      { "key": "surface", "title": "列法", "width": "*",
+                        "cellAction": "modules.surface", "cellStyle": "button" }
                     ]
                   }
                 ]
