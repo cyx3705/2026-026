@@ -43,7 +43,7 @@ test('REQ-WEB-021: saved scenes, titles, usage, deletion and revival persist whi
     await page.waitForFunction(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).lastScene==='work');assert.equal(await page.locator('#nav-query').isVisible(),false);
     assert.equal(await page.getByRole('textbox',{name:'场景共享草稿',exact:true}).inputValue(),'保持这一份草稿');
     await run('aurora.scene.go id=WORK');assert.equal((await stored()).sceneUsage.work.count,3);
-    await run('aurora.scene.list');assert.match(await page.locator('.console-result').innerText(),/工作 场景 \[work\] 另存.*用过 3 次/);
+    await run('aurora.scene.list');assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/工作 场景 \[work\] 另存.*用过 3 次/);
     await run('aurora.scene.save id=historydemo');await page.getByText(/是模块场景，不能覆盖/).first().waitFor();assert.equal((await stored()).lastScene,'work');
     await run('aurora.scene.hide id=work hidden=maybe');await page.getByText(/hidden 必须是 true 或 false/).first().waitFor();assert.ok(!(await stored()).hidden.includes('work'));
     await run('aurora.scene.move id=work before=missing');await page.getByText(/场景不存在：missing/).first().waitFor();assert.equal((await stored()).order[0],'work');

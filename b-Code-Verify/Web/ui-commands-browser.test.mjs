@@ -65,15 +65,15 @@ test('REQ-WEB-027: console invokes explicit action parameters, returns results, 
     await page.getByRole('textbox',{name:'保留草稿',exact:true}).fill('页面草稿不能借用或清空');
     await page.getByRole('cell',{name:'selected-target',exact:true}).click();
     await command('aurora.ui.invoke action=DEMO.EXPLICIT');
-    await page.locator('.console-notice').getByText(/占位符取不到值/).waitFor();
+    await page.locator('.console-log [data-origin=browser][data-level=error]').getByText(/占位符取不到值/).waitFor();
     assert.ok(!calls.some(call=>call.name==='demo.read'));
     await command('aurora.ui.invoke action=demo.explicit project-name="显式名称" selection.demo.id=explicit-target');
     await page.getByText('显式动作完成',{exact:true}).waitFor();
     assert.deepEqual(calls.find(call=>call.name==='demo.read').args,{name:'显式名称',target:'explicit-target'});
     assert.equal(await page.getByRole('textbox',{name:'保留草稿',exact:true}).inputValue(),'页面草稿不能借用或清空');
-    await command('aurora.ui.invoke action=demo.fail');await page.locator('.console-notice').getByText('模拟动作拒绝',{exact:true}).waitFor();
-    await command('aurora.ui.invoke action=missing');await page.locator('.console-notice').getByText('未声明的动作：missing',{exact:true}).waitFor();
-    await command('aurora.ui.invoke action=demo.loop1');await page.locator('.console-notice').getByText('动作循环调用：demo.loop1',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=demo.fail');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('模拟动作拒绝',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=missing');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('未声明的动作：missing',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=demo.loop1');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('动作循环调用：demo.loop1',{exact:true}).waitFor();
     await command('aurora.ui.invoke action=demo.nested mode=dark');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
     await command('aurora.ui.invoke action=demo.nested mode=light');assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     assert.ok(!calls.some(call=>/^aurora\.(ui\.(invoke|dialog)|app.theme)$/.test(call.name)));assert.deepEqual(errors,[]);
@@ -110,10 +110,10 @@ test('REQ-WEB-027: browser reloadpages preserves saved docking and floating wind
     await command('aurora.ui.layoutsave name=重载前');const before=await saved();
     const popup=page.waitForEvent('popup');await command('aurora.ui.float name=editor on=true');const child=await popup;
     child.setDefaultTimeout(6000);await child.getByText('页面版本 1',{exact:true}).waitFor();
-    await command('aurora.ui.invoke action=demo.fail');await page.locator('.console-notice').getByText('模拟动作拒绝',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=demo.fail');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('模拟动作拒绝',{exact:true}).waitFor();
     mode.version=2;await command('aurora.ui.reloadpages');await child.getByText('页面版本 2',{exact:true}).waitFor();
-    await page.locator('.console-result').getByText(/已连接/).waitFor();
-    assert.equal(await page.locator('.console-notice').isVisible(),false);
+    await page.locator('.console-log [data-origin=browser]').getByText(/已连接/).waitFor();
+    assert.equal(await page.locator('.console-log [data-origin=browser][data-level=error]').isVisible(),false);
     const after=await saved();assert.deepEqual(after.layouts,before.layouts);assert.deepEqual(after.homes,before.homes);assert.deepEqual(after.namedLayouts,before.namedLayouts);
     assert.equal(await page.locator('.scene-page[data-page=detail]:visible').count(),0);assert.equal(child.isClosed(),false);
     assert.ok(!calls.some(call=>call.name==='aurora.ui.reloadpages'));assert.deepEqual(errors,[]);
@@ -132,8 +132,8 @@ test('REQ-WEB-027: a disposed console completion cannot overwrite a newer comman
     release();await (await response).finished();
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
     await command('aurora.command.history');
-    assert.equal(await page.locator('.console-notice').isVisible(),false);
-    assert.doesNotMatch(await page.locator('.console-result').first().innerText(),/迟到错误/);assert.deepEqual(errors,[]);
+    assert.equal(await page.locator('.console-log [data-origin=browser][data-level=error]').isVisible(),false);
+    assert.doesNotMatch(await page.locator('.console-log [data-origin=browser]').first().innerText(),/迟到错误/);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
 
@@ -154,7 +154,7 @@ test('REQ-WEB-027: overlapping reloads serialize and a failed connection release
     });
     await page.getByRole('textbox',{name:'保留草稿',exact:true}).fill('目录失败保留旧页');
     await page.evaluate(()=>window.previousInput=document.querySelector('[data-control=draft]'));
-    await page.locator('#reload').click();await ready();await page.locator('.console-result').first().getByText('模拟目录故障',{exact:true}).waitFor();
+    await page.locator('#reload').click();await ready();await page.locator('.console-log [data-origin=browser]').first().getByText('模拟目录故障',{exact:true}).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'保留草稿',exact:true}).inputValue(),'目录失败保留旧页');
     assert.equal(await page.evaluate(()=>previousInput===document.querySelector('[data-control=draft]')),true);
     fail=false;await page.locator('#reload').click();await ready();await page.getByText('页面版本 3',{exact:true}).waitFor();

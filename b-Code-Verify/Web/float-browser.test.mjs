@@ -128,7 +128,7 @@ test('REQ-WEB-024: remembered float intent survives reload and unregistration; b
     await page.getByRole('button',{name:'恢复浮窗',exact:true}).waitFor();
     await page.evaluate(()=>{window.actualOpen=window.open;window.open=()=>null;});
     await page.getByRole('button',{name:'恢复浮窗',exact:true}).click();
-    await page.locator('.console-notice').getByText('浏览器阻止了新窗口，请允许本站弹出窗口',{exact:true}).waitFor();
+    await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('浏览器阻止了新窗口，请允许本站弹出窗口',{exact:true}).waitFor();
     assert.equal((await ledger()).editor.floating,true);assert.equal(await page.getByRole('button',{name:'恢复浮窗',exact:true}).count(),1);
     await page.evaluate(()=>window.open=window.actualOpen);
     const opened=page.waitForEvent('popup');await page.getByRole('button',{name:'恢复浮窗',exact:true}).click();const next=await opened;next.setDefaultTimeout(5000);

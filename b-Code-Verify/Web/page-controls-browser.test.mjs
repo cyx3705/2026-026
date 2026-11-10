@@ -50,14 +50,14 @@ test('REQ-WEB-034: refreshdata selects only data bindings, supports positional/c
     assert.equal(count('demo.rows'),rows+2);assert.equal(count('demo.anonymous'),anonymous+1);assert.equal(count('demo.options'),options);
     await command('aurora.ui.refreshdata node=RECORDS');
     assert.equal(count('demo.rows'),rows+3);assert.equal(count('demo.peer'),peer+1);
-    await command('aurora.ui.refreshdata page=missing');await page.locator('.console-result').getByText(/没有匹配的取数节点/).waitFor();
-    assert.match(await page.locator('.console-result').innerText(),/editor#Records/);
-    await command('aurora.ui.refreshdata page=console');await page.locator('.console-result').getByText(/没有匹配的取数节点/).waitFor();
+    await command('aurora.ui.refreshdata page=missing');await page.locator('.console-log [data-origin=browser]').getByText(/没有匹配的取数节点/).waitFor();
+    assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/editor#Records/);
+    await command('aurora.ui.refreshdata page=console');await page.locator('.console-log [data-origin=browser]').getByText(/没有匹配的取数节点/).waitFor();
     let enter,release;const entered=new Promise(resolve=>enter=resolve),promise=new Promise(resolve=>release=resolve);mode.gate={enter,promise};
     const input=page.getByRole('combobox',{name:'指令'});await input.fill('aurora.ui.refreshdata page=editor node=records');await input.press('Enter');await entered;
     assert.equal(await page.locator('.console-input button').getAttribute('aria-busy'),'true');assert.equal(await page.locator('.console-input button').isEnabled(),true);release();
     await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
-    await page.locator('.console-result').getByText(/已触发 1 处页面数据刷新/).waitFor();
+    await page.locator('.console-log [data-origin=browser]').getByText(/已触发 1 处页面数据刷新/).waitFor();
     // Cached hidden bindings are scheduled without reading until the page returns.
     await command('aurora.ui.hide name=peer');const before=count('demo.peer');
     await command('aurora.ui.refreshdata page=peer');assert.equal(count('demo.peer'),before);
@@ -80,10 +80,10 @@ test('REQ-WEB-034: panelset writes all writable copies including hidden views, s
     const hiddenDraft=await page.locator('[data-page="peer"] [data-control="draft"]').elementHandle();
     await command('aurora.ui.hide name=peer');await command('aurora.ui.panelset shared draft ""');
     assert.equal(await hiddenDraft.inputValue(),'');
-    await command('aurora.ui.panelset panel=shared control=draft');await page.locator('.console-notice').getByText('缺少 value',{exact:true}).waitFor();
+    await command('aurora.ui.panelset panel=shared control=draft');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('缺少 value',{exact:true}).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'甲草稿',exact:true}).inputValue(),'');
-    await command('aurora.ui.panelset shared absent value');await page.locator('.console-notice').getByText(/没有可写控件 absent/).waitFor();
-    await command('aurora.ui.panels');const report=await page.locator('.console-result').innerText();
+    await command('aurora.ui.panelset shared absent value');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText(/没有可写控件 absent/).waitFor();
+    await command('aurora.ui.panels');const report=await page.locator('.console-log [data-origin=browser]').innerText();
     assert.match(report,/共 3 个页面面板/);assert.match(report,/共享面板/);assert.match(report,/未挂载.*HistoryDemo\/later/);assert.match(report,/隐藏.*HistoryDemo\/peer/);
     assert.ok(!calls.some(call=>['aurora.ui.panelset','aurora.ui.panels','demo.commit'].includes(call.name)));assert.deepEqual(errors,[]);
   } finally {await browser.close();}

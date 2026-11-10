@@ -48,7 +48,7 @@ test('REQ-WEB-038: relayed Message restores module pages/actions, dynamic choice
   const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
   try{
     const {page,mode,calls,errors}=await fixture(browser);
-    assert.doesNotMatch(await page.locator('.console-result').first().innerText(),/协议.*不匹配/);
+    assert.doesNotMatch(await page.locator('.console-log [data-origin=browser]').first().innerText(),/协议.*不匹配/);
     await page.waitForFunction(()=>document.querySelector('[data-control=format]')?.value==='a');
     await page.getByRole('textbox',{name:'本地草稿',exact:true}).fill('中继刷新保留');
     await page.getByRole('cell',{name:'原始条目',exact:true}).click();

@@ -25,23 +25,23 @@ test('REQ-WEB-019: all native command dialog kinds, literal content, result valu
     modal=await start({kind:'confirm',title:'确认覆盖',body:'是否继续？',danger:true,defaultcancel:true,primary:'覆盖'});
     assert.equal(await page.evaluate(()=>document.activeElement.textContent),'取消');
     assert.equal(await modal.getByRole('button',{name:'覆盖',exact:true}).evaluate(n=>n.classList.contains('danger-primary')),true);
-    await page.mouse.click(1,1);assert.equal(await modal.count(),1);await page.keyboard.press('Enter');await settle();await page.locator('.console-notice').getByText('已取消',{exact:true}).waitFor();
+    await page.mouse.click(1,1);assert.equal(await modal.count(),1);await page.keyboard.press('Enter');await settle();await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('已取消',{exact:true}).waitFor();
     modal=await start({kind:'prompt',title:'填写说明',value:'默认文字',defaultcancel:true});
     assert.equal(await modal.getByRole('textbox').inputValue(),'默认文字');await page.keyboard.press('Enter');await settle();
     modal=await start({kind:'prompt',title:'填写说明',value:'初值'});await modal.getByRole('textbox').fill('新说明 "引号"');await page.keyboard.press('Enter');await settle();
-    assert.equal(await page.locator('.console-result').innerText(),'新说明 "引号"');
+    assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'新说明 "引号"');
     const options=JSON.stringify([{label:'第一项',value:'first'},{label:'第二项',value:'second'}]);
     modal=await start({kind:'choice',title:'选择动作',options});await modal.getByRole('listbox').press('End');assert.equal(await modal.getByRole('option',{selected:true}).innerText(),'第二项');
-    await page.keyboard.press('Enter');await settle();assert.equal(await page.locator('.console-result').innerText(),'second');
+    await page.keyboard.press('Enter');await settle();assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'second');
     modal=await start({kind:'content',title:'变更预览',body:'说明',content:Array.from({length:100},(_,i)=>`${i}: ${'较长正文 '.repeat(40)}`).join('\n'),options,primary:'执行'});
     const card=await modal.boundingBox(),footer=await modal.locator('.command-dialog-footer').boundingBox();assert.ok(footer.y+footer.height<=card.y+card.height);
     assert.ok(await modal.getByLabel('正文').evaluate(n=>n.scrollWidth>n.clientWidth&&n.scrollHeight>n.clientHeight));
-    await modal.getByRole('option',{name:'第一项',exact:true}).dblclick();await settle();assert.equal(await page.locator('.console-result').innerText(),'first');
+    await modal.getByRole('option',{name:'第一项',exact:true}).dblclick();await settle();assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'first');
     modal=await start({kind:'content',title:'只读正文',content:'没有动作'});assert.equal(await modal.getByRole('button').count(),1);await page.keyboard.press('Escape');await settle();
     await input.fill(commandText('aurora.ui.dialog',{kind:'choice',options:'[]'}));await input.press('Enter');await settle();assert.equal(await page.getByRole('dialog').count(),0);await page.getByText(/options 不能为空/).first().waitFor();
-    await start({kind:'confirm',title:'过期确认',timeout:1});await page.getByRole('timer').waitFor();await page.locator('.console-notice').getByText('已超时，按拒绝处理',{exact:true}).waitFor();await settle();
+    await start({kind:'confirm',title:'过期确认',timeout:1});await page.getByRole('timer').waitFor();await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('已超时，按拒绝处理',{exact:true}).waitFor();await settle();
     await input.fill('aurora.ui.selectfile');await input.press('Enter');modal=page.getByRole('dialog');await modal.getByRole('button',{name:'文件　example.txt',exact:true}).click();await modal.getByRole('button',{name:'选择文件',exact:true}).click();await settle();
-    assert.match(await page.locator('.console-result').innerText(),/example\.txt/);
+    assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/example\.txt/);
     assert.ok(!calls.some(text=>/^aurora\.ui\.(dialog|selectfile)/.test(text)));assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
@@ -117,6 +117,6 @@ test('REQ-WEB-019: server path chooser ignores late folders and cancels pending 
     await modal.getByRole('button',{name:'文件　entry.txt',exact:true}).click();await modal.getByRole('button',{name:'选择文件',exact:true}).click();
     await page.waitForTimeout(20);assert.equal(typeof releaseCommit,'function');assert.equal(await path.isDisabled(),true);
     await page.keyboard.press('Escape');releaseCommit();await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
-    assert.equal(await page.getByRole('dialog').count(),0);assert.equal(await page.locator('.console-result').innerText(),'已取消选择');assert.deepEqual(errors,[]);
+    assert.equal(await page.getByRole('dialog').count(),0);assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'已取消选择');assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

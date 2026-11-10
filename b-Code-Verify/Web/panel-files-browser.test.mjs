@@ -31,7 +31,7 @@ test('REQ-WEB-036: hidden standalone panels open on program write, execute modul
   try {
     const {page,errors,calls,mode,command}=await fixture(browser);
     await command('aurora.ui.dock name=editor pos=left');await page.getByRole('textbox',{name:'模块草稿',exact:true}).fill('模块草稿应保留');
-    await command('aurora.ui.panels');assert.match(await page.locator('.console-result').innerText(),/Quick.*隐藏/);
+    await command('aurora.ui.panels');assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/Quick.*隐藏/);
     assert.equal(await page.locator('.scene-page[data-page="Quick"]').count(),0);
     await command('aurora.ui.panelset quick DRAFT "程序回写"');
     assert.equal(await page.getByRole('textbox',{name:'快捷草稿',exact:true}).inputValue(),'程序回写');assert.ok(!calls.some(call=>call.name==='demo.commit'));
@@ -47,14 +47,14 @@ test('REQ-WEB-036: hidden standalone panels open on program write, execute modul
     await child.waitForFunction(()=>document.querySelector('[data-control="draft"]')?.value==='面板版本 2');
     assert.equal(child.isClosed(),false);assert.equal(await page.getByRole('textbox',{name:'模块草稿',exact:true}).inputValue(),'模块草稿应保留');
     assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).layouts),before);
-    assert.match(await page.locator('.console-result').innerText(),/新增面板需重新连接：Later/);assert.match(await page.locator('.console-result').innerText(),/broken.json/);
-    await command('aurora.ui.panels');assert.match(await page.locator('.console-result').innerText(),/Quick.*浮出/);assert.match(await page.locator('.console-result').innerText(),/Later.*未注册/);
-    await command('aurora.ui.panelshow id=Later');await page.locator('.console-notice').getByText(/尚未注册/).waitFor();
-    mode.failed=true;await command('aurora.ui.panelreload');await page.locator('.console-notice').getByText('无法读取独立面板文件',{exact:true}).waitFor();
+    assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/新增面板需重新连接：Later/);assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/broken.json/);
+    await command('aurora.ui.panels');assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/Quick.*浮出/);assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/Later.*未注册/);
+    await command('aurora.ui.panelshow id=Later');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText(/尚未注册/).waitFor();
+    mode.failed=true;await command('aurora.ui.panelreload');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('无法读取独立面板文件',{exact:true}).waitFor();
     assert.equal(await child.getByRole('textbox',{name:'快捷草稿',exact:true}).inputValue(),'面板版本 2');
     mode.failed=false;mode.deleted=true;await command('aurora.ui.panelreload');
     assert.equal(child.isClosed(),false);assert.equal(await child.getByRole('textbox',{name:'快捷草稿',exact:true}).inputValue(),'面板版本 2');
-    await command('aurora.ui.panels');assert.doesNotMatch(await page.locator('.console-result').innerText(),/HistoryAurora\/Quick/);
+    await command('aurora.ui.panels');assert.doesNotMatch(await page.locator('.console-log [data-origin=browser]').innerText(),/HistoryAurora\/Quick/);
     const closed=child.waitForEvent('close');await command('aurora.ui.reloadpages');await closed;await command('aurora.ui.panelshow id=Later');
     await page.getByRole('textbox',{name:'快捷草稿',exact:true}).waitFor();
     assert.ok(!calls.some(call=>['aurora.ui.panelreload','aurora.ui.panelset','aurora.ui.panelshow','aurora.ui.panels'].includes(call.name)));assert.deepEqual(errors,[]);

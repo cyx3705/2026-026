@@ -93,7 +93,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     });
     await page.goto(base+'/?desktopLayout=HistoryAurora');await page.waitForFunction(()=>!document.getElementById('reload').disabled);
     assert.equal(new URL(page.url()).searchParams.has('desktopLayout'),false);
-    assert.match(await page.locator('.console-result').first().innerText(),/5 个页面/);
+    assert.match(await page.locator('.console-log [data-origin=browser]').first().innerText(),/5 个页面/);
     assert.equal(await page.locator('.scene-page:visible').count(),4);
     assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).desktopHistory.HistoryAurora),true);
     await page.reload();await page.waitForFunction(()=>!document.getElementById('reload').disabled);
@@ -115,7 +115,7 @@ test('REQ-WEB-012/025: explicit desktop history recovery replaces stale browser 
     await page.getByRole('button',{name:'复制示例',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.copiedExample),'demo.safe');
     await page.getByRole('button',{name:'运行（仅只读）',exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector('.console-result')?.textContent==='操作完成');
+    await page.waitForFunction(()=>document.querySelector('.console-log [data-origin=browser]')?.textContent==='操作完成');
     assert.ok(calls.includes('demo.safe'));
     await page.getByRole('cell',{name:'write',exact:true}).click();
     await page.getByRole('button',{name:'运行（仅只读）',exact:true}).click();

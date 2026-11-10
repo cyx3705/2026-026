@@ -231,7 +231,6 @@ nav{overflow:auto;min-height:80px;flex:1}nav button{width:100%;text-align:left;m
 .console-completion>span { font-family:var(--font-family); }
 .console-completion>small { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .console-completion[aria-selected=true] { background:var(--line); }
-.console-notice { flex-shrink:0; }
 
 /* REQ-WEB-016: containers pass the remaining viewport to components, without page scrollbars. */
 .page-switch,.switch-content { display:flex;flex-direction:column;flex:1;min-height:0;min-width:0; }
@@ -254,7 +253,6 @@ nav{overflow:auto;min-height:80px;flex:1}nav button{width:100%;text-align:left;m
 .page-popup { position:fixed;inset:auto;margin:0;width:min(480px,calc(100vw - 8px));min-width:min(260px,calc(100vw - 8px));max-height:min(430px,calc(100dvh - 8px));overflow:auto;padding:4px;border:1px solid var(--control-border);border-radius:var(--radius-inner);background:var(--surface);color:var(--ink); }
 .page-popup::backdrop { background:transparent; }
 .popup-accent,.popup-accent:hover,.popup-accent[aria-expanded=true] { background:var(--ink-block);color:var(--on-ink); }
-.console-result { flex-shrink:0;max-height:30%;overflow:auto;padding:6px;background:var(--surface-alt);border-radius:var(--radius-inner); }
 
 /* REQ-WEB-017: desktop conversation density and message surfaces. */
 .conversation-list { flex:1;min-height:0;overflow:auto;position:relative; }

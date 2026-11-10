@@ -19,6 +19,7 @@ test('REQ-WEB-014/015: console streams host logs, completion, history, failure a
       return route.fulfill({json:{success:true,message:'执行成功'}});
     });
     await page.goto(base);const input=page.getByRole('combobox',{name:'指令'}),log=page.getByRole('log',{name:'宿主日志'});
+    const hostText=async()=> (await log.locator('.console-line:not([data-origin])').allTextContents()).join('\n');
     await page.getByText(/宿主记录 1/).waitFor();
     await input.fill('demo.l');await page.getByRole('option',{name:/demo.list/}).waitFor();await input.press('Tab');assert.equal(await input.inputValue(),'demo.list');
     await input.fill('demo.list mode=all');await input.press('Enter');
@@ -33,13 +34,13 @@ test('REQ-WEB-014/015: console streams host logs, completion, history, failure a
     const refresh=async()=>{await log.click({button:'right'});await page.getByRole('menuitem',{name:'刷新宿主日志',exact:true}).click();};
     serial=2;await refresh();await page.getByText(/宿主记录 2/).waitFor();
     await log.click({button:'right'});await page.getByRole('menuitem',{name:'清屏',exact:true}).click();
-    assert.equal(await log.innerText(),'');await refresh();assert.equal(await log.innerText(),'');
+    assert.equal(await hostText(),'');await refresh();assert.equal(await hostText(),'');
     fail=true;await refresh();await page.getByText(/日志更新失败/).waitFor();
     fail=false;instance='b';serial=1;await refresh();await page.getByText(/宿主记录 1/).waitFor();
     const local=async text=>{await input.fill(text);await input.press('Enter');await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');};
-    await local('aurora.log.keyword text=不匹配');assert.equal(await log.innerText(),'');
+    await local('aurora.log.keyword text=不匹配');assert.equal(await hostText(),'');
     await local('aurora.log.keyword text=""');await page.getByText(/宿主记录 1/).waitFor();
-    await local('aurora.log.level level=error');assert.equal(await log.innerText(),'');assert.equal(await page.getByRole('button',{name:'级别',exact:true}).innerText(),'error');
+    await local('aurora.log.level level=error');assert.equal(await hostText(),'');assert.equal(await page.getByRole('button',{name:'级别',exact:true}).innerText(),'error');
     await local('aurora.log.level info');await page.getByText(/宿主记录 1/).waitFor();
     await local('aurora.log.source source=不存在');await page.getByText(/日志域不存在/).first().waitFor();
     await local('aurora.log.source source=全部');assert.equal(await page.getByRole('button',{name:'域',exact:true}).innerText(),'全部');
@@ -84,14 +85,14 @@ test('REQ-WEB-049: pending HTTP commands allow other commands, block duplicates 
     assert.ok(calls.includes('demo.fast'));assert.equal(await run.getAttribute('aria-busy'),'true');
     const before=reads;
     await submit('aurora.app.theme mode=dark');await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
-    await page.waitForFunction(()=>!document.querySelector('.console-result').hidden);
-    const result=await page.locator('.console-result').innerText();
+    await page.waitForFunction(()=>!!document.querySelector('.console-log [data-origin=browser]'));
+    const result=await page.locator('.console-log [data-origin=browser]').innerText();
     await input.fill('尚未提交的新草稿');
     releases.shift()({success:false,message:'较早的长命令失败'});
     await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='false');
     assert.equal(await input.inputValue(),'尚未提交的新草稿');assert.equal(await status.isVisible(),false);
-    assert.equal(await page.locator('.console-result').innerText(),result);
-    assert.equal(await page.locator('.console-notice').isVisible(),false);
+    assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),result);
+    assert.equal(await page.locator('.console-log [data-origin=browser][data-level=error]').isVisible(),false);
     assert.ok(reads>before,'host logs continue refreshing while another command is pending');
     await submit('demo.slow');await page.waitForFunction(()=>document.querySelector('.console-input button').getAttribute('aria-busy')==='true');
     assert.equal(calls.filter(text=>text==='demo.slow').length,2,'failure releases the duplicate lock');
@@ -131,11 +132,27 @@ test('REQ-WEB-049: shared console views and remounts retain pending commands and
     await input('second').fill('demo.retry');await input('second').press('Enter');
     await page.evaluate(()=>concurrent.pending.get('demo.slow').resolve({browser:true,message:'迟到结果'}));
     await page.waitForFunction(()=>concurrent.model.pendingCommands.size===1);
-    assert.equal(await page.locator('#second .console-notice').innerText(),'快速命令失败');
+    assert.equal(await page.locator('#second .console-log [data-origin=browser][data-level=error]').innerText(),'快速命令失败');
     await page.evaluate(()=>concurrent.pending.get('demo.retry').resolve({browser:true,message:'最新结果'}));
     await page.waitForFunction(()=>concurrent.model.pendingCommands.size===0);
     assert.equal(await run('second').getAttribute('aria-busy'),'false');assert.equal(await run('third').getAttribute('aria-busy'),'false');
-    assert.equal(await page.locator('#third .console-result').innerText(),'最新结果');
+    assert.equal(await page.locator('#third .console-log [data-origin=browser]').innerText(),'最新结果');
     assert.deepEqual(await page.evaluate(()=>concurrent.reports),['快速命令失败']);
+  } finally {await browser.close();}
+});
+// REQ-WEB-050: one failure must never create two console status bars.
+test('REQ-WEB-050: browser failure renders once inside the log without banners',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    const page=await browser.newPage();
+    await page.route('**/api/command',route=>route.fulfill({json:{success:true,data:[]}}));
+    await page.goto(base);await page.waitForFunction(()=>!document.getElementById('reload').disabled);
+    const input=page.getByRole('combobox',{name:'指令'});await input.fill('aurora.ui.invoke action=missing');await input.press('Enter');
+    const log=page.getByRole('log',{name:'宿主日志'});
+    await log.getByText('未声明的动作：missing',{exact:true}).waitFor();
+    assert.equal(await page.getByText('未声明的动作：missing',{exact:true}).count(),1);
+    assert.equal(await page.locator('.console-notice,.console-result').count(),0);
+    assert.equal(await log.locator('[data-origin=browser]').getAttribute('data-level'),'error');
+    assert.equal(await page.getByRole('button',{name:'执行',exact:true}).getAttribute('aria-busy'),'false');
   } finally {await browser.close();}
 });

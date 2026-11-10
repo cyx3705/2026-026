@@ -95,8 +95,8 @@ test('REQ-WEB-028: owner invalidation loads actions first, replaces only its own
     assert.equal(await page.locator('#page-library').getByRole('button',{name:'旧页面',exact:true}).count(),0);
     const refresh=calls.slice(start).map(call=>call.name);assert.ok(refresh.indexOf('alpha.ui.actions')<refresh.indexOf('alpha.ui.describe'));
     assert.ok(!refresh.includes('beta.ui.actions'));assert.ok(!refresh.includes('beta.ui.describe'));assert.ok(!refresh.includes('beta.rows'));
-    await command('aurora.ui.invoke action=alpha.run');await page.locator('.console-notice').getByText('未声明的动作：alpha.run',{exact:true}).waitFor();
-    await command('aurora.ui.invoke action=tools.ping');await page.locator('.console-result').getByText('无页面工具的返回值',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=alpha.run');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('未声明的动作：alpha.run',{exact:true}).waitFor();
+    await command('aurora.ui.invoke action=tools.ping');await page.locator('.console-log [data-origin=browser]').getByText('无页面工具的返回值',{exact:true}).waitFor();
     assert.ok(!calls.some(call=>call.name==='aurora.ui.invalidate'));assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
@@ -108,20 +108,20 @@ test('REQ-WEB-028: targeted refresh rejects bad descriptions before replacing pa
     await page.getByRole('textbox',{name:'alpha 草稿',exact:true}).fill('失败时保留');
     await page.evaluate(()=>window.oldInput=document.querySelector('[data-panel=alpha-panel] [data-control=draft]'));
     const before=await saved();mode.offline=true;
-    await command('aurora.ui.invalidate alpha');await page.locator('.console-result').getByText(/描述暂时离线/).waitFor();
+    await command('aurora.ui.invalidate alpha');await page.locator('.console-log [data-origin=browser]').getByText(/描述暂时离线/).waitFor();
     assert.equal(await page.evaluate(()=>oldInput===document.querySelector('[data-panel=alpha-panel] [data-control=draft]')),true);
     assert.equal(await page.getByRole('textbox',{name:'alpha 草稿',exact:true}).inputValue(),'失败时保留');
     mode.offline=false;mode.badPages={schemaVersion:1,owner:'HistoryAlpha',pages:[{id:'b',title:'冲突页',content:{type:'text',text:'抢占其他模块'}}]};
-    await command('aurora.ui.invalidate owner=HistoryAlpha');await page.locator('.console-result').getByText(/页面 id 冲突：b/).waitFor();
+    await command('aurora.ui.invalidate owner=HistoryAlpha');await page.locator('.console-log [data-origin=browser]').getByText(/页面 id 冲突：b/).waitFor();
     assert.equal(await page.getByText('抢占其他模块',{exact:true}).count(),0);assert.deepEqual((await saved()).layouts,before.layouts);
     mode.badPages=undefined;mode.actionsPresent=false;await command('aurora.ui.invalidate alpha');
     await page.locator('[data-panel=alpha-panel]').getByText('未声明的动作：alpha.run',{exact:true}).waitFor();
     await page.getByRole('button',{name:'beta 动作 1',exact:true}).waitFor();
     mode.actionsPresent=true;mode.badActions={schemaVersion:1,owner:'HistoryBeta',actions:[{id:'alpha.run',command:'alpha.run.v1'}]};
-    await command('aurora.ui.invalidate alpha');await page.locator('.console-result').getByText(/owner.*HistoryBeta/).waitFor();
+    await command('aurora.ui.invalidate alpha');await page.locator('.console-log [data-origin=browser]').getByText(/owner.*HistoryBeta/).waitFor();
     await page.locator('[data-panel=alpha-panel]').getByText('未声明的动作：alpha.run',{exact:true}).waitFor();
     mode.badActions=undefined;await command('aurora.ui.invalidate alpha');await page.getByRole('button',{name:'alpha 动作 1',exact:true}).waitFor();
-    await command('aurora.ui.invalidate owner=""');await page.locator('.console-notice').getByText('缺少 owner',{exact:true}).waitFor();assert.deepEqual(errors,[]);
+    await command('aurora.ui.invalidate owner=""');await page.locator('.console-log [data-origin=browser][data-level=error]').getByText('缺少 owner',{exact:true}).waitFor();assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
 
@@ -139,8 +139,8 @@ test('REQ-WEB-028: action reload rebinds buttons in place, keeps drafts and tabl
     assert.equal(await page.evaluate(()=>refs.input===document.querySelector('[data-panel=beta-panel] [data-control=draft]')&&refs.row===document.querySelector('[data-table=beta-rows] tbody tr')&&refs.button===document.querySelector('[data-panel=beta-panel] button')),true);
     assert.equal(await page.locator('[data-table=beta-rows] tbody tr').getAttribute('aria-selected'),'true');
     assert.ok(!calls.slice(start).some(call=>call.name.endsWith('.ui.describe')||call.name.endsWith('.rows')||call.name==='aurora.ui.hostedactions'));
-    await command('aurora.ui.actions');await page.locator('.console-result').getByText(/preview.node → aurora.log.prefill/).waitFor();
-    assert.doesNotMatch(await page.locator('.console-result').innerText(),/alpha.run →/);
+    await command('aurora.ui.actions');await page.locator('.console-log [data-origin=browser]').getByText(/preview.node → aurora.log.prefill/).waitFor();
+    assert.doesNotMatch(await page.locator('.console-log [data-origin=browser]').innerText(),/alpha.run →/);
     await command('aurora.ui.invoke action=preview.node');assert.equal(await page.getByRole('combobox',{name:'指令'}).inputValue(),'本地动作仍在');
     const input=page.getByRole('combobox',{name:'指令'});await input.fill('fresh.');await page.getByRole('option',{name:/fresh.run/}).waitFor();await input.press('Escape');
     mode.business=true;mode.alpha=2;await command('aurora.ui.reloadactions');await page.getByRole('button',{name:'alpha 动作 2',exact:true}).waitFor();

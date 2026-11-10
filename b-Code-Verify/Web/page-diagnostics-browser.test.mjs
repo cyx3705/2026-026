@@ -29,13 +29,13 @@ test('REQ-WEB-035: browser missing query follows accepted descriptions before mo
     await page.getByText('该组件待交付：FutureCard',{exact:true}).waitFor();
     await page.getByText(/输入框（input）不再是页面节点/).waitFor();
     assert.equal(await page.locator('.scene-page[data-page="a-hidden"]').count(),0);
-    await command('aurora.ui.missing');let report=await page.locator('.console-result').innerText();
+    await command('aurora.ui.missing');let report=await page.locator('.console-log [data-origin=browser]').innerText();
     assert.match(report,/FutureCard ← HistoryAlpha\/a/);assert.match(report,/FutureBranch ← HistoryAlpha\/a-hidden/);assert.doesNotMatch(report,/Unreachable|INPUT/);
     const before=report;mode='invalid';await command('aurora.ui.invalidate owner=alpha');
-    await command('aurora.ui.missing');assert.equal(await page.locator('.console-result').innerText(),before);
+    await command('aurora.ui.missing');assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),before);
     assert.equal(await page.getByRole('textbox',{name:'Beta 草稿',exact:true}).inputValue(),'另一模块的草稿');
     mode='updated';await command('aurora.ui.invalidate owner=alpha');await command('aurora.ui.missing');
-    assert.equal(await page.locator('.console-result').innerText(),'无缺件');await page.getByText('已更新的正常内容',{exact:true}).waitFor();
+    assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'无缺件');await page.getByText('已更新的正常内容',{exact:true}).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'Beta 草稿',exact:true}).inputValue(),'另一模块的草稿');
     assert.ok(!calls.includes('aurora.ui.missing'));assert.deepEqual(errors,[]);
   } finally {await browser.close();}
@@ -53,9 +53,9 @@ test('REQ-WEB-035: initially malformed module is rejected as a whole while the o
       return route.fulfill({json:{success:true,data}});
     });
     await page.goto(base);await page.waitForFunction(()=>!document.getElementById('reload').disabled);
-    await page.getByText('正常模块内容',{exact:true}).waitFor();assert.match(await page.locator('.console-result').first().innerText(),/alpha.ui.describe.*children/);
+    await page.getByText('正常模块内容',{exact:true}).waitFor();assert.match(await page.locator('.console-log [data-origin=browser]').first().innerText(),/alpha.ui.describe.*children/);
     assert.equal(await page.getByText('半份',{exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'不应出现的半份页面',exact:true}).count(),0);
     await page.getByRole('combobox',{name:'指令'}).fill('aurora.ui.missing');await page.getByRole('combobox',{name:'指令'}).press('Enter');
-    await page.locator('.console-result').getByText('无缺件',{exact:true}).waitFor();assert.deepEqual(errors,[]);
+    await page.locator('.console-log [data-origin=browser]').getByText('无缺件',{exact:true}).waitFor();assert.deepEqual(errors,[]);
   } finally {await browser.close();}
 });

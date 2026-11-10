@@ -88,7 +88,7 @@ test('REQ-WEB-039: shared reader registers native-compatible pages, preserves ac
     await page.evaluate(()=>window.acceptedInput=document.querySelector('[data-control=draft]'));
     const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).layouts);
     bad=true;version=2;await command('aurora.ui.invalidate owner=demo');
-    await page.locator('.console-result').getByText(/合法 JSON/).waitFor();
+    await page.locator('.console-log [data-origin=browser]').getByText(/合法 JSON/).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'原生草稿',exact:true}).inputValue(),'声明错误仍保留');
     assert.equal(await page.evaluate(()=>acceptedInput===document.querySelector('[data-control=draft]')),true);
     assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('aurora.web.workspace.v1')).layouts),before);

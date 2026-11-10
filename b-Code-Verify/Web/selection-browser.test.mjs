@@ -48,7 +48,7 @@ test('REQ-WEB-032: an unmounted page reserves its declared channel so the initia
     assert.equal(await page.locator('[data-table=primary-table]').count(),0);
     await page.getByRole('textbox',{name:'重复发布方',exact:true}).fill('visible-first');
     assert.equal(await follower.inputValue(),'');assert.equal(await page.getByRole('button',{name:'依赖选择',exact:true}).isDisabled(),true);
-    await command('aurora.ui.channels');assert.match(await page.locator('.console-result').innerText(),/HistoryAlpha\/primary#primary-table/);
+    await command('aurora.ui.channels');assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/HistoryAlpha\/primary#primary-table/);
     await command('aurora.scene.go HistoryAlpha');await page.getByRole('cell',{name:'row-a',exact:true}).click();
     await command('aurora.scene.go HistoryBeta');assert.equal(await follower.inputValue(),'primary-value');
     assert.deepEqual(errors,[]);
@@ -66,7 +66,7 @@ test('REQ-WEB-032: duplicate publishers cannot overwrite a selected row, includi
     await page.getByRole('textbox',{name:'重复发布方',exact:true}).fill('cannot-steal');
     assert.equal(await follower.inputValue(),'primary-value');
     await page.locator('.channel-notices').getByText(/声明被忽略/).waitFor();
-    await command('aurora.ui.channels');const result=page.locator('.console-result');
+    await command('aurora.ui.channels');const result=page.locator('.console-log [data-origin=browser]');
     assert.match(await result.innerText(),/HistoryAlpha\/primary#primary-table/);
     assert.match(await result.innerText(),/断链引用/);assert.match(await result.innerText(),/absent/);
     mode.badAlpha=true;await command('aurora.ui.invalidate alpha');
@@ -91,9 +91,9 @@ test('REQ-WEB-032: declaration removal promotes the retained publisher, then cle
     assert.equal(await follower.inputValue(),'retained-value');assert.equal(await page.locator('.channel-notices:visible').count(),0);
     mode.betaPublishes=false;await command('aurora.ui.invalidate beta');
     assert.equal(await follower.inputValue(),'');assert.equal(await page.getByRole('button',{name:'依赖选择',exact:true}).isDisabled(),true);
-    await command('aurora.ui.channels');assert.match(await page.locator('.console-result').innerText(),/没有声明这个通道/);
+    await command('aurora.ui.channels');assert.match(await page.locator('.console-log [data-origin=browser]').innerText(),/没有声明这个通道/);
     mode.missingAction=false;await command('aurora.ui.reloadactions');await command('aurora.ui.channels');
-    assert.doesNotMatch(await page.locator('.console-result').innerText(),/absent/);
+    assert.doesNotMatch(await page.locator('.console-log [data-origin=browser]').innerText(),/absent/);
     assert.deepEqual(errors,[]);
   } finally {await browser.close();}
 });

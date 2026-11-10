@@ -6,11 +6,10 @@ import {catalogDomains} from './catalog-model.js';
 export function renderConsole(target,model,hooks) {
   const catalog=()=>hooks.catalog(),box=el('section',undefined,'console-view');
   const toolbar=el('div',undefined,'panel console-toolbar'),output=el('div',undefined,'console-log');
-  const form=el('form',undefined,'console-input'),input=el('input'),notice=el('p','','notice console-notice');
+  const form=el('form',undefined,'console-input'),input=el('input');
   const suggestions=el('div',undefined,'console-completions'); suggestions.id=`completion-${crypto.randomUUID()}`;
-  const resultView=el('pre','','console-result');resultView.hidden=true;
   suggestions.setAttribute('role','listbox');suggestions.hidden=true;
-  output.tabIndex=0;output.setAttribute('role','log');output.setAttribute('aria-label','宿主日志');notice.hidden=true;
+  output.tabIndex=0;output.setAttribute('role','log');output.setAttribute('aria-label','宿主日志');
   input.placeholder='输入 OneHistory 指令';input.setAttribute('aria-label','指令');input.setAttribute('autocomplete','off');
   input.setAttribute('role','combobox');input.setAttribute('aria-controls',suggestions.id);input.setAttribute('aria-expanded','false');
   let disposed=false,timer,busy=false,historyIndex=-1,historyDraft='',matches=[],matchIndex=0,rendered='',readError='';
@@ -93,18 +92,23 @@ export function renderConsole(target,model,hooks) {
   form.onsubmit=e=>{e.preventDefault();void submit();};form.append(el('span','>','console-prompt'),input,run,suggestions);
   function paint(){
     syncRunning();
-    resultView.hidden=!model.commandResult?.browser;
-    resultView.textContent=model.commandResult?.browser?model.commandResult.message||'操作完成':'';
-    const message=readError||(model.commandResult?.error?model.commandResult.message:'');
-    notice.textContent=message;notice.hidden=!message;
     for(const [key,control]of controls)control.textContent=model[key];
-    const entries=filteredLogs(model,catalog()),key=entries.map(e=>`${e.sequence}:${e.level}`).join('|');
+    const entries=filteredLogs(model,catalog());
+    const result=model.commandResult;
+    // Browser receipts share the log viewport; never reserve separate status panels.
+    const message=result?.browser||result?.error ? result.message||'操作完成' : '';
+    const local=message&&!entries.some(entry=>String(entry.message).includes(message))?message:'';
+    const key=JSON.stringify([entries.map(e=>`${e.sequence}:${e.level}`),local,!!result?.error,readError,model.level,model.domain,model.keyword]);
     if(key===rendered)return;
     const top=output.scrollTop,follow=model.follow&&(output.scrollHeight-output.clientHeight-top<24||!rendered);
     rendered=key;
     output.replaceChildren(...entries.flatMap(entry=>formatLog(entry).split('\n').map(line=>{
       const row=el('div',line,'console-line');row.dataset.level=String(entry.level).toLowerCase();return row;
     })).slice(-3000));
+    for(const [origin,message,level]of [['browser',local,result?.error?'error':'info'],['read-error',readError,'error']]) {
+      if(!message)continue;
+      const row=el('div',message,'console-line');row.dataset.origin=origin;row.dataset.level=level;output.append(row);
+    }
     output.scrollTop=follow?output.scrollHeight:top;
   }
   const text=()=>filteredLogs(model,catalog()).map(formatLog).join('\n');
@@ -118,7 +122,7 @@ export function renderConsole(target,model,hooks) {
     showMenu([
       {title:'刷新宿主日志',run:()=>refresh(true)},
       {title:'复制',run:copy},
-      {title:'清屏',run:()=>{model.clearedThrough=model.after??0;model.entries=[];paint();}},
+      {title:'清屏',run:()=>{model.clearedThrough=model.after??0;model.entries=[];model.commandResult=undefined;readError='';paint();}},
       {title:'自动滚动',checked:model.follow,run:()=>{model.follow=!model.follow;if(model.follow)output.scrollTop=output.scrollHeight;}},
       {title:'导出',run:()=>exportText()}
     ],output,{x:e?.clientX,y:e?.clientY,owner:box,report:hooks.report});
@@ -141,7 +145,7 @@ export function renderConsole(target,model,hooks) {
   async function poll(){await refresh();if(!disposed)timer=setTimeout(poll,hooks.interval??2000);}
   const visibility=()=>{if(!box.ownerDocument.hidden)void refresh();};
   const unwatch=bindDocumentEvent(box,'visibilitychange',visibility,hooks.context??{disposers:[]});
-  box.append(toolbar,notice,output,resultView,form);target.replaceChildren(box);paint();
+  box.append(toolbar,output,form);target.replaceChildren(box);paint();
   timer=setTimeout(poll,0);
   return {
     prefill(text){setInput(text);input.focus();},refresh,paint,copy,exportText,focus(){input.focus();},

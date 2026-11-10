@@ -37,7 +37,7 @@ test('REQ-WEB-020: browser layout commands persist, reject failed saves, and sce
     assert.equal(await page.locator('.aurora-table tbody tr').getAttribute('aria-selected'),'true');assert.equal(calls.filter(text=>text==='demo.records').length,reads);
     await page.evaluate(()=>{const original=Storage.prototype.setItem;window.restoreWorkspaceStorage=()=>Storage.prototype.setItem=original;Storage.prototype.setItem=function(key,value){if(key==='aurora.web.workspace.v1')throw new DOMException('quota','QuotaExceededError');return original.call(this,key,value);};});
     await command('aurora.ui.layoutsave name=未保存');await page.getByText(/本次操作未保存/).first().waitFor();await page.evaluate(()=>restoreWorkspaceStorage());
-    await command('aurora.ui.layouts');assert.equal(await page.locator('.console-result').innerText(),'工作布局');
+    await command('aurora.ui.layouts');assert.equal(await page.locator('.console-log [data-origin=browser]').innerText(),'工作布局');
     const beforeReload=await tree();await page.reload();await input.waitFor();assert.deepEqual(await tree(),beforeReload);
     await command('aurora.ui.layoutload name=工作布局');assert.deepEqual(await tree(),saved);
     await command('aurora.ui.layoutreset');assert.equal(await page.locator('.scene-page[data-page=console]:visible').count(),1);
