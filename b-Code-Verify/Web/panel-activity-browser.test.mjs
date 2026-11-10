@@ -160,3 +160,20 @@ test('REQ-WEB-031: a disposed source picker cannot report a late failure over th
     assert.deepEqual(await page.evaluate(()=>activity.reports),[]);
   } finally {await browser.close();}
 });
+
+// REQ-WEB-049: failure is visible at the action and the same button can retry.
+test('REQ-WEB-049: failed push shows its reason, unlocks and clears the error on retry',async()=>{
+  const browser=await chromium.launch({channel:process.env.AURORA_BROWSER_CHANNEL||'msedge',headless:true});
+  try {
+    const page=await fixture(browser,[{kind:'button',action:'submit',text:'推送'}]);
+    const button=page.getByRole('button',{name:'推送',exact:true});
+    await button.click();await page.evaluate(()=>{activity.fail(true);activity.release();});
+    await page.getByRole('status').filter({hasText:'执行失败：模拟提交失败'}).waitFor();
+    assert.equal(await button.isDisabled(),false);
+    assert.equal(await button.getAttribute('aria-busy'),'false');
+    await button.click();assert.equal(await page.getByRole('status').count(),0);
+    await page.evaluate(()=>{activity.fail(false);activity.release();});
+    await page.waitForFunction(()=>!document.querySelector('[data-panel=activity] .is-running'));
+    assert.equal(await button.isDisabled(),false);assert.equal(await page.evaluate(()=>activity.calls.length),2);
+  } finally {await browser.close();}
+});

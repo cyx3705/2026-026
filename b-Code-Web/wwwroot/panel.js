@@ -12,7 +12,7 @@ export function renderPanel(node, page, hooks) {
   page.panels.push(scope);
   let disposed=false, frame,frameWindow,fontDocument;
   const active=() => !disposed && hooks.active();
-  const rows=[], pending=new Set(), activators=[],bindings=[];
+  const rows=[], pending=new Set(), activators=[],bindings=[], failures=new Map();
   scope.rebindActions=changed=>{
     const affected=bindings.filter(binding=>!changed||changed.has(binding.id?.toLowerCase()));
     if(changed&&!affected.length)return false;
@@ -23,9 +23,16 @@ export function renderPanel(node, page, hooks) {
   async function run(id, additions={}, activity) {
     const key=activity ?? id;
     if (!active() || pending.has(key)) return false;
-    pending.add(key); updateBusy(activity?.element,true);
+    pending.add(key); failures.get(key)?.remove(); failures.delete(key); updateBusy(activity?.element,true);
     try { await hooks.action(id,scope,additions); return true; }
-    catch(error) { if(active())hooks.report(error); return false; }
+    catch(error) {
+      if(active()) {
+        const notice=el('p',`执行失败：${error.message ?? String(error)}`,'notice');
+        notice.setAttribute('role','status');section.append(notice);failures.set(key,notice);
+        hooks.report(error);
+      }
+      return false;
+    }
     finally { pending.delete(key); updateBusy(activity?.element,false); }
   }
   function updateBusy(control,busy) {
