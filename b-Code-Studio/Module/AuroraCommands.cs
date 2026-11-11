@@ -230,7 +230,7 @@ internal static class AuroraCommands
             Name = "aurora.component.list",
             Domain = "aurora",
             CommandClass = "component",
-            Summary = "列出页面协议的全部组件与协议：页面节点、面板小组件、页面信封、动作声明、选择通道、取数载荷、XAML 令牌，各一句用途",
+            Summary = "列出页面组件、动作与取数协议",
             Example = "aurora.component.list",
             Readonly = true,
             Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(
@@ -243,7 +243,7 @@ internal static class AuroraCommands
             Name = "aurora.component.show",
             Domain = "aurora",
             CommandClass = "component",
-            Summary = "看一个组件或协议的完整用法：字段（类型、必填、缺省、取值）、规矩与照抄能跑的示例",
+            Summary = "查看页面组件或协议的字段与示例",
             Example = "aurora.component.show name=table",
             Readonly = true,
             Parameters =
@@ -342,7 +342,7 @@ internal static class AuroraCommands
             HiddenReason = "界面内部协议不对远程暴露",
             Domain = "aurora",
             CommandClass = "ui",
-            Summary = "Aurora 自持页面（命令集、模块管理、组件测试）的动作声明，供网页装配原生页面",
+            Summary = "列出前端自带页面的动作声明",
             Example = "aurora.ui.hostedactions",
             Readonly = true,
             Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(
@@ -372,7 +372,7 @@ internal static class AuroraCommands
             HiddenReason = "宿主装载生命周期回调，不由人或远端触发",
             Domain = "aurora",
             CommandClass = "host",
-            Summary = "宿主通知模块装载已完成；已打开的网页据此整轮重拉页面、动作与面板",
+            Summary = "装载就绪后通知网页重载页面和动作",
             Handler = CommandDescriptor.Sync(_ =>
             {
                 services.Web.Broadcast("aurora.ui.reloadpages");

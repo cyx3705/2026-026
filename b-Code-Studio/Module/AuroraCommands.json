@@ -180,12 +180,12 @@
   },
   {
     "name": "aurora.nav.open",
-    "summary": "聚焦右栏搜索框：搜索并打开场景与页面。全局快捷键由 HistoryMercury 注册",
+    "summary": "聚焦右栏搜索框以查找场景和页面",
     "hiddenReason": "把光标放进界面右栏的搜索框，只对坐在屏幕前的人有意义"
   },
   {
     "name": "aurora.scene.delete",
-    "summary": "删除一个场景：另存的连记录一起删；模块场景删后不再列出，模块装回来也不复活，aurora.scene.reset scene=<模块> 恢复。最后一个场景不能删",
+    "summary": "删除场景，模块场景可重置恢复",
     "example": "aurora.scene.delete id=出图",
     "parameters": [
       {
@@ -198,7 +198,7 @@
   },
   {
     "name": "aurora.scene.go",
-    "summary": "切到一个场景：恢复它上次的布局与显隐；模块场景第一次进入时露出该模块的页与常驻页（控制台、命令集）",
+    "summary": "切换场景并恢复其布局和页面显隐",
     "example": "aurora.scene.go id=HistoryMinerva",
     "parameters": [
       {
@@ -211,7 +211,7 @@
   },
   {
     "name": "aurora.scene.hide",
-    "summary": "把场景收进右下页面调整小栏（右栏不再列出，搜索与菜单照旧），hidden=false 放回右栏",
+    "summary": "将场景收进小栏或放回右栏",
     "example": "aurora.scene.hide id=HistoryJuno hidden=true",
     "parameters": [
       {
@@ -231,12 +231,12 @@
   },
   {
     "name": "aurora.scene.list",
-    "summary": "列出全部场景（按右栏的先后）：当前场景、来源、是否收进小栏、使用次数。场景不含页面集合，只是一份布局",
+    "summary": "按右栏顺序列出场景及使用状态",
     "readonly": true
   },
   {
     "name": "aurora.scene.move",
-    "summary": "调整场景在右栏与菜单里的先后：挪到另一个场景前面，省略 before 则挪到最后",
+    "summary": "调整场景在右栏和菜单中的顺序",
     "example": "aurora.scene.move id=HistoryJanus before=HistoryMinerva",
     "parameters": [
       {
@@ -254,7 +254,7 @@
   },
   {
     "name": "aurora.scene.open",
-    "summary": "在当前场景里打开一页（不切场景）；它回到自己的位置，那个位置原来的页被隐藏（一格一页）",
+    "summary": "在当前场景打开页面并替换同位置页面",
     "example": "aurora.scene.open page=graph",
     "parameters": [
       {
@@ -267,7 +267,7 @@
   },
   {
     "name": "aurora.scene.reset",
-    "summary": "场景回到默认形态：布局按各页声明重建，露面的页回到初值（省略 scene 为当前场景；另存场景只能在当前时重排）；点名一个删掉的模块场景则把它恢复",
+    "summary": "重建场景默认布局或恢复已删除的模块场景",
     "example": "aurora.scene.reset scene=HistoryJanus",
     "parameters": [
       {
@@ -308,7 +308,7 @@
   },
   {
     "name": "aurora.ui.dialog",
-    "summary": "显示 Aurora 主题化弹窗（message / confirm / prompt / choice / content；content 可带动作候选）",
+    "summary": "显示消息、确认、输入或选项弹窗",
     "example": "aurora.ui.dialog kind=confirm title=确认 body=\"覆盖现有文件？\" danger=true",
     "parameters": [
       {
@@ -373,7 +373,7 @@
   },
   {
     "name": "aurora.ui.dock",
-    "summary": "停靠窗口到指定方位，那个位置原来的页被隐藏(一格一页；pos=center 占中央区)",
+    "summary": "将页面停靠到指定位置并替换原页面",
     "example": "aurora.ui.dock name=console pos=bottom ratio=0.3",
     "parameters": [
       {
@@ -403,7 +403,7 @@
   },
   {
     "name": "aurora.ui.float",
-    "summary": "把一页浮成置顶小窗（操作别的程序时也够得着），或还原回停靠区；不写 on 时切换。浮着的状态与位置跨重启保留",
+    "summary": "将页面浮为置顶窗口或还原停靠",
     "example": "aurora.ui.float name=powersw",
     "parameters": [
       {
